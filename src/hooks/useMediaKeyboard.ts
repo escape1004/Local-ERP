@@ -16,6 +16,7 @@ interface UseMediaKeyboardOptions {
   onSeekBySeconds: (delta: number) => void;
   onSeekByFrame: (direction: 'backward' | 'forward') => void;
   onSpeedChange: (speed: number) => void;
+  onFullscreenToggle: () => void;
   onPreviousArchive: () => void;
   onNextArchive: () => void;
 }
@@ -34,6 +35,7 @@ export function useMediaKeyboard({
   onSeekBySeconds,
   onSeekByFrame,
   onSpeedChange,
+  onFullscreenToggle,
   onPreviousArchive,
   onNextArchive,
 }: UseMediaKeyboardOptions) {
@@ -47,6 +49,18 @@ export function useMediaKeyboard({
 
     const effectiveType = fileType || detectedFileType;
     const applyVideoShortcuts = () => {
+      if (
+        event.key.toLowerCase() === 'f'
+        && !event.ctrlKey
+        && !event.metaKey
+        && !event.altKey
+        && !event.repeat
+      ) {
+        event.preventDefault();
+        onFullscreenToggle();
+        return;
+      }
+
       switch (event.key) {
         case ' ':
           event.preventDefault();
@@ -119,6 +133,7 @@ export function useMediaKeyboard({
     onSeekByFrame,
     onSeekBySeconds,
     onSpeedChange,
+    onFullscreenToggle,
     onVolumeChange,
     playbackSpeed,
     videoSeekSeconds,

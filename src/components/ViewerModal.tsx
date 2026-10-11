@@ -172,6 +172,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     onSeekBySeconds: playback.seekBySeconds,
     onSeekByFrame: playback.seekByFrame,
     onSpeedChange: playback.handleSpeedChange,
+    onFullscreenToggle: () => void playback.handleFullscreenToggle(),
     onPreviousArchive: () => void archive.handlePrevious(),
     onNextArchive: () => void archive.handleNext(),
   });
