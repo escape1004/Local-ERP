@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import { test } from 'vitest';
-import { getFileTypeFromPath, getThumbnailHash, resolveRecordFileSystemPath, resolveRecordStoredFilePath } from './files.ts';
+import { getFileTypeFromPath, getRecordThumbnailHash, getThumbnailHash, resolveRecordFileSystemPath, resolveRecordStoredFilePath } from './files.ts';
 
 test('getFileTypeFromPath classifies known extensions', () => {
   assert.equal(getFileTypeFromPath('C:\\media\\cover.PNG'), 'image');
@@ -21,6 +21,20 @@ test('getThumbnailHash normalizes slashes and case', () => {
     getThumbnailHash('C:\\Media\\File.MP4'),
     getThumbnailHash('C:\\Media\\other.MP4')
   );
+});
+
+test('getRecordThumbnailHash isolates thumbnails for records using the same file path', () => {
+  const filePath = 'C:\\Temp\\cover.jpg';
+
+  assert.notEqual(
+    getRecordThumbnailHash(filePath, 'record-a'),
+    getRecordThumbnailHash(filePath, 'record-b')
+  );
+  assert.equal(
+    getRecordThumbnailHash('C:\\TEMP\\cover.jpg', 'record-a'),
+    getRecordThumbnailHash('c:/temp/cover.jpg', 'record-a')
+  );
+  assert.equal(getRecordThumbnailHash(filePath), getThumbnailHash(filePath));
 });
 
 test('resolveRecordStoredFilePath joins base-mode filenames and skips placeholders', () => {

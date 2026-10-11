@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest';
 import type { Category, DataRecord, FieldDefinition } from '../types';
 import { filterRecords, getNextSortState, matchesSearchValue, sortRecords } from './recordQuery';
+import { getTranslatedFieldId } from './translation';
 
 const titleField = { id: 'title', name: '제목', type: 'text' } as FieldDefinition;
 const scoreField = { id: 'score', name: '점수', type: 'number' } as FieldDefinition;
@@ -48,6 +49,45 @@ test('matches numeric and translated text search without changing relation looku
     searchTerm: '1',
     normalizedSearchTerm: '1',
   })).toBe(false);
+});
+
+test('searches source and translated text fields independently', () => {
+  const translatedTitleField = {
+    ...titleField,
+    enableTranslation: true,
+  } as FieldDefinition;
+  const recordData = {
+    title: 'Original title',
+    [getTranslatedFieldId('title')]: '번역 제목',
+  };
+
+  expect(matchesSearchValue({
+    ...searchBase,
+    field: translatedTitleField,
+    value: recordData.title,
+    recordData,
+    effectiveSearchField: 'title',
+    searchTerm: '번역',
+    normalizedSearchTerm: '번역',
+  })).toBe(false);
+  expect(matchesSearchValue({
+    ...searchBase,
+    field: translatedTitleField,
+    value: recordData.title,
+    recordData,
+    effectiveSearchField: getTranslatedFieldId('title'),
+    searchTerm: '번역',
+    normalizedSearchTerm: '번역',
+  })).toBe(true);
+  expect(matchesSearchValue({
+    ...searchBase,
+    field: translatedTitleField,
+    value: recordData.title,
+    recordData,
+    effectiveSearchField: 'all',
+    searchTerm: '번역',
+    normalizedSearchTerm: '번역',
+  })).toBe(true);
 });
 
 test('filters and sorts records in a single pass each', () => {

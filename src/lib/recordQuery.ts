@@ -8,7 +8,7 @@ import {
   type FieldValue,
   type ListFileType,
 } from './recordFields';
-import { getTranslatedFieldValue, isTranslationEnabledField } from './translation';
+import { getTranslatedFieldId, getTranslatedFieldValue, isTranslationEnabledField } from './translation';
 
 export interface RecordSearchState {
   searchTerm: string;
@@ -88,9 +88,14 @@ export function matchesSearchValue({
 
   if ((field.type === 'text' || field.type === 'longtext') && isTranslationEnabledField(field)) {
     const translatedText = getTranslatedFieldValue(recordData, field.id);
-    return [String(value || ''), translatedText].some((item) =>
-      item.toLowerCase().includes(normalizedSearchTerm)
-    );
+    if (effectiveSearchField === getTranslatedFieldId(field.id)) {
+      return translatedText.toLowerCase().includes(normalizedSearchTerm);
+    }
+    if (effectiveSearchField === field.id) {
+      return String(value || '').toLowerCase().includes(normalizedSearchTerm);
+    }
+    return [String(value || ''), translatedText]
+      .some((item) => item.toLowerCase().includes(normalizedSearchTerm));
   }
 
   return String(value || '').toLowerCase().includes(normalizedSearchTerm);
@@ -172,9 +177,14 @@ export function filterRecords(options: {
   if (!options.search.hasActiveSearch) return filteredByFileType;
 
   return filteredByFileType.filter((record) => {
+    const translatedSourceField = options.visibleFields.find(
+      (field) => getTranslatedFieldId(field.id) === options.search.effectiveSearchField
+        && isTranslationEnabledField(field)
+    );
     const fieldsToSearch = options.search.effectiveSearchField === 'all'
       ? options.visibleFields
-      : [options.fieldMap.get(options.search.effectiveSearchField)].filter(Boolean) as FieldDefinition[];
+      : [translatedSourceField ?? options.fieldMap.get(options.search.effectiveSearchField)]
+        .filter(Boolean) as FieldDefinition[];
 
     if (fieldsToSearch.length === 0) return false;
 

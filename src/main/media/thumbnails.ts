@@ -13,7 +13,7 @@ import {
   log,
 } from '../store';
 import crypto from 'crypto';
-import { getThumbnailHash } from '../lib/files';
+import { getRecordThumbnailHash, getThumbnailHash } from '../lib/files';
 import { getAutoThumbnailTimestamp } from '../lib/media-time';
 import { cleanupRelationReferencesForDatabase } from '../database/relations';
 import { electronDistDir, getFfmpegToolPaths, getUnpackedFfprobePath } from '../ffmpeg-paths';
@@ -132,11 +132,16 @@ export function getStructuredThumbnailDir(context: any = {}) {
 
 export function getThumbnailPathForContext(filePath, context: any = {}) {
   const thumbnailDir = getStructuredThumbnailDir(context);
-  const hash = getThumbnailHash(filePath);
+  const { recordId } = resolveThumbnailContext(context);
+  const hash = getRecordThumbnailHash(filePath, recordId);
   return {
     thumbnailDir,
     thumbnailPath: path.join(thumbnailDir, `thumb_${hash}.jpg`)
   };
+}
+
+export function getPreviousStructuredThumbnailPath(filePath, context: any = {}) {
+  return path.join(getStructuredThumbnailDir(context), `thumb_${getThumbnailHash(filePath)}.jpg`);
 }
 
 export function ensureThumbnailDirForContext(filePath, context: any = {}) {
@@ -163,22 +168,28 @@ export function getThumbnailContextForRecordLike(record) {
 
 export function copyLegacyThumbnailToStructuredPath(filePath, context: any = {}) {
   try {
-    const legacyPath = getLegacyThumbnailPath(filePath);
     const { thumbnailPath } = ensureThumbnailDirForContext(filePath, context);
+    const candidatePaths = [
+      getPreviousStructuredThumbnailPath(filePath, context),
+      getLegacyThumbnailPath(filePath)
+    ];
 
-    if (legacyPath === thumbnailPath || !fs.existsSync(legacyPath)) {
-      return null;
+    for (const sourcePath of [...new Set(candidatePaths)]) {
+      if (sourcePath === thumbnailPath || !fs.existsSync(sourcePath)) {
+        continue;
+      }
+
+      if (!fs.existsSync(thumbnailPath)) {
+        // A path-based thumbnail may still be shared by records created before
+        // record-scoped storage was introduced. Copy it and leave cleanup to the
+        // orphan-thumbnail pass after every record has migrated.
+        fs.copyFileSync(sourcePath, thumbnailPath);
+      }
+
+      return fs.existsSync(thumbnailPath) ? thumbnailPath : null;
     }
 
-    if (!fs.existsSync(thumbnailPath)) {
-      fs.copyFileSync(legacyPath, thumbnailPath);
-    }
-
-    if (fs.existsSync(thumbnailPath) && fs.existsSync(legacyPath)) {
-      fs.unlinkSync(legacyPath);
-    }
-
-    return thumbnailPath;
+    return null;
   } catch (error) {
     log('legacy thumbnail migration failed:', error);
     return null;
@@ -309,12 +320,19 @@ export function migrateStructuredThumbnailEntries(entries) {
 
       const candidatePaths = [
         entry.thumbnailPath,
+        getPreviousStructuredThumbnailPath(normalizedPath, {
+          recordId: entry.recordId,
+          categoryId: entry.categoryId,
+          profileId: entry.profileId
+        }),
         getLegacyThumbnailPath(normalizedPath)
       ].filter(Boolean);
 
       for (const candidatePath of [...new Set(candidatePaths)]) {
         if (candidatePath && candidatePath !== expectedPath && fs.existsSync(candidatePath)) {
-          if (relocateThumbnailFile(candidatePath, expectedPath)) {
+          ensureDirectoryExists(path.dirname(expectedPath));
+          if (!fs.existsSync(expectedPath)) {
+            fs.copyFileSync(candidatePath, expectedPath);
             migratedCount++;
           }
           break;
@@ -341,11 +359,10 @@ export function migrateStructuredThumbnailEntries(entries) {
 export const deleteThumbnail = (filePath, context: any = {}) => {
   try {
     const normalizedPath = path.isAbsolute(filePath) ? filePath : path.join(appDataDir, filePath);
-    const candidatePaths = [
-      context?.thumbnailPath,
-      getThumbnailPathForContext(normalizedPath, context).thumbnailPath,
-      getLegacyThumbnailPath(normalizedPath)
-    ].filter(Boolean);
+    const expectedPath = getThumbnailPathForContext(normalizedPath, context).thumbnailPath;
+    const candidatePaths = context?.recordId
+      ? [expectedPath]
+      : [context?.thumbnailPath, expectedPath, getLegacyThumbnailPath(normalizedPath)].filter(Boolean);
 
     let deleted = false;
     for (const thumbnailPath of [...new Set(candidatePaths)]) {

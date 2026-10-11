@@ -46,3 +46,16 @@ export function getThumbnailHash(filePath) {
   const normalizedPath = filePath.trim().replace(/\\/g, '/').toLowerCase();
   return crypto.createHash('sha1').update(normalizedPath).digest('hex');
 }
+
+export function getRecordThumbnailHash(filePath, recordId = null) {
+  if (!recordId) {
+    return getThumbnailHash(filePath);
+  }
+
+  const normalizedPath = filePath.trim().replace(/\\/g, '/').toLowerCase();
+  return crypto.createHash('sha1')
+    .update(normalizedPath)
+    .update('\0record:')
+    .update(String(recordId))
+    .digest('hex');
+}

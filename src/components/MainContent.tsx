@@ -50,6 +50,7 @@ import { FIELD_TOOLTIP_CLASSNAME } from './records/FieldValueRenderer';
 import { RecordGalleryView } from './records/RecordGalleryView';
 import { RecordTableView } from './records/RecordTableView';
 import { HoverVideoPreview } from './records/ThumbnailCell';
+import { getTranslatedFieldId, isTranslationEnabledField } from '../lib/translation';
 
 declare global {
   interface WindowEventMap {
@@ -317,10 +318,19 @@ export const MainContent: React.FC = () => {
     () => new Map((selectedCategorySafe?.fields ?? []).map((field) => [field.id, field])),
     [selectedCategorySafe]
   );
-  const selectedSearchField = useMemo(
-    () => selectedCategoryFieldMap.get(searchField) ?? null,
-    [selectedCategoryFieldMap, searchField]
+  const translatedSearchField = useMemo(
+    () => visibleFields.find(
+      (field) => isTranslationEnabledField(field) && getTranslatedFieldId(field.id) === searchField
+    ) ?? null,
+    [visibleFields, searchField]
   );
+  const selectedSearchField = useMemo(
+    () => selectedCategoryFieldMap.get(searchField) ?? translatedSearchField,
+    [selectedCategoryFieldMap, searchField, translatedSearchField]
+  );
+  const selectedSearchFieldLabel = translatedSearchField
+    ? `${translatedSearchField.name} (번역)`
+    : selectedSearchField?.name ?? '';
   const effectiveSearchField = (selectedSearchField || searchField === 'all') ? searchField : 'all';
   const isMultiValueSearchField = Boolean(
     selectedSearchField
@@ -1213,7 +1223,7 @@ export const MainContent: React.FC = () => {
                           )}
                         >
                           <span className="truncate">
-                            {multiSearchLabel || `${selectedSearchField.name} 선택...`}
+                            {multiSearchLabel || `${selectedSearchFieldLabel} 선택...`}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -1221,7 +1231,7 @@ export const MainContent: React.FC = () => {
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
                         <Command className="bg-discord-sidebar border-none">
                           <CommandInput
-                            placeholder={`${selectedSearchField.name} 검색...`}
+                            placeholder={`${selectedSearchFieldLabel} 검색...`}
                             className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
                           />
                           <CommandList className="max-h-[200px] overflow-y-auto">
@@ -1337,7 +1347,7 @@ export const MainContent: React.FC = () => {
                           )}
                         >
                           <span className="truncate">
-                            {searchTerm || `${selectedSearchField.name} 선택...`}
+                            {searchTerm || `${selectedSearchFieldLabel} 선택...`}
                           </span>
                           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                         </Button>
@@ -1345,7 +1355,7 @@ export const MainContent: React.FC = () => {
                       <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
                         <Command className="bg-discord-sidebar border-none">
                           <CommandInput
-                            placeholder={`${selectedSearchField.name} 검색...`}
+                            placeholder={`${selectedSearchFieldLabel} 검색...`}
                             className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
                           />
                           <CommandList className="max-h-[200px] overflow-y-auto">
@@ -1391,7 +1401,7 @@ export const MainContent: React.FC = () => {
                   ) : selectedSearchField.type === 'select' ? (
                     <Select value={searchTerm} onValueChange={setSearchTerm}>
                       <SelectTrigger className="bg-discord-sidebar border-gray-600 text-discord-text">
-                        <SelectValue placeholder={`${selectedSearchField.name} 선택...`} />
+                        <SelectValue placeholder={`${selectedSearchFieldLabel} 선택...`} />
                       </SelectTrigger>
                       <SelectContent className="bg-discord-sidebar border-gray-600">
                         {getFieldOptions(selectedSearchField).map((option) => (
@@ -1415,7 +1425,7 @@ export const MainContent: React.FC = () => {
                     <Input
                       ref={searchInputRef}
                       type={selectedSearchField.type === 'number' || selectedSearchField.type === 'percentage' ? 'number' : 'text'}
-                      placeholder={`${selectedSearchField.name} 검색...`}
+                      placeholder={`${selectedSearchFieldLabel} 검색...`}
                       value={searchTerm}
                       onChange={(e) => setSearchTerm(e.target.value)}
                       className={`${selectedSearchField.type === 'number' || selectedSearchField.type === 'percentage' ? 'pr-4' : 'pl-10'} bg-discord-sidebar border-gray-600 text-discord-text placeholder:text-gray-500`}
@@ -1454,9 +1464,16 @@ export const MainContent: React.FC = () => {
                 <SelectContent className="bg-discord-sidebar border-gray-600">
                   <SelectItem value="all">전체 필드</SelectItem>
                   {visibleFields.map(field => (
-                    <SelectItem key={field.id} value={field.id}>
-                      {field.name}
-                    </SelectItem>
+                    <React.Fragment key={field.id}>
+                      <SelectItem value={field.id}>
+                        {isTranslationEnabledField(field) ? `${field.name} (원문)` : field.name}
+                      </SelectItem>
+                      {isTranslationEnabledField(field) && (
+                        <SelectItem value={getTranslatedFieldId(field.id)}>
+                          {field.name} (번역)
+                        </SelectItem>
+                      )}
+                    </React.Fragment>
                   ))}
                 </SelectContent>
               </Select>
