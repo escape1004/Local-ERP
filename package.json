@@ -1,7 +1,7 @@
 {
   "name": "local-erp",
   "private": true,
-  "version": "1.1.22",
+  "version": "1.1.23",
   "description": "Local ERP System for Personal File Management",
   "author": "Escape",
   "main": "dist-electron-app/main.js",
