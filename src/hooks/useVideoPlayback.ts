@@ -134,14 +134,7 @@ export function useVideoPlayback({
   }, [showSpeedMenu]);
 
   useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
+    return window.electronAPI.onViewerFullscreenChange(setIsFullscreen);
   }, []);
 
   const resolveSeekTime = useCallback((clientX: number, input: HTMLInputElement) => {
@@ -259,20 +252,32 @@ export function useVideoPlayback({
     if (activeVideo) activeVideo.loop = nextLooping && !loopRange;
   }, [getActiveVideoElement, isLooping, loopRange]);
 
-  const handleFullscreenToggle = useCallback(() => {
-    const effectiveType = getEffectiveFileType();
-    if (videoRef.current && effectiveType === 'video') {
-      if (!isFullscreen) videoRef.current.requestFullscreen();
-      else document.exitFullscreen();
-    }
-    if (archiveVideoRef.current && effectiveType === 'archive' && archiveFiles.length > 0 && currentArchiveIndex >= 0) {
-      const currentFile = archiveFiles[currentArchiveIndex];
-      if (isVideoFileName(currentFile?.name)) {
-        if (!isFullscreen) archiveVideoRef.current.requestFullscreen();
-        else document.exitFullscreen();
+  const handleFullscreenToggle = useCallback(async () => {
+    try {
+      const activeVideo = getActiveVideoElement();
+      if (!activeVideo) {
+        toast({
+          title: '전체화면 전환 실패',
+          description: '전체화면으로 표시할 동영상을 찾을 수 없습니다.',
+          variant: 'destructive',
+        });
+        return;
       }
+
+      const result = await window.electronAPI.setViewerFullscreen(!isFullscreen);
+      if (!result.success) {
+        throw new Error(result.error || 'Fullscreen transition failed');
+      }
+      setIsFullscreen(result.isFullscreen);
+    } catch (error) {
+      console.error('동영상 전체화면 전환 실패:', error);
+      toast({
+        title: '전체화면 전환 실패',
+        description: '전체화면을 시작할 수 없습니다. 다시 시도해주세요.',
+        variant: 'destructive',
+      });
     }
-  }, [archiveFiles, archiveVideoRef, currentArchiveIndex, getEffectiveFileType, isFullscreen, videoRef]);
+  }, [getActiveVideoElement, isFullscreen]);
 
   const handlePictureInPictureStateChange = useCallback((active: boolean) => {
     void window.electronAPI.setPictureInPictureActive(active).catch((error) => {

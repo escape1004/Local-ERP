@@ -136,8 +136,27 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   });
 
   const handleClose = useCallback(() => {
-    void exitPictureInPicture().finally(onClose);
-  }, [onClose]);
+    const exitFullscreen = playback.isFullscreen
+      ? window.electronAPI.setViewerFullscreen(false).catch(() => null)
+      : Promise.resolve(null);
+    void exitFullscreen
+      .then(() => exitPictureInPicture())
+      .finally(onClose);
+  }, [onClose, playback.isFullscreen]);
+
+  const handleEscape = useCallback(() => {
+    if (playback.isFullscreen) {
+      void window.electronAPI.setViewerFullscreen(false);
+      return;
+    }
+    handleClose();
+  }, [handleClose, playback.isFullscreen]);
+
+  useEffect(() => {
+    if (!isOpen && playback.isFullscreen) {
+      void window.electronAPI.setViewerFullscreen(false);
+    }
+  }, [isOpen, playback.isFullscreen]);
 
   const handleKeyDown = useMediaKeyboard({
     fileType,
@@ -147,7 +166,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     videoSeekSeconds: playback.videoSeekSeconds,
     volume: playback.volume,
     playbackSpeed: playback.playbackSpeed,
-    onClose: handleClose,
+    onClose: handleEscape,
     onPlayPause: playback.handlePlayPause,
     onVolumeChange: playback.handleVolumeChange,
     onSeekBySeconds: playback.seekBySeconds,
@@ -722,18 +741,22 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     <AnimatedModal
       isOpen={isOpen}
       className="z-[60] bg-black/95"
-      contentClassName="relative bg-discord-bg rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col"
+      contentClassName={playback.isFullscreen
+        ? 'relative flex h-screen w-screen flex-col bg-black shadow-2xl rounded-none'
+        : 'relative bg-discord-bg rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col'}
       animateContent={false}
       exitAnimation={false}
     >
       <div
         ref={modalContainerRef}
-        className="relative bg-discord-bg rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col"
+        className={playback.isFullscreen
+          ? 'relative flex h-screen w-screen flex-col bg-black shadow-2xl rounded-none'
+          : 'relative bg-discord-bg rounded-xl shadow-2xl w-[95vw] h-[95vh] flex flex-col'}
         onKeyDown={handleKeyDown}
         tabIndex={0}
         data-modal-container
       >
-        <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-700">
+        {!playback.isFullscreen && <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-700">
           <div className="flex items-center gap-3">
             {effectiveFileType === 'image' && <FileImage size={20} className="text-blue-400" />}
             {effectiveFileType === 'video' && <FileVideo size={20} className="text-green-400" />}
@@ -748,7 +771,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
           <button onClick={handleClose} className="text-discord-muted hover:text-white transition-colors">
             <X size={24} />
           </button>
-        </div>
+        </div>}
 
         <div className="flex-1 min-h-0 flex items-center justify-center relative" style={{ overflow: 'hidden' }}>
           {((effectiveFileType === 'image') || (effectiveFileType === 'video') || (effectiveFileType === 'archive' && currentFile && (currentFileExt !== 'txt'))) && (

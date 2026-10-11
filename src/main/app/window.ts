@@ -224,6 +224,12 @@ export function createWindow() {
   mainWindow.on('blur', syncWindowAudioMute);
   mainWindow.on('focus', syncWindowAudioMute);
   mainWindow.on('show', syncWindowAudioMute);
+  mainWindow.on('enter-full-screen', () => {
+    mainWindow.webContents.send('viewer:fullscreen-changed', true);
+  });
+  mainWindow.on('leave-full-screen', () => {
+    mainWindow.webContents.send('viewer:fullscreen-changed', false);
+  });
   syncWindowAudioMute();
 
   // 창 제어 이벤트 처리
@@ -271,5 +277,21 @@ export function createWindow() {
     isPictureInPictureActive = active === true;
     syncWindowAudioMute();
     return { success: true };
+  });
+
+  ipcMain.removeHandler?.('viewer:setFullscreen');
+  ipcMain.handle('viewer:setFullscreen', (_event, enabled) => {
+    try {
+      const nextFullscreen = enabled === true;
+      mainWindow.setFullScreen(nextFullscreen);
+      return { success: true, isFullscreen: nextFullscreen };
+    } catch (error) {
+      log('Viewer fullscreen transition failed:', error);
+      return {
+        success: false,
+        isFullscreen: mainWindow.isFullScreen(),
+        error: error instanceof Error ? error.message : String(error),
+      };
+    }
   });
 }

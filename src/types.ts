@@ -239,6 +239,8 @@ export interface ElectronAPI {
   setRememberWindowBounds: (enabled: boolean) => Promise<{ success: boolean }>;
   setMuteAudioWhenBackgrounded: (enabled: boolean) => Promise<{ success: boolean }>;
   setPictureInPictureActive: (active: boolean) => Promise<{ success: boolean }>;
+  setViewerFullscreen: (enabled: boolean) => Promise<{ success: boolean; isFullscreen: boolean; error?: string }>;
+  onViewerFullscreenChange: (callback: (isFullscreen: boolean) => void) => () => void;
   setZoomPercent: (percent: number) => Promise<{ success: boolean; error?: string }>;
   setDateParseFormats: (formats: string[]) => Promise<{ success: boolean; dateParseFormats?: string[]; error?: string }>;
   setAppPassword: (password: string) => Promise<{ success: boolean; error?: string }>;

@@ -89,6 +89,12 @@ const api: ElectronAPI = {
   setRememberWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberWindowBounds', enabled),
   setMuteAudioWhenBackgrounded: (enabled: boolean) => ipcRenderer.invoke('setMuteAudioWhenBackgrounded', enabled),
   setPictureInPictureActive: (active: boolean) => ipcRenderer.invoke('setPictureInPictureActive', active),
+  setViewerFullscreen: (enabled: boolean) => ipcRenderer.invoke('viewer:setFullscreen', enabled),
+  onViewerFullscreenChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, isFullscreen: boolean) => callback(isFullscreen);
+    ipcRenderer.on('viewer:fullscreen-changed', listener);
+    return () => ipcRenderer.removeListener('viewer:fullscreen-changed', listener);
+  },
   setZoomPercent: (percent: number) => ipcRenderer.invoke('setZoomPercent', percent),
   setThumbnailPreviewScale: (scale: number) => ipcRenderer.invoke('setThumbnailPreviewScale', scale),
   setDefaultGalleryZoom: (scale: number) => ipcRenderer.invoke('setDefaultGalleryZoom', scale),
