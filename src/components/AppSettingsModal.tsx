@@ -73,7 +73,7 @@ const shortcutSections = [
     items: [
       { keys: 'Esc', description: '뷰어를 닫습니다.' },
       { keys: 'Space', description: '동영상 재생 또는 일시정지를 전환합니다.' },
-      { keys: 'F', description: '동영상 전체화면을 활성화하거나 해제합니다.' },
+      { keys: 'F', description: '동영상 전체화면을 활성화하거나 현재 뷰어의 전체화면을 해제합니다.' },
       { keys: 'ArrowLeft / ArrowRight', description: '동영상은 설정된 간격만큼 이동하고, 압축파일 내 이미지나 텍스트는 이전/다음 항목으로 이동합니다.' },
       { keys: 'ArrowUp / ArrowDown', description: '동영상은 볼륨을 조절하고, 압축파일 내 이미지나 텍스트는 이전/다음 항목으로 이동합니다.' },
       { keys: ', / .', description: '동영상을 뒤 또는 앞으로 1프레임씩 이동합니다.' },

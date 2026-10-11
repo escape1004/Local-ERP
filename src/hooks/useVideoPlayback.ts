@@ -255,7 +255,7 @@ export function useVideoPlayback({
   const handleFullscreenToggle = useCallback(async () => {
     try {
       const activeVideo = getActiveVideoElement();
-      if (!activeVideo) {
+      if (!isFullscreen && !activeVideo) {
         toast({
           title: '전체화면 전환 실패',
           description: '전체화면으로 표시할 동영상을 찾을 수 없습니다.',

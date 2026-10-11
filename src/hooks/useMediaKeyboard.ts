@@ -10,6 +10,7 @@ interface UseMediaKeyboardOptions {
   videoSeekSeconds: number;
   volume: number;
   playbackSpeed: number;
+  isFullscreen: boolean;
   onClose: () => void;
   onPlayPause: () => void;
   onVolumeChange: (volume: number) => void;
@@ -29,6 +30,7 @@ export function useMediaKeyboard({
   videoSeekSeconds,
   volume,
   playbackSpeed,
+  isFullscreen,
   onClose,
   onPlayPause,
   onVolumeChange,
@@ -46,6 +48,19 @@ export function useMediaKeyboard({
     }
 
     if (isEditableKeyboardTarget(event.target)) return;
+
+    if (
+      isFullscreen
+      && event.key.toLowerCase() === 'f'
+      && !event.ctrlKey
+      && !event.metaKey
+      && !event.altKey
+      && !event.repeat
+    ) {
+      event.preventDefault();
+      onFullscreenToggle();
+      return;
+    }
 
     const effectiveType = fileType || detectedFileType;
     const applyVideoShortcuts = () => {
@@ -126,6 +141,7 @@ export function useMediaKeyboard({
     currentArchiveIndex,
     detectedFileType,
     fileType,
+    isFullscreen,
     onClose,
     onNextArchive,
     onPlayPause,

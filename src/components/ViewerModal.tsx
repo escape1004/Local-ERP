@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, FileImage, FileVideo, RotateCcw, RotateCw, X } from 'lucide-react';
+import { Archive, FileImage, FileVideo, Minimize, RotateCcw, RotateCw, X } from 'lucide-react';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
 import { AnimatedModal } from './ui/animated-modal';
 import { ArchiveViewer } from './viewer/ArchiveViewer';
@@ -166,6 +166,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     videoSeekSeconds: playback.videoSeekSeconds,
     volume: playback.volume,
     playbackSpeed: playback.playbackSpeed,
+    isFullscreen: playback.isFullscreen,
     onClose: handleEscape,
     onPlayPause: playback.handlePlayPause,
     onVolumeChange: playback.handleVolumeChange,
@@ -618,6 +619,11 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   const effectiveFileType = displayFileType || detectedFileType;
   const isImageGif = effectiveFileType === 'image' && /\.gif$/i.test(displayFilePath);
   const isArchiveGif = effectiveFileType === 'archive' && /\.gif$/i.test(currentFile?.name || '');
+  const isCurrentVideo = effectiveFileType === 'video'
+    || (effectiveFileType === 'archive' && isVideoFileName(currentFile?.name));
+  const canRotateCurrentFile = effectiveFileType === 'image'
+    || effectiveFileType === 'video'
+    || (effectiveFileType === 'archive' && currentFile && currentFileExt !== 'txt');
   const timelinePreviewSource = effectiveFileType === 'video'
     ? dataUrl
     : effectiveFileType === 'archive' && isVideoFileName(currentFile?.name)
@@ -775,42 +781,63 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
         </div>}
 
         <div className="flex-1 min-h-0 flex items-center justify-center relative" style={{ overflow: 'hidden' }}>
-          {((effectiveFileType === 'image') || (effectiveFileType === 'video') || (effectiveFileType === 'archive' && currentFile && (currentFileExt !== 'txt'))) && (
+          {(canRotateCurrentFile || (playback.isFullscreen && !isCurrentVideo)) && (
             <div className="absolute top-4 right-4 z-20 flex gap-2">
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => {
-                        if (effectiveFileType === 'image') setImgRotation((value) => (value - 90) % 360);
-                        else if (effectiveFileType === 'video') setVideoRotation((value) => (value - 90) % 360);
-                        else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value - 90) % 360);
-                      }}
-                      className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-                    >
-                      <RotateCcw size={20} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className={tooltipClassName}>왼쪽으로 90도 회전</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => {
-                        if (effectiveFileType === 'image') setImgRotation((value) => (value + 90) % 360);
-                        else if (effectiveFileType === 'video') setVideoRotation((value) => (value + 90) % 360);
-                        else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value + 90) % 360);
-                      }}
-                      className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-                    >
-                      <RotateCw size={20} />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="center" className={tooltipClassName}>오른쪽으로 90도 회전</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
+              {playback.isFullscreen && !isCurrentVideo && (
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <button
+                        type="button"
+                        onClick={() => void playback.handleFullscreenToggle()}
+                        aria-label="전체화면 해제"
+                        className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
+                      >
+                        <Minimize size={20} />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" align="center" className={tooltipClassName}>전체화면 해제 (F)</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              )}
+              {canRotateCurrentFile && (
+                <>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            if (effectiveFileType === 'image') setImgRotation((value) => (value - 90) % 360);
+                            else if (effectiveFileType === 'video') setVideoRotation((value) => (value - 90) % 360);
+                            else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value - 90) % 360);
+                          }}
+                          className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
+                        >
+                          <RotateCcw size={20} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="center" className={tooltipClassName}>왼쪽으로 90도 회전</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          onClick={() => {
+                            if (effectiveFileType === 'image') setImgRotation((value) => (value + 90) % 360);
+                            else if (effectiveFileType === 'video') setVideoRotation((value) => (value + 90) % 360);
+                            else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value + 90) % 360);
+                          }}
+                          className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
+                        >
+                          <RotateCw size={20} />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top" align="center" className={tooltipClassName}>오른쪽으로 90도 회전</TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </>
+              )}
             </div>
           )}
 
