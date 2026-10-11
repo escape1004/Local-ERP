@@ -49,14 +49,14 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
     <ContextMenuTrigger asChild>
       {children}
     </ContextMenuTrigger>
-    <ContextMenuContent className="min-w-[180px]">
+    <ContextMenuContent className="z-[80] min-w-[180px]">
       <ContextMenuItem onSelect={onPlayInPictureInPicture}>
         PIP 재생
       </ContextMenuItem>
       <ContextMenuSeparator />
       <ContextMenuSub>
         <ContextMenuSubTrigger>자막</ContextMenuSubTrigger>
-        <ContextMenuSubContent className="min-w-[220px]">
+        <ContextMenuSubContent className="z-[80] min-w-[220px]">
           <ContextMenuRadioGroup value={activeSubtitleId || 'off'} onValueChange={value => onSubtitleChange(value === 'off' ? null : value)}>
             <ContextMenuRadioItem value="off">끄기</ContextMenuRadioItem>
             {subtitles.map(subtitle => (
@@ -72,7 +72,7 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
       </ContextMenuSub>
       <ContextMenuSub>
         <ContextMenuSubTrigger>자막 크기</ContextMenuSubTrigger>
-        <ContextMenuSubContent>
+        <ContextMenuSubContent className="z-[80]">
           <ContextMenuRadioGroup value={subtitleSize} onValueChange={value => onSubtitleSizeChange(value as SubtitleSize)}>
             <ContextMenuRadioItem value="small">작게</ContextMenuRadioItem>
             <ContextMenuRadioItem value="medium">보통</ContextMenuRadioItem>
@@ -82,7 +82,7 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
       </ContextMenuSub>
       <ContextMenuSub>
         <ContextMenuSubTrigger>자막 색상</ContextMenuSubTrigger>
-        <ContextMenuSubContent>
+        <ContextMenuSubContent className="z-[80]">
           <ContextMenuRadioGroup value={subtitleColor} onValueChange={value => onSubtitleColorChange(value as SubtitleColor)}>
             <ContextMenuRadioItem value="white">흰색</ContextMenuRadioItem>
             <ContextMenuRadioItem value="yellow">노란색</ContextMenuRadioItem>
@@ -91,7 +91,7 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
       </ContextMenuSub>
       <ContextMenuSub>
         <ContextMenuSubTrigger>자막 배경</ContextMenuSubTrigger>
-        <ContextMenuSubContent>
+        <ContextMenuSubContent className="z-[80]">
           <ContextMenuRadioGroup value={subtitleBackground} onValueChange={value => onSubtitleBackgroundChange(value as SubtitleBackground)}>
             <ContextMenuRadioItem value="none">없음</ContextMenuRadioItem>
             <ContextMenuRadioItem value="translucent">반투명</ContextMenuRadioItem>
@@ -106,7 +106,7 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
             {subtitleOffset > 0 ? '+' : ''}{subtitleOffset.toFixed(1)}초
           </span>
         </ContextMenuSubTrigger>
-        <ContextMenuSubContent>
+        <ContextMenuSubContent className="z-[80]">
           <ContextMenuItem
             onSelect={(event) => {
               event.preventDefault();
