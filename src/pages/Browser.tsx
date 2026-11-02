@@ -29,7 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/toolti
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
-import { parseExternalHttpUrl } from '../lib/browserNavigation';
+import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 
 type EmbeddedWebview = HTMLElement & {
   src: string;
@@ -197,12 +197,11 @@ const BrowserPage: React.FC = () => {
   }, []);
 
   const navigateTo = React.useCallback((rawUrl: string) => {
-    const parsed = parseExternalHttpUrl(rawUrl);
-    if (!parsed) {
+    const nextUrl = resolveBrowserAddressInput(rawUrl);
+    if (!nextUrl) {
       toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
       return;
     }
-    const nextUrl = parsed.toString();
     pendingUrlRef.current = nextUrl;
     addressRef.current = nextUrl;
     setAddress(nextUrl);
@@ -418,10 +417,10 @@ const BrowserPage: React.FC = () => {
                   syncNavigation();
                 }, 0);
               }}
-              placeholder="https:// 주소 입력"
+              placeholder="주소 또는 검색어 입력"
               className="h-8 bg-discord-sidebar border-gray-600 text-sm text-discord-text"
             />
-            <BrowserTooltip label="입력한 주소로 이동">
+            <BrowserTooltip label="이동 또는 검색">
               <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
             </BrowserTooltip>
           </form>
