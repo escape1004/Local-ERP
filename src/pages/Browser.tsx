@@ -29,6 +29,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/toolti
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
+import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 
 type EmbeddedWebview = HTMLElement & {
@@ -42,6 +43,13 @@ type EmbeddedWebview = HTMLElement & {
   canGoForward: () => boolean;
   getURL: () => string;
   getTitle: () => string;
+  getZoomFactor?: () => number;
+  setZoomFactor?: (factor: number) => void;
+};
+
+type WebviewIpcMessageEvent = Event & {
+  channel?: string;
+  args?: unknown[];
 };
 
 type SideTab = 'bookmarks' | 'scripts' | 'ai';
@@ -89,6 +97,7 @@ const BrowserPage: React.FC = () => {
   const requestedUrl = searchParams.get('url') || '';
   const webviewRef = React.useRef<EmbeddedWebview | null>(null);
   const webviewHostRef = React.useRef<HTMLDivElement | null>(null);
+  const addressInputRef = React.useRef<HTMLInputElement | null>(null);
   const addressFocusedRef = React.useRef(false);
   const addressRef = React.useRef(requestedUrl);
   const pendingUrlRef = React.useRef(parseExternalHttpUrl(requestedUrl)?.toString() || '');
@@ -196,6 +205,33 @@ const BrowserPage: React.FC = () => {
     }
   }, []);
 
+  const lastMouseNavRef = React.useRef(0);
+  const lastZoomAtRef = React.useRef(0);
+
+  const navigateFromMouseButton = React.useCallback((button: number) => {
+    const action = resolveBrowserMouseButton(button);
+    const webview = webviewRef.current;
+    if (!action || !webview) return;
+    const now = Date.now();
+    if (now - lastMouseNavRef.current < 80) return;
+    lastMouseNavRef.current = now;
+    if (action === 'back') webview.goBack();
+    else webview.goForward();
+  }, []);
+
+  const applyPageZoom = React.useCallback((direction: 'in' | 'out' | 'reset') => {
+    const webview = webviewRef.current;
+    if (!webview?.getZoomFactor || !webview.setZoomFactor) return;
+    const now = Date.now();
+    if (direction !== 'reset' && now - lastZoomAtRef.current < 45) return;
+    lastZoomAtRef.current = now;
+    try {
+      webview.setZoomFactor(nextBrowserZoomFactor(webview.getZoomFactor(), direction));
+    } catch {
+      // zoom APIs can throw before the webview is attached
+    }
+  }, []);
+
   const navigateTo = React.useCallback((rawUrl: string) => {
     const nextUrl = resolveBrowserAddressInput(rawUrl);
     if (!nextUrl) {
@@ -218,6 +254,38 @@ const BrowserPage: React.FC = () => {
       navigateTo(nextUrl);
     });
   }, [navigateTo]);
+
+  React.useEffect(() => {
+    return window.electronAPI.onBrowserShortcut((action) => {
+      if (action !== 'focus-address') return;
+      const input = addressInputRef.current;
+      if (!input) return;
+      input.focus();
+      input.select();
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const onMouseUp = (event: MouseEvent) => {
+      if (!resolveBrowserMouseButton(event.button)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      navigateFromMouseButton(event.button);
+    };
+    const onWheel = (event: WheelEvent) => {
+      if (!(event.ctrlKey || event.metaKey)) return;
+      event.preventDefault();
+      applyPageZoom(event.deltaY < 0 ? 'in' : 'out');
+    };
+    window.addEventListener('mouseup', onMouseUp, true);
+    window.addEventListener('auxclick', onMouseUp, true);
+    window.addEventListener('wheel', onWheel, { capture: true, passive: false });
+    return () => {
+      window.removeEventListener('mouseup', onMouseUp, true);
+      window.removeEventListener('auxclick', onMouseUp, true);
+      window.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
+    };
+  }, [applyPageZoom, navigateFromMouseButton]);
 
   React.useEffect(() => {
     const host = webviewHostRef.current;
@@ -261,6 +329,17 @@ const BrowserPage: React.FC = () => {
     webview.addEventListener('did-finish-load', onNav);
     webview.addEventListener('page-title-updated', onTitle);
     webview.addEventListener('did-fail-load', onNav);
+    const onGuestIpc = (event: Event) => {
+      const message = event as WebviewIpcMessageEvent;
+      if (message.channel === 'browser:mouse-button') {
+        navigateFromMouseButton(Number(message.args?.[0]));
+        return;
+      }
+      if (message.channel === 'browser:zoom-wheel') {
+        applyPageZoom(Number(message.args?.[0]) < 0 ? 'in' : 'out');
+      }
+    };
+    webview.addEventListener('ipc-message', onGuestIpc);
 
     host.replaceChildren(webview);
     webviewRef.current = webview;
@@ -269,7 +348,7 @@ const BrowserPage: React.FC = () => {
       webviewRef.current = null;
       host.replaceChildren();
     };
-  }, [partition, preloadPath, syncNavigation]);
+  }, [applyPageZoom, navigateFromMouseButton, partition, preloadPath, syncNavigation]);
 
   const [canonicalCurrent, setCanonicalCurrent] = React.useState('');
   React.useEffect(() => {
@@ -376,17 +455,17 @@ const BrowserPage: React.FC = () => {
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
         <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
-          <BrowserTooltip label="뒤로" wrapDisabled={!canGoBack}>
+          <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>
             <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
               <ArrowLeft size={16} />
             </Button>
           </BrowserTooltip>
-          <BrowserTooltip label="앞으로" wrapDisabled={!canGoForward}>
+          <BrowserTooltip label="앞으로 (Alt+→)" wrapDisabled={!canGoForward}>
             <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoForward} aria-label="앞으로" onClick={() => webviewRef.current?.goForward()}>
               <ArrowRight size={16} />
             </Button>
           </BrowserTooltip>
-          <BrowserTooltip label={loading ? '불러오는 중' : '새로고침'}>
+          <BrowserTooltip label={loading ? '불러오는 중' : '새로고침 (F5)'}>
             <Button variant="ghost" className="h-8 w-8 p-0" aria-label="새로고침" onClick={() => webviewRef.current?.reload()}>
               <RotateCw size={16} className={loading ? 'animate-spin' : ''} />
             </Button>
@@ -399,6 +478,7 @@ const BrowserPage: React.FC = () => {
             }}
           >
             <Input
+              ref={addressInputRef}
               value={address}
               onChange={(event) => {
                 addressRef.current = event.target.value;

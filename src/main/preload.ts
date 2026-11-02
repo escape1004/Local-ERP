@@ -3,7 +3,17 @@ import { NewCategory, CategoryUpdate, NewRecord, ElectronAPI } from '../types';
 
 const allowedSendChannels = new Set(['window-control']);
 
+const isStandaloneBrowserWindow = () => {
+  try {
+    return new URLSearchParams(window.location.search).get('role') === 'browser';
+  } catch {
+    return false;
+  }
+};
+
 const setupMouseBackButtonPrevention = () => {
+  if (isStandaloneBrowserWindow()) return;
+
   const preventMouseBackButton = (event: MouseEvent) => {
     if (event.button !== 3) return;
 
@@ -159,6 +169,11 @@ const api: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, nextUrl: string) => callback(nextUrl);
     ipcRenderer.on('browser:open-url', listener);
     return () => ipcRenderer.removeListener('browser:open-url', listener);
+  },
+  onBrowserShortcut: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
+    ipcRenderer.on('browser:shortcut', listener);
+    return () => ipcRenderer.removeListener('browser:shortcut', listener);
   },
   canonicalizeBrowserUrl: (url) => ipcRenderer.invoke('browser:canonicalizeUrl', url),
   listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),

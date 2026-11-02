@@ -82,6 +82,21 @@ const shortcutSections = [
       { keys: '[ / ]', description: '동영상 재생 속도를 한 단계 낮추거나 높입니다.' },
     ],
   },
+  {
+    title: '브라우저',
+    description: '내장 브라우저 창에서만 사용하는 단축키입니다. 앱 본체의 단축키는 그대로 유지됩니다.',
+    items: [
+      { keys: 'F5 / Ctrl+R', description: '현재 페이지를 새로고침합니다.' },
+      { keys: 'Ctrl+F5 / Shift+F5 / Ctrl+Shift+R', description: '캐시를 무시하고 현재 페이지를 새로고침합니다.' },
+      { keys: 'Alt+ArrowLeft / Ctrl+[', description: '이전 페이지로 이동합니다.' },
+      { keys: 'Alt+ArrowRight / Ctrl+]', description: '다음 페이지로 이동합니다.' },
+      { keys: 'Ctrl+L / Alt+D / F6', description: '주소창으로 포커스를 이동합니다.' },
+      { keys: '마우스 옆 버튼', description: '이전 또는 다음 페이지로 이동합니다.' },
+      { keys: 'Ctrl++ / Ctrl+- / Ctrl+휠', description: '페이지를 확대하거나 축소합니다.' },
+      { keys: 'Ctrl+0', description: '페이지 확대 비율을 원래대로 되돌립니다.' },
+      { keys: 'Esc', description: '페이지가 로드 중이면 불러오기를 중지합니다.' },
+    ],
+  },
 ] as const;
 const getEffectiveDateParseFormats = (config: Config | null) => (
   Array.isArray(config?.dateParseFormats) && config.dateParseFormats.length > 0

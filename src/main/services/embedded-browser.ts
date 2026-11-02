@@ -6,6 +6,7 @@ import {
   popupBoundsFromFeatures,
   shouldOpenEmbeddedBrowserPopup,
 } from '../lib/embedded-browser-policy';
+import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
 import { db } from '../database/connection';
 import { log } from '../app/state';
 
@@ -184,4 +185,6 @@ export function attachEmbeddedBrowserGuest(contents) {
       contents.send('browser:url-changed', url);
     }
   });
+
+  attachEmbeddedBrowserShortcutGuard(contents);
 }

@@ -4,6 +4,10 @@ import { electronDistDir } from '../ffmpeg-paths';
 import { parseExternalHttpUrl } from '../lib/security';
 import { getEmbeddedBrowserHash, resolveEmbeddedBrowserOpenUrl } from '../lib/browser-window-url';
 import {
+  attachEmbeddedBrowserShortcutGuard,
+  findWebviewGuestForHost,
+} from '../lib/browser-shortcuts';
+import {
   appConfig,
   applyWindowZoom,
   getConfiguredBrowserStartupMode,
@@ -117,6 +121,13 @@ export async function openEmbeddedBrowserWindow(url) {
   applyWindowZoom(browserWindow);
   browserWindow.webContents.on('did-finish-load', () => applyWindowZoom(browserWindow));
   browserWindow.webContents.setVisualZoomLevelLimits(1, 1);
+  attachEmbeddedBrowserShortcutGuard(browserWindow.webContents, {
+    handleWheelZoom: false,
+    resolveTarget: (hostContents, action) => {
+      if (action === 'focus-address') return hostContents;
+      return findWebviewGuestForHost(hostContents);
+    },
+  });
   browserWindow.on('move', queueSaveEmbeddedBrowserWindowBounds);
   browserWindow.on('resize', queueSaveEmbeddedBrowserWindowBounds);
   browserWindow.on('unmaximize', queueSaveEmbeddedBrowserWindowBounds);

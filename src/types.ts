@@ -349,6 +349,7 @@ export interface ElectronAPI {
   isBrowserWindowFocused: () => Promise<boolean>;
   saveBrowserLastUrl: (url: string) => Promise<{ success: boolean }>;
   onBrowserOpenUrl: (callback: (url: string) => void) => () => void;
+  onBrowserShortcut: (callback: (action: string) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string; folderId?: string | null }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
