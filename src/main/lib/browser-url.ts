@@ -86,26 +86,103 @@ export function urlsReferToSameResource(left: string, right: string): boolean {
   return Boolean(a && b && a === b);
 }
 
-export function scriptMatchesUrl(matches: unknown, url: string): boolean {
-  const target = String(url || '').trim();
-  if (!target || target === 'about:blank') return false;
-  return (Array.isArray(matches) ? matches : []).some((pattern) => matchUrlPattern(String(pattern || ''), target));
+export function normalizeScriptMatches(matches: unknown): string[] {
+  if (Array.isArray(matches)) {
+    return matches.map((item) => String(item || '').trim()).filter(Boolean);
+  }
+  if (typeof matches === 'string') {
+    const trimmed = matches.trim();
+    if (!trimmed) return [];
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) return normalizeScriptMatches(parsed);
+    } catch {
+      // comma-separated patterns from the editor
+    }
+    return trimmed.split(',').map((item) => item.trim()).filter(Boolean);
+  }
+  return [];
+}
+
+function globMatches(pattern: string, url: string) {
+  const escaped = pattern
+    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/\*/g, '.*');
+  try {
+    return new RegExp(`^${escaped}$`, 'i').test(url);
+  } catch {
+    return false;
+  }
+}
+
+function hostnameFromUrl(url: string) {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function isHostOnlyPattern(pattern: string) {
+  const trimmed = pattern.replace(/^\*:\/\//, '').replace(/\/\*$/, '').replace(/\/$/, '');
+  if (trimmed.includes('://') || trimmed.includes('/')) return false;
+  return /^(\*\.)?[a-z0-9.-]+\.?$/i.test(trimmed);
+}
+
+function hostPatternMatches(pattern: string, hostname: string) {
+  if (!hostname) return false;
+  const normalized = pattern
+    .replace(/^\*:\/\//, '')
+    .replace(/\/\*$/, '')
+    .replace(/\/$/, '')
+    .replace(/^\*\./, '')
+    .replace(/\*$/, '')
+    .replace(/^\./, '')
+    .toLowerCase();
+  if (!normalized) return false;
+  return hostname === normalized || hostname.endsWith(`.${normalized}`);
+}
+
+export function scriptMatchesUrl(matches: unknown, url: string | string[]): boolean {
+  const patterns = normalizeScriptMatches(matches);
+  if (patterns.length === 0) return false;
+
+  const targets = (Array.isArray(url) ? url : [url]).flatMap((item) => {
+    const raw = String(item || '').trim();
+    if (!raw || raw === 'about:blank') return [];
+    const canonical = canonicalizeBrowserUrl(raw);
+    return canonical && canonical !== raw ? [raw, canonical] : [raw];
+  });
+
+  return targets.some((target) => patterns.some((pattern) => matchUrlPattern(pattern, target)));
 }
 
 export function matchUrlPattern(pattern: string, url: string): boolean {
   const normalizedPattern = String(pattern || '').trim();
   const target = String(url || '').trim();
   if (!normalizedPattern || !target) return false;
-  if (normalizedPattern === '*') return true;
+  if (normalizedPattern === '*' || normalizedPattern === '<all_urls>') return true;
+  if (globMatches(normalizedPattern, target)) return true;
 
-  const escaped = normalizedPattern
-    .replace(/[.+?^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*/g, '.*');
-  try {
-    return new RegExp(`^${escaped}$`, 'i').test(target);
-  } catch {
-    return false;
+  const lowerTarget = target.toLowerCase();
+  const lowerPattern = normalizedPattern.toLowerCase();
+  if (!normalizedPattern.includes('*') && lowerTarget.startsWith(lowerPattern)) return true;
+
+  const canonicalTarget = canonicalizeBrowserUrl(target);
+  if (canonicalTarget && canonicalTarget !== target) {
+    if (globMatches(normalizedPattern, canonicalTarget)) return true;
+    if (!normalizedPattern.includes('*') && canonicalTarget.toLowerCase().startsWith(lowerPattern)) return true;
   }
+
+  const patternAsUrl = normalizedPattern.replace(/\*$/, '');
+  if (urlsReferToSameResource(patternAsUrl, target)) return true;
+
+  if (isHostOnlyPattern(normalizedPattern)) {
+    const hostname = hostnameFromUrl(target) || hostnameFromUrl(canonicalTarget || '');
+    if (hostPatternMatches(normalizedPattern, hostname)) return true;
+  }
+
+  return false;
 }
 
 export function isHttpUrlString(value: unknown): value is string {

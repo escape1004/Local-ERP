@@ -238,7 +238,7 @@ function BookmarkRow({
           )}
         </div>
         {secondary ? (
-          <div className="truncate pl-[18px] text-[11px] text-discord-muted">{secondary}</div>
+          <div className="truncate pl-[18px] text-xs text-discord-muted">{secondary}</div>
         ) : null}
       </div>
     </div>
@@ -334,7 +334,7 @@ function FolderNode({
             }
           }}
         >
-          {depth > 0 && <span className="text-xs text-gray-400">└</span>}
+          {depth > 0 && <span className="text-sm text-gray-400">└</span>}
           {open ? (
             <ChevronDown size={14} className="shrink-0 text-discord-muted" />
           ) : (
@@ -370,7 +370,7 @@ function FolderNode({
           ) : (
             <span className="min-w-0 flex-1 truncate text-sm font-medium text-discord-text">{folder.name}</span>
           )}
-          <span className="shrink-0 text-[11px] tabular-nums text-discord-muted">{total}</span>
+          <span className="shrink-0 text-xs tabular-nums text-discord-muted">{total}</span>
         </div>
       </div>
   );
@@ -781,7 +781,7 @@ export function BookmarkTree({
   return (
     <ManualDndContext.Provider value={dndValue}>
       <div className="flex h-full min-h-0 flex-col">
-        <div className="flex shrink-0 items-center gap-4 px-3 pb-2 pt-3 text-[11px] text-discord-muted">
+        <div className="flex shrink-0 items-center gap-4 px-3 pb-2 pt-3 text-sm text-discord-muted">
           <span className="inline-flex items-center gap-1.5">
             <Star size={12} className="fill-yellow-400 text-yellow-400" />
             직접 추가
@@ -812,7 +812,7 @@ export function BookmarkTree({
           className={cn('min-h-0 flex-1 overflow-y-auto discord-scrollbar px-3 pb-3', dragging && 'select-none')}
         >
           {tree.length === 0 ? (
-            <div className="py-8 text-center text-xs text-discord-muted">저장된 북마크가 없습니다.</div>
+            <div className="py-8 text-center text-sm text-discord-muted">저장된 북마크가 없습니다.</div>
           ) : (
             tree.map((folder) => (
               <FolderNode

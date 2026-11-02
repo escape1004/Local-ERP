@@ -62,7 +62,7 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNewTab }: TabBarPr
                 onClick={() => onSelect(tab.id)}
                 style={noDragStyle}
                 className={cn(
-                  'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 text-xs',
+                  'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 text-sm',
                   active ? 'bg-discord-bg text-discord-text' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text',
                 )}
               >

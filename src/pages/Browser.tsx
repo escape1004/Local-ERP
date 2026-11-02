@@ -34,7 +34,13 @@ import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolde
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 import { scriptMatchesUrl } from '../main/lib/browser-url';
+import { wrapUserscript } from '../main/lib/browser-userscript';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
+import {
+  resolveWebviewStartNavigation,
+  shouldLoadPendingWebviewUrl,
+  upsertBrowserScriptList,
+} from '../lib/browserWebviewLoad';
 import {
   closeBrowserTab,
   cycleBrowserTab,
@@ -96,10 +102,6 @@ function BrowserTooltip({
       </TooltipContent>
     </Tooltip>
   );
-}
-
-function wrapOneShotUserscript(source: string) {
-  return `(function(){try{${source}\n}catch(error){console.error('[ERP userscript]', error);}})();`;
 }
 
 function emptyScript(): BrowserScript {
@@ -191,11 +193,11 @@ const BrowserPage: React.FC = () => {
 
   React.useEffect(() => {
     let ignore = false;
+    void refreshLists();
     void Promise.all([
       window.electronAPI.getBrowserPreloadPath(),
       window.electronAPI.getBrowserPartition(),
       window.electronAPI.getConfig(),
-      refreshLists(),
     ]).then(([nextPreload, nextPartition, config]) => {
       if (ignore) return;
       setPreloadPath(nextPreload);
@@ -292,18 +294,56 @@ const BrowserPage: React.FC = () => {
 
   const lastOpenedTabRef = React.useRef({ url: '', at: 0 });
   const pendingLoadRef = React.useRef(new Map<string, string>());
-  const pendingTestScriptRef = React.useRef<{ tabId: string; source: string; armed: boolean } | null>(null);
+  const backgroundLoadTimersRef = React.useRef(new Map<string, number>());
+
+  const readWebviewUrl = React.useCallback((webview: EmbeddedWebview) => {
+    try {
+      return webview.getURL() || NEW_TAB_URL;
+    } catch {
+      return '';
+    }
+  }, []);
+
+  const clearDeferredTabLoad = React.useCallback((tabId: string) => {
+    const timer = backgroundLoadTimersRef.current.get(tabId);
+    if (timer) {
+      window.clearTimeout(timer);
+      backgroundLoadTimersRef.current.delete(tabId);
+    }
+    pendingLoadRef.current.delete(tabId);
+  }, []);
+
+  const flushDeferredTabLoad = React.useCallback((tabId: string) => {
+    const timer = backgroundLoadTimersRef.current.get(tabId);
+    if (timer) {
+      window.clearTimeout(timer);
+      backgroundLoadTimersRef.current.delete(tabId);
+    }
+    const pending = pendingLoadRef.current.get(tabId);
+    const webview = webviewByTabRef.current.get(tabId);
+    if (!pending || !webview) return;
+    if (!shouldLoadPendingWebviewUrl(readWebviewUrl(webview), pending)) {
+      pendingLoadRef.current.delete(tabId);
+      return;
+    }
+    pendingLoadRef.current.delete(tabId);
+    try {
+      webview.loadURL(pending);
+    } catch {
+      webview.src = pending;
+    }
+  }, [readWebviewUrl]);
 
   const loadUrlInTab = React.useCallback((tabId: string, nextUrl: string) => {
     patchTab(tabId, { url: nextUrl, title: titleForBrowserTab(nextUrl), loading: true });
     const webview = webviewByTabRef.current.get(tabId);
     if (webview?.loadURL) {
-      pendingLoadRef.current.delete(tabId);
+      clearDeferredTabLoad(tabId);
       webview.loadURL(nextUrl);
       return;
     }
     pendingLoadRef.current.set(tabId, nextUrl);
-  }, [patchTab]);
+  }, [clearDeferredTabLoad, patchTab]);
 
   const openTab = React.useCallback((rawUrl?: string, options?: { background?: boolean; newTab?: boolean }) => {
     const nextUrl = rawUrl
@@ -344,6 +384,7 @@ const BrowserPage: React.FC = () => {
 
   const closeTab = React.useCallback((tabId: string) => {
     const result = closeBrowserTab(tabsRef.current, activeTabIdRef.current, tabId);
+    clearDeferredTabLoad(tabId);
     const webview = webviewByTabRef.current.get(tabId);
     if (webview) {
       webviewByTabRef.current.delete(tabId);
@@ -351,7 +392,7 @@ const BrowserPage: React.FC = () => {
     }
     setTabs(result.tabs);
     setActiveTabId(result.activeId);
-  }, []);
+  }, [clearDeferredTabLoad]);
 
   const navigateTo = React.useCallback((rawUrl: string) => {
     const nextUrl = resolveBrowserAddressInput(rawUrl);
@@ -471,8 +512,14 @@ const BrowserPage: React.FC = () => {
         || tabsRef.current.find((item) => item.id === tabId)?.url
         || NEW_TAB_URL;
       pendingLoadRef.current.delete(tabId);
+      const tabIndex = Math.max(0, tabsRef.current.findIndex((item) => item.id === tabId));
+      const navigation = resolveWebviewStartNavigation({
+        startUrl,
+        isActive: tabId === activeTabIdRef.current,
+        tabIndex,
+      });
       let ignoreInitialBlank = !isBlankBrowserTab({ url: startUrl });
-      webview.src = ignoreInitialBlank ? startUrl : NEW_TAB_URL;
+      webview.src = navigation.src;
 
       const onNav = () => {
         try {
@@ -484,54 +531,23 @@ const BrowserPage: React.FC = () => {
         }
         syncTabFromWebview(tabId, webview, { loading: false });
       };
-      const onStart = () => {
-        patchTab(tabId, { loading: true });
-        const pending = pendingTestScriptRef.current;
-        if (pending && pending.tabId === tabId) pending.armed = true;
-      };
-      const onFinish = () => {
-        onNav();
-        const pending = pendingTestScriptRef.current;
-        if (!pending || pending.tabId !== tabId || !pending.armed) return;
-        pendingTestScriptRef.current = null;
-        const source = pending.source;
-        window.setTimeout(() => {
-          void webview.executeJavaScript?.(wrapOneShotUserscript(source)).catch(() => undefined);
-        }, 400);
-      };
       const onTitle = (event: Event) => {
         const title = (event as Event & { title?: string }).title;
         if (title) patchTab(tabId, { title: titleForBrowserTab(webview.getURL?.() || NEW_TAB_URL, title) });
       };
-      let started = false;
-      const loadPending = () => {
-        if (started) return;
-        if (isBlankBrowserTab({ url: startUrl })) {
-          started = true;
-          return;
-        }
-        started = true;
-        try {
-          if (webview.getURL() === startUrl) return;
-        } catch {
-          // load before the guest is ready
-        }
-        webview.loadURL(startUrl);
-      };
 
-      webview.addEventListener('did-attach', loadPending);
-      webview.addEventListener('dom-ready', loadPending);
-      webview.addEventListener('did-start-loading', onStart);
+      webview.addEventListener('did-start-loading', () => patchTab(tabId, { loading: true }));
       webview.addEventListener('did-stop-loading', onNav);
       webview.addEventListener('did-navigate', onNav);
       webview.addEventListener('did-navigate-in-page', onNav);
-      webview.addEventListener('did-finish-load', onFinish);
+      webview.addEventListener('did-finish-load', onNav);
       webview.addEventListener('page-title-updated', onTitle);
-      webview.addEventListener('did-fail-load', () => {
-        onNav();
-        const pending = pendingTestScriptRef.current;
-        if (pending?.tabId === tabId && pending.armed) pendingTestScriptRef.current = null;
-      });
+      webview.addEventListener('did-fail-load', onNav);
+      if (navigation.deferUrl) {
+        pendingLoadRef.current.set(tabId, navigation.deferUrl);
+        const timer = window.setTimeout(() => flushDeferredTabLoad(tabId), navigation.deferMs);
+        backgroundLoadTimersRef.current.set(tabId, timer);
+      }
       webview.addEventListener('ipc-message', (event: Event) => {
         const message = event as WebviewIpcMessageEvent;
         if (message.channel === 'browser:mouse-button') {
@@ -555,16 +571,21 @@ const BrowserPage: React.FC = () => {
     }
     if (webview.parentElement !== host) host.replaceChildren(webview);
     if (tabId === activeTabIdRef.current) webviewRef.current = webview;
-  }, [applyPageZoom, navigateFromMouseButton, openTab, partition, patchTab, preloadPath, syncTabFromWebview]);
+  }, [applyPageZoom, flushDeferredTabLoad, navigateFromMouseButton, openTab, partition, patchTab, preloadPath, syncTabFromWebview]);
+
+  React.useEffect(() => {
+    flushDeferredTabLoad(activeTabId);
+  }, [activeTabId, flushDeferredTabLoad]);
 
   React.useEffect(() => {
     const ids = new Set(tabs.map((tab) => tab.id));
     webviewByTabRef.current.forEach((webview, tabId) => {
       if (ids.has(tabId)) return;
+      clearDeferredTabLoad(tabId);
       webviewByTabRef.current.delete(tabId);
       webview.remove();
     });
-  }, [tabs]);
+  }, [clearDeferredTabLoad, tabs]);
 
   const [canonicalCurrent, setCanonicalCurrent] = React.useState('');
   React.useEffect(() => {
@@ -625,6 +646,26 @@ const BrowserPage: React.FC = () => {
     await refreshLists();
   };
 
+  const collectActivePageUrls = () => {
+    const urls = [currentUrl, canonicalCurrent];
+    try {
+      const guestUrl = activeWebview()?.getURL?.();
+      if (guestUrl) urls.push(guestUrl);
+    } catch {
+      // webview methods can throw before attachment
+    }
+    return urls;
+  };
+
+  const pageMatchesScript = (matches: unknown) => scriptMatchesUrl(matches, collectActivePageUrls());
+
+  const applyScriptToActivePage = (source: string) => {
+    const webview = activeWebview();
+    if (!webview?.executeJavaScript) return false;
+    void webview.executeJavaScript(wrapUserscript(source)).catch(() => undefined);
+    return true;
+  };
+
   const saveDraft = async () => {
     setSaving(true);
     try {
@@ -642,20 +683,17 @@ const BrowserPage: React.FC = () => {
       }
       setDraft(result.script);
       setScriptModalOpen(false);
-      await refreshLists();
-      const appliesToCurrentPage = scriptMatchesUrl(result.script.matches, currentUrl);
-      const webview = activeWebview();
-      if (appliesToCurrentPage && webview) {
-        try {
-          webview.reload();
-        } catch {
-          // webview methods can throw before attachment
-        }
-      }
+      setScripts((current) => upsertBrowserScriptList(current, result.script));
+      const matchesPage = pageMatchesScript(
+        result.script.matches?.length ? result.script.matches : draft.matches,
+      );
+      const applied = Boolean(result.script.enabled) && matchesPage && applyScriptToActivePage(result.script.source);
       toast({
-        title: appliesToCurrentPage
-          ? '스크립트를 저장했습니다.'
-          : '스크립트를 저장했습니다. 현재 페이지는 대상이 아니라 적용하지 않았습니다.',
+        title: applied
+          ? '스크립트를 저장하고 현재 페이지에 적용했습니다.'
+          : matchesPage
+            ? '스크립트를 저장했습니다.'
+            : '스크립트를 저장했습니다. 현재 페이지는 대상이 아니라 적용하지 않았습니다.',
       });
     } finally {
       setSaving(false);
@@ -713,36 +751,44 @@ const BrowserPage: React.FC = () => {
 
   const deleteDraft = async () => {
     if (!draft.id) return;
+    const matchesPage = pageMatchesScript(draft.matches);
     const result = await window.electronAPI.deleteBrowserScript(draft.id);
     if (!result.success) {
       toast({ title: result.error || '스크립트를 삭제하지 못했습니다.', variant: 'destructive' });
       return;
     }
+    const deletedId = draft.id;
     setDraft(emptyScript());
     setScriptModalOpen(false);
-    await refreshLists();
-    toast({ title: '스크립트를 삭제했습니다.' });
+    setScripts((current) => current.filter((script) => script.id !== deletedId));
+    if (matchesPage) {
+      try {
+        activeWebview()?.reload();
+      } catch {
+        // webview methods can throw before attachment
+      }
+    }
+    toast({
+      title: matchesPage
+        ? '스크립트를 삭제하고 현재 페이지에 반영했습니다.'
+        : '스크립트를 삭제했습니다. 현재 페이지는 대상이 아니라 적용하지 않았습니다.',
+    });
   };
 
   const testChatScript = (script: BrowserAiChatScript) => {
-    const webview = activeWebview();
-    const tabId = activeTabIdRef.current;
-    if (!webview || !tabId || isBlankBrowserTab({ url: currentUrl })) {
+    if (isBlankBrowserTab({ url: currentUrl })) {
       toast({ title: '테스트를 적용할 페이지가 없습니다.', variant: 'destructive' });
       return;
     }
-    if (!scriptMatchesUrl(script.matches, currentUrl)) {
+    if (!pageMatchesScript(script.matches)) {
       toast({ title: '현재 페이지는 이 스크립트의 대상이 아닙니다.', variant: 'destructive' });
       return;
     }
-    pendingTestScriptRef.current = { tabId, source: script.source, armed: false };
-    try {
-      webview.reload();
-      toast({ title: '테스트 스크립트를 1회 적용합니다.' });
-    } catch {
-      pendingTestScriptRef.current = null;
-      toast({ title: '페이지를 새로고침하지 못했습니다.', variant: 'destructive' });
+    if (!applyScriptToActivePage(script.source)) {
+      toast({ title: '테스트를 적용할 페이지가 없습니다.', variant: 'destructive' });
+      return;
     }
+    toast({ title: '테스트 스크립트를 현재 페이지에 적용했습니다.' });
   };
 
   const sendChat = async () => {
@@ -982,7 +1028,7 @@ const BrowserPage: React.FC = () => {
                   type="button"
                   onClick={() => setSideTab(id)}
                   aria-label={label}
-                  className={`flex flex-1 items-center justify-center gap-1 px-2 py-2 text-xs ${
+                  className={`flex flex-1 items-center justify-center gap-1 px-2 py-2 text-sm ${
                     sideTab === id ? 'bg-discord-accent text-white' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text'
                   }`}
                 >
@@ -1045,7 +1091,7 @@ const BrowserPage: React.FC = () => {
                 <div className="flex h-full flex-col">
                   <div className="min-h-0 flex-1 space-y-1 overflow-y-auto discord-scrollbar p-3">
                     {scripts.length === 0 && (
-                      <p className="px-1 py-6 text-center text-[11px] leading-relaxed text-discord-muted">
+                      <p className="px-1 py-6 text-center text-sm leading-relaxed text-discord-muted">
                         저장된 스크립트가 없습니다.
                       </p>
                     )}
@@ -1054,10 +1100,19 @@ const BrowserPage: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => openScriptModal(script)}
-                          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-discord-text hover:bg-discord-hover"
+                          className="flex w-full items-start justify-between rounded-md px-2 py-1.5 text-left text-discord-text hover:bg-discord-hover"
                         >
-                          <span className="truncate">{script.name}</span>
-                          <span className="ml-2 shrink-0 text-discord-muted">{script.enabled ? '켜짐' : '꺼짐'}</span>
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate text-sm">{script.name}</span>
+                            {script.matches.length > 0 && (
+                              <span className="mt-0.5 block truncate text-xs text-discord-muted">
+                                {script.matches.join(', ')}
+                              </span>
+                            )}
+                          </span>
+                          <span className={`ml-2 shrink-0 pt-0.5 text-sm ${script.enabled ? 'text-discord-accent' : 'text-discord-muted'}`}>
+                            {script.enabled ? '켜짐' : '꺼짐'}
+                          </span>
                         </button>
                       </BrowserTooltip>
                     ))}
@@ -1066,7 +1121,7 @@ const BrowserPage: React.FC = () => {
                     <BrowserTooltip label="새 스크립트 만들기">
                       <Button
                         variant="outline"
-                        className="h-8 w-full border-gray-600 text-xs"
+                        className="h-8 w-full border-gray-600 text-sm"
                         onClick={() => openScriptModal(emptyScript())}
                       >
                         새 스크립트

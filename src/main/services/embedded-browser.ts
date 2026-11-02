@@ -1,6 +1,6 @@
 import { BrowserWindow, session } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
-import { matchUrlPattern } from '../lib/browser-url';
+import { scriptMatchesUrl } from '../lib/browser-url';
 import {
   chromeLikeUserAgent,
   isBackgroundBrowserTabDisposition,
@@ -8,6 +8,7 @@ import {
   shouldOpenEmbeddedBrowserPopup,
 } from '../lib/embedded-browser-policy';
 import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
+import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
 import { log } from '../app/state';
 
@@ -76,27 +77,19 @@ function parseMatches(raw) {
   }
 }
 
-function wrapUserscript(source) {
-  return `(function(){try{${source}\n}catch(error){console.error('[ERP userscript]', error);}})();`;
-}
-
 export function injectMatchingScripts(contents) {
   if (!contents || contents.isDestroyed()) return;
   const currentUrl = contents.getURL();
   if (!isAllowedEmbeddedBrowserUrl(currentUrl) || currentUrl === 'about:blank') return;
 
   const scripts = listEnabledScripts().filter((script) => (
-    parseMatches(script.matches_json).some((pattern) => matchUrlPattern(pattern, currentUrl))
+    scriptMatchesUrl(parseMatches(script.matches_json), currentUrl)
   ));
 
   scripts.forEach((script) => {
-    const delay = script.run_at === 'document-idle' ? 400 : 0;
-    setTimeout(() => {
-      if (contents.isDestroyed()) return;
-      contents.executeJavaScript(wrapUserscript(script.source), true).catch((error) => {
-        log('브라우저 스크립트 주입 실패:', { name: script.name, error });
-      });
-    }, delay);
+    contents.executeJavaScript(wrapUserscriptForRunAt(script.source, script.run_at), true).catch((error) => {
+      log('브라우저 스크립트 주입 실패:', { name: script.name, error });
+    });
   });
 }
 

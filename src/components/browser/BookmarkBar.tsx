@@ -197,7 +197,7 @@ export function BookmarkBar({
       )}
     >
       {bookmarks.length === 0 ? (
-        <span className="px-1 text-[11px] text-discord-muted">여기에 놓으면 북마크 바로 이동합니다</span>
+        <span className="px-1 text-sm text-discord-muted">여기에 놓으면 북마크 바로 이동합니다</span>
       ) : bookmarks.map((bookmark, index) => {
         const active = activeUrls.includes(bookmark.url);
         const renaming = renamingId === bookmark.id;
@@ -223,7 +223,7 @@ export function BookmarkBar({
                     <input
                       autoFocus
                       value={renameDraft}
-                      className="h-6 w-32 rounded-sm border border-gray-600 bg-discord-bg px-1 text-xs text-discord-text outline-none"
+                      className="h-6 w-32 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
                       onChange={(event) => setRenameDraft(event.target.value)}
                       onBlur={() => submitRename()}
                       onKeyDown={(event) => {
@@ -244,7 +244,7 @@ export function BookmarkBar({
                           type="button"
                           aria-label={bookmark.title.trim() || bookmark.url}
                           className={cn(
-                            'inline-flex items-center gap-1 rounded-md text-xs text-discord-text hover:bg-discord-hover',
+                            'inline-flex items-center gap-1 rounded-md text-sm text-discord-text hover:bg-discord-hover',
                             iconOnly ? 'h-7 w-7 justify-center' : 'max-w-[180px] px-2 py-1',
                             'cursor-grab active:cursor-grabbing',
                             active && 'bg-discord-accent/20',
@@ -279,7 +279,7 @@ export function BookmarkBar({
                       <TooltipContent side="bottom" align="start" className={FIELD_TOOLTIP_CLASSNAME}>
                         <div className="whitespace-pre">{bookmark.title || bookmark.url}</div>
                         {bookmark.title ? (
-                          <div className="mt-0.5 text-[11px] text-discord-muted">{bookmark.url}</div>
+                          <div className="mt-0.5 text-xs text-discord-muted">{bookmark.url}</div>
                         ) : null}
                       </TooltipContent>
                     </Tooltip>
