@@ -68,7 +68,7 @@ type BookmarkBarProps = {
   activeUrls?: string[];
   acceptDrop?: boolean;
   draggingId?: string | null;
-  onOpen: (bookmark: BrowserBookmark) => void;
+  onOpen: (bookmark: BrowserBookmark, options?: { newTab?: boolean; background?: boolean }) => void;
   onRemove: (bookmark: BrowserBookmark) => void;
   onRename: (bookmark: BrowserBookmark, title: string) => void | Promise<void>;
   onDropBookmark: (payload: { id: string; index: number }) => void;
@@ -249,12 +249,25 @@ export function BookmarkBar({
                             'cursor-grab active:cursor-grabbing',
                             active && 'bg-discord-accent/20',
                           )}
-                          onClick={() => {
+                          onPointerDown={(event) => {
+                            if (event.button !== 1) return;
+                            event.preventDefault();
+                            onOpen(bookmark, { newTab: true, background: true });
+                          }}
+                          onClick={(event) => {
                             if (suppressClickRef.current) {
                               suppressClickRef.current = false;
                               return;
                             }
-                            onOpen(bookmark);
+                            onOpen(bookmark, {
+                              newTab: event.ctrlKey || event.metaKey,
+                              background: false,
+                            });
+                          }}
+                          onAuxClick={(event) => {
+                            if (event.button !== 1) return;
+                            event.preventDefault();
+                            onOpen(bookmark, { newTab: true, background: true });
                           }}
                         >
                           <BookmarkFavicon url={bookmark.url} />

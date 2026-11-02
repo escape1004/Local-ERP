@@ -1,6 +1,8 @@
 import { expect, test } from 'vitest';
 import {
   chromeLikeUserAgent,
+  isBackgroundBrowserTabDisposition,
+  isBrowserTabDisposition,
   popupBoundsFromFeatures,
   shouldOpenEmbeddedBrowserPopup,
 } from './embedded-browser-policy';
@@ -18,13 +20,20 @@ test('keeps sized or named window.open calls as popups for login flows', () => {
   })).toBe(true);
 });
 
-test('folds plain target=_blank navigations into the current webview', () => {
+test('keeps plain target=_blank navigations out of login popups so they can open as tabs', () => {
   expect(shouldOpenEmbeddedBrowserPopup({
     url: 'https://www.youtube.com/watch?v=abc',
     frameName: '_blank',
   })).toBe(false);
   expect(shouldOpenEmbeddedBrowserPopup({
     url: 'https://example.com/next',
+  })).toBe(false);
+  expect(isBackgroundBrowserTabDisposition('background-tab')).toBe(true);
+  expect(isBackgroundBrowserTabDisposition('foreground-tab')).toBe(false);
+  expect(isBrowserTabDisposition('foreground-tab')).toBe(true);
+  expect(shouldOpenEmbeddedBrowserPopup({
+    url: 'about:blank',
+    disposition: 'background-tab',
   })).toBe(false);
 });
 

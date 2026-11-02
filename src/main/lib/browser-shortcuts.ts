@@ -1,5 +1,3 @@
-import { webContents } from 'electron';
-
 export type EmbeddedBrowserShortcutAction =
   | 'reload'
   | 'hard-reload'
@@ -9,7 +7,24 @@ export type EmbeddedBrowserShortcutAction =
   | 'focus-address'
   | 'zoom-in'
   | 'zoom-out'
-  | 'zoom-reset';
+  | 'zoom-reset'
+  | 'new-tab'
+  | 'close-tab'
+  | 'next-tab'
+  | 'prev-tab'
+  | 'tab-1' | 'tab-2' | 'tab-3' | 'tab-4' | 'tab-5' | 'tab-6' | 'tab-7' | 'tab-8' | 'tab-9';
+
+const HOST_SHORTCUT_ACTIONS = new Set<EmbeddedBrowserShortcutAction>([
+  'focus-address',
+  'new-tab',
+  'close-tab',
+  'next-tab',
+  'prev-tab',
+]);
+
+function isHostShortcutAction(action: string): action is EmbeddedBrowserShortcutAction {
+  return HOST_SHORTCUT_ACTIONS.has(action as EmbeddedBrowserShortcutAction) || /^tab-[1-9]$/.test(action);
+}
 
 const BROWSER_ZOOM_STEPS = [0.25, 0.33, 0.5, 0.67, 0.75, 0.8, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2, 2.5, 3, 4, 5];
 
@@ -101,20 +116,19 @@ export function resolveEmbeddedBrowserShortcut(input: ShortcutInput = {}): Embed
   if (control && !alt && !shift && (letter === 'l' || isKey(input, ['l', 'L'], ['KeyL']))) return 'focus-address';
   if (alt && !control && !shift && (letter === 'd' || isKey(input, ['d', 'D'], ['KeyD']))) return 'focus-address';
 
+  if (control && !alt && !shift && (letter === 't' || isKey(input, ['t', 'T'], ['KeyT']))) return 'new-tab';
+  if (control && !alt && !shift && (letter === 'w' || isKey(input, ['w', 'W'], ['KeyW']))) return 'close-tab';
+  if (control && !alt && !shift && isKey(input, ['F4'])) return 'close-tab';
+  if (control && !alt && isKey(input, ['Tab'])) return shift ? 'prev-tab' : 'next-tab';
+  if (control && !alt && !shift && isKey(input, ['PageDown'])) return 'next-tab';
+  if (control && !alt && !shift && isKey(input, ['PageUp'])) return 'prev-tab';
+  if (control && !alt && !shift && /^[1-9]$/.test(key)) {
+    return `tab-${key}` as EmbeddedBrowserShortcutAction;
+  }
+
   if (isKey(input, ['Escape', 'Esc']) && !control && !alt && !shift) return 'stop';
 
   return null;
-}
-
-export function findWebviewGuestForHost(hostContents) {
-  if (!hostContents || hostContents.isDestroyed()) return null;
-  return webContents.getAllWebContents().find((item) => {
-    try {
-      return Boolean(item) && !item.isDestroyed() && item.hostWebContents === hostContents;
-    } catch {
-      return false;
-    }
-  }) || null;
 }
 
 function isWebContentsLoading(contents) {
@@ -144,9 +158,9 @@ function canGoForward(contents) {
 export function applyEmbeddedBrowserShortcut(contents, action: EmbeddedBrowserShortcutAction) {
   if (!contents || contents.isDestroyed()) return;
 
-  if (action === 'focus-address') {
+  if (isHostShortcutAction(action)) {
     const host = contents.hostWebContents || contents;
-    if (!host.isDestroyed()) host.send('browser:shortcut', 'focus-address');
+    if (!host.isDestroyed()) host.send('browser:shortcut', action);
     return;
   }
 

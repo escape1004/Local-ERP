@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
+import { TabBar } from '../components/browser/TabBar';
 import type { ManualDragItem } from '../components/browser/bookmark-dnd';
 import { Button } from '../components/ui/button';
 import {
@@ -31,6 +32,18 @@ import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRendere
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
+import {
+  closeBrowserTab,
+  cycleBrowserTab,
+  isBlankBrowserTab,
+  MAX_BROWSER_TABS,
+  NEW_TAB_URL,
+  openBrowserTab,
+  restoreBrowserSession,
+  selectBrowserTabByNumber,
+  titleForBrowserTab,
+  type BrowserTabState,
+} from '../lib/browserTabs';
 
 type EmbeddedWebview = HTMLElement & {
   src: string;
@@ -38,6 +51,7 @@ type EmbeddedWebview = HTMLElement & {
   goBack: () => void;
   goForward: () => void;
   reload: () => void;
+  reloadIgnoringCache?: () => void;
   stop: () => void;
   canGoBack: () => boolean;
   canGoForward: () => boolean;
@@ -96,20 +110,19 @@ const BrowserPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const requestedUrl = searchParams.get('url') || '';
   const webviewRef = React.useRef<EmbeddedWebview | null>(null);
-  const webviewHostRef = React.useRef<HTMLDivElement | null>(null);
+  const webviewByTabRef = React.useRef(new Map<string, EmbeddedWebview>());
   const addressInputRef = React.useRef<HTMLInputElement | null>(null);
   const addressFocusedRef = React.useRef(false);
   const addressRef = React.useRef(requestedUrl);
-  const pendingUrlRef = React.useRef(parseExternalHttpUrl(requestedUrl)?.toString() || '');
+  const tabsRef = React.useRef<BrowserTabState[]>([]);
+  const activeTabIdRef = React.useRef('');
+  const [tabs, setTabs] = React.useState<BrowserTabState[]>([]);
+  const [activeTabId, setActiveTabId] = React.useState('');
+  const [sessionReady, setSessionReady] = React.useState(false);
 
   const [preloadPath, setPreloadPath] = React.useState('');
   const [partition, setPartition] = React.useState('persist:erp-browser');
   const [address, setAddress] = React.useState(requestedUrl);
-  const [currentUrl, setCurrentUrl] = React.useState('about:blank');
-  const [pageTitle, setPageTitle] = React.useState('브라우저');
-  const [canGoBack, setCanGoBack] = React.useState(false);
-  const [canGoForward, setCanGoForward] = React.useState(false);
-  const [loading, setLoading] = React.useState(false);
   const [sideTab, setSideTab] = React.useState<SideTab>('bookmarks');
   const [sidePanelOpen, setSidePanelOpen] = React.useState(true);
   const [bookmarks, setBookmarks] = React.useState<BrowserBookmark[]>([]);
@@ -123,6 +136,15 @@ const BrowserPage: React.FC = () => {
   const [generating, setGenerating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = React.useState(false);
+
+  tabsRef.current = tabs;
+  activeTabIdRef.current = activeTabId;
+  const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
+  const currentUrl = activeTab?.url || NEW_TAB_URL;
+  const pageTitle = activeTab?.title || '브라우저';
+  const canGoBack = Boolean(activeTab?.canGoBack);
+  const canGoForward = Boolean(activeTab?.canGoForward);
+  const loading = Boolean(activeTab?.loading);
 
   const refreshLists = React.useCallback(async () => {
     const [nextBookmarks, nextScripts] = await Promise.all([
@@ -157,16 +179,35 @@ const BrowserPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
+    let ignore = false;
     void Promise.all([
       window.electronAPI.getBrowserPreloadPath(),
       window.electronAPI.getBrowserPartition(),
+      window.electronAPI.getConfig(),
       refreshLists(),
-      refreshOpenAiAvailability(),
-    ]).then(([nextPreload, nextPartition]) => {
+    ]).then(([nextPreload, nextPartition, config]) => {
+      if (ignore) return;
       setPreloadPath(nextPreload);
       if (nextPartition) setPartition(nextPartition);
+      setHasOpenAiApiKey(Boolean(config?.hasOpenAiApiKey));
+      const requested = parseExternalHttpUrl(requestedUrl)?.toString() || '';
+      const restored = restoreBrowserSession(
+        Array.isArray(config?.browserLastTabs) ? config.browserLastTabs : [],
+        Number(config?.browserLastTabIndex) || 0,
+        requested,
+      );
+      setTabs(restored.tabs);
+      setActiveTabId(restored.activeId);
+      const active = restored.tabs.find((tab) => tab.id === restored.activeId);
+      const display = active && !isBlankBrowserTab(active) ? active.url : '';
+      addressRef.current = display;
+      setAddress(display);
+      setSessionReady(true);
     });
-  }, [refreshLists, refreshOpenAiAvailability]);
+    return () => {
+      ignore = true;
+    };
+  }, [refreshLists, requestedUrl]);
 
   React.useEffect(() => {
     const onFocus = () => {
@@ -183,44 +224,50 @@ const BrowserPage: React.FC = () => {
     }
   }, [hasOpenAiApiKey, sideTab]);
 
-  const syncNavigation = React.useCallback(() => {
-    const webview = webviewRef.current;
-    if (!webview) return;
+  const patchTab = React.useCallback((tabId: string, patch: Partial<BrowserTabState>) => {
+    setTabs((current) => current.map((tab) => (tab.id === tabId ? { ...tab, ...patch } : tab)));
+  }, []);
+
+  const syncTabFromWebview = React.useCallback((tabId: string, webview: EmbeddedWebview, extra?: Partial<BrowserTabState>) => {
     try {
-      const nextUrl = webview.getURL() || 'about:blank';
-      setCurrentUrl(nextUrl);
-      if (nextUrl && nextUrl !== 'about:blank') {
-        pendingUrlRef.current = nextUrl;
-      }
-      if (!addressFocusedRef.current) {
-        const display = nextUrl === 'about:blank' ? '' : nextUrl;
+      const nextUrl = webview.getURL() || NEW_TAB_URL;
+      patchTab(tabId, {
+        url: nextUrl,
+        title: titleForBrowserTab(nextUrl, webview.getTitle()),
+        canGoBack: webview.canGoBack(),
+        canGoForward: webview.canGoForward(),
+        ...extra,
+      });
+      if (tabId === activeTabIdRef.current && !addressFocusedRef.current) {
+        const display = isBlankBrowserTab({ url: nextUrl }) ? '' : nextUrl;
         addressRef.current = display;
         setAddress(display);
       }
-      setPageTitle(webview.getTitle() || '브라우저');
-      setCanGoBack(webview.canGoBack());
-      setCanGoForward(webview.canGoForward());
     } catch {
       // webview methods can throw before attachment
     }
-  }, []);
+  }, [patchTab]);
 
   const lastMouseNavRef = React.useRef(0);
   const lastZoomAtRef = React.useRef(0);
 
+  const activeWebview = React.useCallback(() => (
+    webviewByTabRef.current.get(activeTabIdRef.current) || null
+  ), []);
+
   const navigateFromMouseButton = React.useCallback((button: number) => {
     const action = resolveBrowserMouseButton(button);
-    const webview = webviewRef.current;
+    const webview = activeWebview();
     if (!action || !webview) return;
     const now = Date.now();
     if (now - lastMouseNavRef.current < 80) return;
     lastMouseNavRef.current = now;
     if (action === 'back') webview.goBack();
     else webview.goForward();
-  }, []);
+  }, [activeWebview]);
 
   const applyPageZoom = React.useCallback((direction: 'in' | 'out' | 'reset') => {
-    const webview = webviewRef.current;
+    const webview = activeWebview();
     if (!webview?.getZoomFactor || !webview.setZoomFactor) return;
     const now = Date.now();
     if (direction !== 'reset' && now - lastZoomAtRef.current < 45) return;
@@ -230,6 +277,68 @@ const BrowserPage: React.FC = () => {
     } catch {
       // zoom APIs can throw before the webview is attached
     }
+  }, [activeWebview]);
+
+  const lastOpenedTabRef = React.useRef({ url: '', at: 0 });
+  const pendingLoadRef = React.useRef(new Map<string, string>());
+
+  const loadUrlInTab = React.useCallback((tabId: string, nextUrl: string) => {
+    patchTab(tabId, { url: nextUrl, title: titleForBrowserTab(nextUrl), loading: true });
+    const webview = webviewByTabRef.current.get(tabId);
+    if (webview?.loadURL) {
+      pendingLoadRef.current.delete(tabId);
+      webview.loadURL(nextUrl);
+      return;
+    }
+    pendingLoadRef.current.set(tabId, nextUrl);
+  }, [patchTab]);
+
+  const openTab = React.useCallback((rawUrl?: string, options?: { background?: boolean; newTab?: boolean }) => {
+    const nextUrl = rawUrl
+      ? (rawUrl === NEW_TAB_URL ? NEW_TAB_URL : resolveBrowserAddressInput(rawUrl))
+      : NEW_TAB_URL;
+    if (rawUrl && rawUrl !== NEW_TAB_URL && !nextUrl) {
+      toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
+      return;
+    }
+    const url = nextUrl || NEW_TAB_URL;
+    if (url !== NEW_TAB_URL) {
+      const now = Date.now();
+      if (url === lastOpenedTabRef.current.url && now - lastOpenedTabRef.current.at < 250) return;
+      lastOpenedTabRef.current = { url, at: now };
+    }
+    const result = openBrowserTab(tabsRef.current, activeTabIdRef.current, url, {
+      background: options?.background,
+      reuseEmpty: !options?.newTab && !options?.background,
+    });
+    if (result.limited) {
+      toast({ title: `탭은 최대 ${MAX_BROWSER_TABS}개까지 열 수 있습니다.` });
+      return;
+    }
+    setTabs(result.tabs);
+    setActiveTabId(result.activeId);
+    if (result.reusedId) loadUrlInTab(result.reusedId, url);
+    else if (result.created && result.tab && url !== NEW_TAB_URL) loadUrlInTab(result.tab.id, url);
+    if (!options?.background && url !== NEW_TAB_URL) {
+      addressRef.current = url;
+      setAddress(url);
+    }
+    if (!options?.background && url === NEW_TAB_URL) {
+      addressRef.current = '';
+      setAddress('');
+      window.setTimeout(() => addressInputRef.current?.focus(), 0);
+    }
+  }, [loadUrlInTab]);
+
+  const closeTab = React.useCallback((tabId: string) => {
+    const result = closeBrowserTab(tabsRef.current, activeTabIdRef.current, tabId);
+    const webview = webviewByTabRef.current.get(tabId);
+    if (webview) {
+      webviewByTabRef.current.delete(tabId);
+      webview.remove();
+    }
+    setTabs(result.tabs);
+    setActiveTabId(result.activeId);
   }, []);
 
   const navigateTo = React.useCallback((rawUrl: string) => {
@@ -238,32 +347,77 @@ const BrowserPage: React.FC = () => {
       toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
       return;
     }
-    pendingUrlRef.current = nextUrl;
     addressRef.current = nextUrl;
     setAddress(nextUrl);
-    const webview = webviewRef.current;
-    if (webview?.loadURL) {
-      webview.loadURL(nextUrl);
+    loadUrlInTab(activeTabIdRef.current, nextUrl);
+  }, [loadUrlInTab]);
+
+  const openBookmark = React.useCallback((bookmark: { url: string }, options?: { newTab?: boolean; background?: boolean }) => {
+    if (options?.newTab || options?.background) {
+      openTab(bookmark.url, options);
       return;
     }
-    setCurrentUrl(nextUrl);
-  }, []);
+    navigateTo(bookmark.url);
+  }, [navigateTo, openTab]);
 
   React.useEffect(() => {
-    return window.electronAPI.onBrowserOpenUrl((nextUrl) => {
-      navigateTo(nextUrl);
+    webviewRef.current = activeWebview();
+    if (addressFocusedRef.current) return;
+    const display = isBlankBrowserTab({ url: currentUrl }) ? '' : currentUrl;
+    addressRef.current = display;
+    setAddress(display);
+  }, [activeTabId, activeWebview, currentUrl, tabs]);
+
+  React.useEffect(() => {
+    return window.electronAPI.onBrowserOpenUrl((nextUrl, options) => {
+      openTab(nextUrl, { background: options?.background });
     });
-  }, [navigateTo]);
+  }, [openTab]);
 
   React.useEffect(() => {
     return window.electronAPI.onBrowserShortcut((action) => {
-      if (action !== 'focus-address') return;
-      const input = addressInputRef.current;
-      if (!input) return;
-      input.focus();
-      input.select();
+      const webview = activeWebview();
+      if (action === 'focus-address') {
+        addressInputRef.current?.focus();
+        addressInputRef.current?.select();
+        return;
+      }
+      if (action === 'new-tab') {
+        openTab(NEW_TAB_URL, { newTab: true });
+        return;
+      }
+      if (action === 'close-tab') {
+        closeTab(activeTabIdRef.current);
+        return;
+      }
+      if (action === 'next-tab') {
+        setActiveTabId(cycleBrowserTab(tabsRef.current, activeTabIdRef.current, 1));
+        return;
+      }
+      if (action === 'prev-tab') {
+        setActiveTabId(cycleBrowserTab(tabsRef.current, activeTabIdRef.current, -1));
+        return;
+      }
+      const tabNumber = /^tab-([1-9])$/.exec(action);
+      if (tabNumber) {
+        const nextId = selectBrowserTabByNumber(tabsRef.current, Number(tabNumber[1]));
+        if (nextId) setActiveTabId(nextId);
+        return;
+      }
+      if (!webview) return;
+      if (action === 'reload') webview.reload();
+      if (action === 'hard-reload') {
+        if (webview.reloadIgnoringCache) webview.reloadIgnoringCache();
+        else webview.reload();
+      }
+      if (action === 'back' && webview.canGoBack()) webview.goBack();
+      if (action === 'forward' && webview.canGoForward()) webview.goForward();
+      if (action === 'stop') webview.stop();
+      if (action === 'zoom-in') applyPageZoom('in');
+      if (action === 'zoom-out') applyPageZoom('out');
+      if (action === 'zoom-reset') applyPageZoom('reset');
     });
-  }, []);
+  }, [activeWebview, applyPageZoom, closeTab, openTab]);
 
   React.useEffect(() => {
     const onMouseUp = (event: MouseEvent) => {
@@ -287,68 +441,100 @@ const BrowserPage: React.FC = () => {
     };
   }, [applyPageZoom, navigateFromMouseButton]);
 
+  const attachTabHost = React.useCallback((tabId: string, host: HTMLDivElement | null) => {
+    if (!host || !preloadPath) return;
+    let webview = webviewByTabRef.current.get(tabId);
+    if (!webview) {
+      webview = document.createElement('webview') as EmbeddedWebview;
+      webview.className = 'h-full w-full';
+      webview.style.display = 'inline-flex';
+      webview.style.width = '100%';
+      webview.style.height = '100%';
+      webview.dataset.tabId = tabId;
+      webview.setAttribute('partition', partition);
+      webview.setAttribute('preload', toPreloadUrl(preloadPath));
+      webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no, sandbox=yes');
+      webview.setAttribute('allowpopups', 'true');
+      const startUrl = pendingLoadRef.current.get(tabId)
+        || tabsRef.current.find((item) => item.id === tabId)?.url
+        || NEW_TAB_URL;
+      pendingLoadRef.current.delete(tabId);
+      let ignoreInitialBlank = !isBlankBrowserTab({ url: startUrl });
+      webview.src = ignoreInitialBlank ? startUrl : NEW_TAB_URL;
+
+      const onNav = () => {
+        try {
+          const url = webview.getURL() || NEW_TAB_URL;
+          if (ignoreInitialBlank && isBlankBrowserTab({ url })) return;
+          ignoreInitialBlank = false;
+        } catch {
+          // webview methods can throw before attachment
+        }
+        syncTabFromWebview(tabId, webview, { loading: false });
+      };
+      const onStart = () => patchTab(tabId, { loading: true });
+      const onTitle = (event: Event) => {
+        const title = (event as Event & { title?: string }).title;
+        if (title) patchTab(tabId, { title: titleForBrowserTab(webview.getURL?.() || NEW_TAB_URL, title) });
+      };
+      let started = false;
+      const loadPending = () => {
+        if (started) return;
+        if (isBlankBrowserTab({ url: startUrl })) {
+          started = true;
+          return;
+        }
+        started = true;
+        try {
+          if (webview.getURL() === startUrl) return;
+        } catch {
+          // load before the guest is ready
+        }
+        webview.loadURL(startUrl);
+      };
+
+      webview.addEventListener('did-attach', loadPending);
+      webview.addEventListener('dom-ready', loadPending);
+      webview.addEventListener('did-start-loading', onStart);
+      webview.addEventListener('did-stop-loading', onNav);
+      webview.addEventListener('did-navigate', onNav);
+      webview.addEventListener('did-navigate-in-page', onNav);
+      webview.addEventListener('did-finish-load', onNav);
+      webview.addEventListener('page-title-updated', onTitle);
+      webview.addEventListener('did-fail-load', onNav);
+      webview.addEventListener('ipc-message', (event: Event) => {
+        const message = event as WebviewIpcMessageEvent;
+        if (message.channel === 'browser:mouse-button') {
+          navigateFromMouseButton(Number(message.args?.[0]));
+          return;
+        }
+        if (message.channel === 'browser:zoom-wheel') {
+          applyPageZoom(Number(message.args?.[0]) < 0 ? 'in' : 'out');
+          return;
+        }
+        if (message.channel === 'browser:open-tab') {
+          const first = message.args?.[0];
+          const url = typeof first === 'string' ? first : (first as { url?: string } | undefined)?.url;
+          const background = typeof first === 'object' && first
+            ? (first as { background?: boolean }).background !== false
+            : message.args?.[1] !== false;
+          if (url) openTab(url, { background, newTab: true });
+        }
+      });
+      webviewByTabRef.current.set(tabId, webview);
+    }
+    if (webview.parentElement !== host) host.replaceChildren(webview);
+    if (tabId === activeTabIdRef.current) webviewRef.current = webview;
+  }, [applyPageZoom, navigateFromMouseButton, openTab, partition, patchTab, preloadPath, syncTabFromWebview]);
+
   React.useEffect(() => {
-    const host = webviewHostRef.current;
-    if (!preloadPath || !host) return;
-
-    const webview = document.createElement('webview') as EmbeddedWebview;
-    webview.className = 'h-full w-full';
-    webview.style.display = 'inline-flex';
-    webview.style.width = '100%';
-    webview.style.height = '100%';
-    webview.setAttribute('partition', partition);
-    webview.setAttribute('preload', toPreloadUrl(preloadPath));
-    webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no, sandbox=yes');
-    webview.setAttribute('allowpopups', 'true');
-    webview.src = 'about:blank';
-
-    const onNav = () => {
-      setLoading(false);
-      syncNavigation();
-    };
-    const onStart = () => setLoading(true);
-    const onTitle = (event: Event) => {
-      const title = (event as Event & { title?: string }).title;
-      if (title) setPageTitle(title);
-    };
-    let started = false;
-    const loadPending = () => {
-      if (started) return;
-      const nextUrl = pendingUrlRef.current;
-      if (!nextUrl) return;
-      started = true;
-      webview.loadURL(nextUrl);
-    };
-
-    webview.addEventListener('did-attach', loadPending);
-    webview.addEventListener('dom-ready', loadPending);
-    webview.addEventListener('did-start-loading', onStart);
-    webview.addEventListener('did-stop-loading', onNav);
-    webview.addEventListener('did-navigate', onNav);
-    webview.addEventListener('did-navigate-in-page', onNav);
-    webview.addEventListener('did-finish-load', onNav);
-    webview.addEventListener('page-title-updated', onTitle);
-    webview.addEventListener('did-fail-load', onNav);
-    const onGuestIpc = (event: Event) => {
-      const message = event as WebviewIpcMessageEvent;
-      if (message.channel === 'browser:mouse-button') {
-        navigateFromMouseButton(Number(message.args?.[0]));
-        return;
-      }
-      if (message.channel === 'browser:zoom-wheel') {
-        applyPageZoom(Number(message.args?.[0]) < 0 ? 'in' : 'out');
-      }
-    };
-    webview.addEventListener('ipc-message', onGuestIpc);
-
-    host.replaceChildren(webview);
-    webviewRef.current = webview;
-
-    return () => {
-      webviewRef.current = null;
-      host.replaceChildren();
-    };
-  }, [applyPageZoom, navigateFromMouseButton, partition, preloadPath, syncNavigation]);
+    const ids = new Set(tabs.map((tab) => tab.id));
+    webviewByTabRef.current.forEach((webview, tabId) => {
+      if (ids.has(tabId)) return;
+      webviewByTabRef.current.delete(tabId);
+      webview.remove();
+    });
+  }, [tabs]);
 
   const [canonicalCurrent, setCanonicalCurrent] = React.useState('');
   React.useEffect(() => {
@@ -366,12 +552,18 @@ const BrowserPage: React.FC = () => {
   }, [currentUrl]);
 
   React.useEffect(() => {
-    if (currentUrl === 'about:blank' && pendingUrlRef.current) return undefined;
-    const timer = window.setTimeout(() => {
-      void window.electronAPI.saveBrowserLastUrl(currentUrl || 'about:blank');
-    }, 400);
-    return () => window.clearTimeout(timer);
-  }, [currentUrl]);
+    if (!sessionReady || tabs.length === 0) return undefined;
+    const urls = tabs.map((tab) => tab.url || NEW_TAB_URL);
+    const activeIndex = Math.max(0, tabs.findIndex((tab) => tab.id === activeTabId));
+    const save = () => {
+      void window.electronAPI.saveBrowserLastUrl({ urls, activeIndex });
+    };
+    const timer = window.setTimeout(save, 400);
+    return () => {
+      window.clearTimeout(timer);
+      save();
+    };
+  }, [activeTabId, sessionReady, tabs]);
 
   const matchesCurrentUrl = (item: BrowserBookmark) => (
     Boolean(item.url) && (item.url === canonicalCurrent || item.url === currentUrl)
@@ -454,6 +646,13 @@ const BrowserPage: React.FC = () => {
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
+        <TabBar
+          tabs={tabs}
+          activeId={activeTabId}
+          onSelect={setActiveTabId}
+          onClose={closeTab}
+          onNewTab={() => openTab(NEW_TAB_URL, { newTab: true })}
+        />
         <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
           <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>
             <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
@@ -494,7 +693,8 @@ const BrowserPage: React.FC = () => {
                   if (addressFocusedRef.current) return;
                   const active = document.activeElement;
                   if (form && active instanceof HTMLElement && form.contains(active)) return;
-                  syncNavigation();
+                  const webview = activeWebview();
+                  if (webview) syncTabFromWebview(activeTabIdRef.current, webview);
                 }, 0);
               }}
               placeholder="주소 또는 검색어 입력"
@@ -569,10 +769,7 @@ const BrowserPage: React.FC = () => {
           activeUrls={[canonicalCurrent, currentUrl].filter(Boolean)}
           acceptDrop={manualDrag?.kind === 'bookmark'}
           draggingId={manualDrag?.kind === 'bookmark' ? manualDrag.id : null}
-          onOpen={(bookmark) => {
-            setAddress(bookmark.url);
-            navigateTo(bookmark.url);
-          }}
+          onOpen={openBookmark}
           onRemove={async (bookmark) => {
             await window.electronAPI.removeBrowserBookmark(bookmark.id);
             await refreshLists();
@@ -604,11 +801,17 @@ const BrowserPage: React.FC = () => {
 
         <div className="flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1 bg-black">
-            <div ref={webviewHostRef} className="h-full w-full" />
-            {!preloadPath && (
+            {tabs.map((tab) => (
+              <div
+                key={tab.id}
+                ref={(node) => attachTabHost(tab.id, node)}
+                className={`absolute inset-0 ${tab.id === activeTabId ? '' : 'invisible pointer-events-none'}`}
+              />
+            ))}
+            {(!preloadPath || !sessionReady) && (
               <div className="absolute inset-0 flex items-center justify-center text-sm text-discord-muted">브라우저 준비 중...</div>
             )}
-            {currentUrl === 'about:blank' && !loading && !pendingUrlRef.current && (
+            {isBlankBrowserTab({ url: currentUrl }) && !loading && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-discord-bg/80">
                 <div className="text-center text-sm text-discord-muted">
                   <Globe className="mx-auto mb-2" size={28} />
@@ -646,10 +849,7 @@ const BrowserPage: React.FC = () => {
                 <BookmarkTree
                   tree={bookmarkTree}
                   activeUrls={[canonicalCurrent, currentUrl].filter(Boolean)}
-                  onOpen={(bookmark) => {
-                    setAddress(bookmark.url);
-                    navigateTo(bookmark.url);
-                  }}
+                  onOpen={openBookmark}
                   onRemoveManual={async (bookmark) => {
                     await window.electronAPI.removeBrowserBookmark(bookmark.id);
                     await refreshLists();

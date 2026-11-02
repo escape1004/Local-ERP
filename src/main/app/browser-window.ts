@@ -2,15 +2,11 @@ import { BrowserWindow } from 'electron';
 import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
 import { parseExternalHttpUrl } from '../lib/security';
-import { getEmbeddedBrowserHash, resolveEmbeddedBrowserOpenUrl } from '../lib/browser-window-url';
-import {
-  attachEmbeddedBrowserShortcutGuard,
-  findWebviewGuestForHost,
-} from '../lib/browser-shortcuts';
+import { getEmbeddedBrowserHash } from '../lib/browser-window-url';
+import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
 import {
   appConfig,
   applyWindowZoom,
-  getConfiguredBrowserStartupMode,
   isolatedRendererUrl,
   saveAppConfig,
 } from '../store';
@@ -88,9 +84,7 @@ export function closeEmbeddedBrowserWindow() {
 
 export async function openEmbeddedBrowserWindow(url) {
   const parsed = url ? parseExternalHttpUrl(String(url)) : null;
-  const targetUrl = parsed
-    ? parsed.toString()
-    : resolveEmbeddedBrowserOpenUrl('', appConfig.browserLastUrl, getConfiguredBrowserStartupMode());
+  const targetUrl = parsed ? parsed.toString() : '';
 
   if (browserWindow && !browserWindow.isDestroyed()) {
     if (targetUrl && parsed) {
@@ -124,8 +118,8 @@ export async function openEmbeddedBrowserWindow(url) {
   attachEmbeddedBrowserShortcutGuard(browserWindow.webContents, {
     handleWheelZoom: false,
     resolveTarget: (hostContents, action) => {
-      if (action === 'focus-address') return hostContents;
-      return findWebviewGuestForHost(hostContents);
+      hostContents.send('browser:shortcut', action);
+      return null;
     },
   });
   browserWindow.on('move', queueSaveEmbeddedBrowserWindowBounds);

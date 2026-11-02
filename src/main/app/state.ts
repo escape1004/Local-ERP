@@ -117,6 +117,8 @@ export const defaultConfig = {
   browserWindowBounds: null,
   browserStartupMode: 'newtab',
   browserLastUrl: '',
+  browserLastTabs: [],
+  browserLastTabIndex: 0,
   passwordHash: null,
   passwordLockMaxAttempts: 5,
   passwordLockDurationMinutes: 1,

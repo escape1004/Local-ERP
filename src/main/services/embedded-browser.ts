@@ -3,6 +3,7 @@ import { parseExternalHttpUrl } from '../lib/security';
 import { matchUrlPattern } from '../lib/browser-url';
 import {
   chromeLikeUserAgent,
+  isBackgroundBrowserTabDisposition,
   popupBoundsFromFeatures,
   shouldOpenEmbeddedBrowserPopup,
 } from '../lib/embedded-browser-policy';
@@ -144,9 +145,16 @@ export function attachEmbeddedBrowserGuest(contents) {
     const parsed = parseExternalHttpUrl(details.url);
     if (parsed) {
       const nextUrl = parsed.toString();
-      setImmediate(() => {
-        loadHttpUrlInGuest(contents, nextUrl);
-      });
+      const host = contents.hostWebContents;
+      if (host && !host.isDestroyed()) {
+        host.send('browser:open-url', nextUrl, {
+          background: isBackgroundBrowserTabDisposition(details.disposition),
+        });
+      } else {
+        setImmediate(() => {
+          loadHttpUrlInGuest(contents, nextUrl);
+        });
+      }
     }
     return { action: 'deny' };
   });

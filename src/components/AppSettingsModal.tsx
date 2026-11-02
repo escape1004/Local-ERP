@@ -91,6 +91,12 @@ const shortcutSections = [
       { keys: 'Alt+ArrowLeft / Ctrl+[', description: '이전 페이지로 이동합니다.' },
       { keys: 'Alt+ArrowRight / Ctrl+]', description: '다음 페이지로 이동합니다.' },
       { keys: 'Ctrl+L / Alt+D / F6', description: '주소창으로 포커스를 이동합니다.' },
+      { keys: 'Ctrl+T', description: '새 탭을 엽니다.' },
+      { keys: 'Ctrl+W / Ctrl+F4', description: '현재 탭을 닫습니다.' },
+      { keys: 'Ctrl+Tab / Ctrl+Shift+Tab', description: '다음 또는 이전 탭으로 이동합니다.' },
+      { keys: 'Ctrl+1 ~ Ctrl+8', description: '해당 번호의 탭을 활성화합니다.' },
+      { keys: 'Ctrl+9', description: '마지막 탭을 활성화합니다.' },
+      { keys: '마우스 휠 클릭', description: '링크나 북마크를 새 탭으로 엽니다.' },
       { keys: '마우스 옆 버튼', description: '이전 또는 다음 페이지로 이동합니다.' },
       { keys: 'Ctrl++ / Ctrl+- / Ctrl+휠', description: '페이지를 확대하거나 축소합니다.' },
       { keys: 'Ctrl+0', description: '페이지 확대 비율을 원래대로 되돌립니다.' },
@@ -951,7 +957,7 @@ export function AppSettingsModal({
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="text-sm font-medium text-white">시작 시 설정</div>
         <p className="text-sm text-discord-muted mt-2 leading-6">
-          브라우저 창을 새로 열 때 빈 시작 화면을 보여줄지, 마지막으로 보던 페이지를 다시 열지 선택합니다.
+          브라우저 창을 새로 열 때 빈 시작 화면을 보여줄지, 마지막으로 열려 있던 탭들을 다시 열지 선택합니다.
         </p>
 
         <RadioGroup
@@ -983,7 +989,7 @@ export function AppSettingsModal({
             />
             <span>
               <span className="block text-sm font-medium text-white">중단한 위치에서 계속하기</span>
-              <span className="mt-1 block text-sm text-discord-muted">마지막으로 보고 있던 페이지를 다시 엽니다.</span>
+              <span className="mt-1 block text-sm text-discord-muted">마지막으로 열려 있던 탭과 활성 탭을 그대로 다시 엽니다.</span>
             </span>
           </label>
         </RadioGroup>

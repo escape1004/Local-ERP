@@ -133,6 +133,8 @@ export interface Config {
   rememberWindowBounds?: boolean;
   rememberBrowserWindowBounds?: boolean;
   browserStartupMode?: 'newtab' | 'continue';
+  browserLastTabs?: string[];
+  browserLastTabIndex?: number;
   muteAudioWhenBackgrounded?: boolean;
   zoomPercent?: number;
   hasAppPassword?: boolean;
@@ -347,8 +349,8 @@ export interface ElectronAPI {
   openBrowserWindow: (url?: string) => Promise<{ success: boolean; error?: string }>;
   closeBrowserWindow: () => Promise<{ success: boolean; error?: string }>;
   isBrowserWindowFocused: () => Promise<boolean>;
-  saveBrowserLastUrl: (url: string) => Promise<{ success: boolean }>;
-  onBrowserOpenUrl: (callback: (url: string) => void) => () => void;
+  saveBrowserLastUrl: (payload: string | { urls: string[]; activeIndex: number }) => Promise<{ success: boolean }>;
+  onBrowserOpenUrl: (callback: (url: string, options?: { background?: boolean }) => void) => () => void;
   onBrowserShortcut: (callback: (action: string) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;

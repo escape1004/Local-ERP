@@ -164,9 +164,11 @@ const api: ElectronAPI = {
   openBrowserWindow: (url) => ipcRenderer.invoke('browser:openWindow', url),
   closeBrowserWindow: () => ipcRenderer.invoke('browser:closeWindow'),
   isBrowserWindowFocused: () => ipcRenderer.invoke('browser:isWindowFocused'),
-  saveBrowserLastUrl: (url: string) => ipcRenderer.invoke('browser:saveLastUrl', url),
+  saveBrowserLastUrl: (payload) => ipcRenderer.invoke('browser:saveLastUrl', payload),
   onBrowserOpenUrl: (callback) => {
-    const listener = (_event: Electron.IpcRendererEvent, nextUrl: string) => callback(nextUrl);
+    const listener = (_event: Electron.IpcRendererEvent, nextUrl: string, options?: { background?: boolean }) => {
+      callback(nextUrl, options);
+    };
     ipcRenderer.on('browser:open-url', listener);
     return () => ipcRenderer.removeListener('browser:open-url', listener);
   },

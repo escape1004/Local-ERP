@@ -191,11 +191,18 @@ import {
   importCategoryRecordsFromRows
 } from '../import-export';
 import { hasOpenAiApiKey } from '../services/openai-secret';
+import { resolveEmbeddedBrowserSession } from '../lib/browser-window-url';
 
 export function registerSettingsHandlers() {
 
 
   ipcMain.handle('getConfig', () => {
+    const browserSession = resolveEmbeddedBrowserSession({
+      lastTabs: appConfig.browserLastTabs,
+      lastTabIndex: appConfig.browserLastTabIndex,
+      lastUrl: appConfig.browserLastUrl,
+      startupMode: getConfiguredBrowserStartupMode(),
+    });
     return {
       dbPath: dbPath,
       backupDir: getConfiguredBackupDir(),
@@ -204,6 +211,8 @@ export function registerSettingsHandlers() {
       rememberWindowBounds: appConfig.rememberWindowBounds,
       rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
       browserStartupMode: getConfiguredBrowserStartupMode(),
+      browserLastTabs: browserSession.urls,
+      browserLastTabIndex: browserSession.activeIndex,
       muteAudioWhenBackgrounded: appConfig.muteAudioWhenBackgrounded === true,
       zoomPercent: getConfiguredZoomPercent(),
       hasAppPassword: Boolean(appConfig.passwordHash),

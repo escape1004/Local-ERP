@@ -4,6 +4,7 @@ type PopupOpenDetails = {
   url?: string;
   frameName?: string;
   features?: string;
+  disposition?: string;
 };
 
 type PopupBounds = {
@@ -13,7 +14,17 @@ type PopupBounds = {
   y?: number;
 };
 
+export function isBackgroundBrowserTabDisposition(disposition?: string) {
+  return String(disposition || '') === 'background-tab';
+}
+
+export function isBrowserTabDisposition(disposition?: string) {
+  const value = String(disposition || '');
+  return value === 'background-tab' || value === 'foreground-tab';
+}
+
 export function shouldOpenEmbeddedBrowserPopup(details: PopupOpenDetails = {}) {
+  if (isBrowserTabDisposition(details.disposition)) return false;
   const url = String(details.url || '');
   if (!url || url === 'about:blank') return true;
 

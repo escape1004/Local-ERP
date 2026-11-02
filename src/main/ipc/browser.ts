@@ -3,7 +3,7 @@ import path from 'path';
 import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
 import { canonicalizeBrowserUrl } from '../lib/browser-url';
-import { normalizeBrowserSessionUrl } from '../lib/browser-window-url';
+import { normalizePersistedBrowserSession } from '../lib/browser-window-url';
 import {
   BOOKMARK_BAR_FOLDER_ID,
   buildBrowserBookmarkTree,
@@ -173,10 +173,25 @@ export function registerBrowserHandlers() {
   ipcMain.handle('setRememberBrowserWindowBounds', (_event, enabled) => (
     setRememberEmbeddedBrowserWindowBounds(enabled)
   ));
-  ipcMain.handle('browser:saveLastUrl', (_event, url) => {
-    const normalized = normalizeBrowserSessionUrl(url);
-    if (!normalized || appConfig.browserLastUrl === normalized) return { success: true };
-    appConfig.browserLastUrl = normalized;
+  ipcMain.handle('browser:saveLastUrl', (_event, payload) => {
+    const urls = typeof payload === 'string'
+      ? [payload]
+      : (payload && typeof payload === 'object' ? payload.urls : []);
+    const activeIndex = typeof payload === 'string'
+      ? 0
+      : payload?.activeIndex;
+    const fallbackUrl = typeof payload === 'string'
+      ? payload
+      : (Array.isArray(urls) ? urls[Number(activeIndex) || 0] : '');
+    const session = normalizePersistedBrowserSession(urls, activeIndex, fallbackUrl);
+    const nextUrl = session.urls[session.activeIndex] || '';
+    const same = JSON.stringify(appConfig.browserLastTabs || []) === JSON.stringify(session.urls)
+      && Number(appConfig.browserLastTabIndex || 0) === session.activeIndex
+      && appConfig.browserLastUrl === nextUrl;
+    if (same) return { success: true };
+    appConfig.browserLastTabs = session.urls;
+    appConfig.browserLastTabIndex = session.activeIndex;
+    appConfig.browserLastUrl = nextUrl;
     saveAppConfig();
     return { success: true };
   });

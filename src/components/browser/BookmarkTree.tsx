@@ -23,7 +23,7 @@ type DropTarget =
 type BookmarkTreeProps = {
   tree: BrowserBookmarkFolder[];
   activeUrls?: string[];
-  onOpen: (bookmark: BrowserBookmark) => void;
+  onOpen: (bookmark: BrowserBookmark, options?: { newTab?: boolean; background?: boolean }) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
   onRenameManual: (bookmark: BrowserBookmark, title: string) => void | Promise<void>;
   onDragChange?: (item: ManualDragItem | null) => void;
@@ -140,7 +140,7 @@ function BookmarkRow({
   parentId: string;
   insertIndex: number;
   active: boolean;
-  onOpen: (bookmark: BrowserBookmark) => void;
+  onOpen: (bookmark: BrowserBookmark, options?: { newTab?: boolean; background?: boolean }) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
   bookmarkEdit: BookmarkEditProps;
 }) {
@@ -167,8 +167,18 @@ function BookmarkRow({
       }
       onDragStart={(event) => event.preventDefault()}
       onPointerDown={(event) => {
+        if (event.button === 1) {
+          event.preventDefault();
+          if (!renaming) onOpen(bookmark, { newTab: true, background: true });
+          return;
+        }
         if (!canDrag || !dnd) return;
         dnd.armDrag({ kind: 'bookmark', id: bookmark.id }, event);
+      }}
+      onAuxClick={(event) => {
+        if (renaming || event.button !== 1) return;
+        event.preventDefault();
+        onOpen(bookmark, { newTab: true, background: true });
       }}
     >
       <span
@@ -182,10 +192,13 @@ function BookmarkRow({
         tabIndex={0}
         className="min-w-0 flex-1 text-left"
         title={bookmark.url}
-        onClick={() => {
+        onClick={(event) => {
           if (renaming) return;
           if (dnd?.consumeClickSuppression()) return;
-          onOpen(bookmark);
+          onOpen(bookmark, {
+            newTab: event.ctrlKey || event.metaKey,
+            background: false,
+          });
         }}
         onKeyDown={(event) => {
           if (renaming) return;
@@ -267,7 +280,7 @@ function FolderNode({
   expanded: Set<string>;
   activeUrls: string[];
   onToggle: (id: string) => void;
-  onOpen: (bookmark: BrowserBookmark) => void;
+  onOpen: (bookmark: BrowserBookmark, options?: { newTab?: boolean; background?: boolean }) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
   folderEdit: FolderEditProps;
   bookmarkEdit: BookmarkEditProps;

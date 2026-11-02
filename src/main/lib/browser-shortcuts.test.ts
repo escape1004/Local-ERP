@@ -17,6 +17,15 @@ test('navigates history with Alt arrows', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: ']', control: true })).toBe('forward');
 });
 
+test('opens and cycles tabs with Ctrl+T, Ctrl+W, and Ctrl+Tab', () => {
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 't', control: true })).toBe('new-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'w', control: true })).toBe('close-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'Tab', control: true })).toBe('next-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'Tab', control: true, shift: true })).toBe('prev-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: '1', control: true })).toBe('tab-1');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: '9', control: true })).toBe('tab-9');
+});
+
 test('focuses the address bar with Ctrl+L', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'l', control: true })).toBe('focus-address');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'd', alt: true })).toBe('focus-address');

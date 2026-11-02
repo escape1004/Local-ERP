@@ -17,8 +17,29 @@ function sendToHost(channel: string, ...args: unknown[]) {
   ipcRenderer.sendToHost(channel, ...args);
 }
 
+function httpHrefFromEvent(event: MouseEvent) {
+  const target = event.target as Element | null;
+  const anchor = target?.closest?.('a[href]') as HTMLAnchorElement | null;
+  if (!anchor) return null;
+  try {
+    const parsed = new URL(anchor.href, window.location.href);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return null;
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
 window.addEventListener('mousedown', preventSideMouseButton, true);
-window.addEventListener('auxclick', preventSideMouseButton, true);
+window.addEventListener('auxclick', (event) => {
+  preventSideMouseButton(event);
+  if (event.button !== 1) return;
+  const href = httpHrefFromEvent(event);
+  if (!href) return;
+  event.preventDefault();
+  event.stopPropagation();
+  sendToHost('browser:open-tab', href, true);
+}, true);
 window.addEventListener('mouseup', (event) => {
   if (!isSideMouseButton(event.button)) return;
   preventSideMouseButton(event);
