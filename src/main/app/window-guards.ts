@@ -2,7 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
 import { buildContentSecurityPolicy } from './csp';
-import { attachEmbeddedBrowserGuest } from '../services/embedded-browser';
+import { attachEmbeddedBrowserGuest, BROWSER_PARTITION } from '../services/embedded-browser';
 import {
   isolatedRendererUrl,
   isDev,
@@ -53,6 +53,7 @@ export function attachNavigationGuards(contents) {
 let rendererSessionGuarded = false;
 export function ensureRendererSessionGuards(session) {
   if (rendererSessionGuarded || !session) return;
+  if (session.partition === BROWSER_PARTITION) return;
   rendererSessionGuarded = true;
   const contentSecurityPolicy = buildContentSecurityPolicy();
   session.webRequest.onHeadersReceived((details, callback) => {

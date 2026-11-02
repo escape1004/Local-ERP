@@ -6,6 +6,7 @@ import { initializeDatabase } from './database';
 import { startAutomaticBackup, stopAutomaticBackup } from './services/backup';
 import { registerLocalVideoProtocol, startVideoHttpServer } from './services/videoServer';
 import { registerAllIpcHandlers } from './ipc';
+import { configureEmbeddedBrowserSession } from './services/embedded-browser';
 
 export function focusExistingInstance() {
   const windows = BrowserWindow.getAllWindows().filter((item) => !item.isDestroyed());
@@ -31,6 +32,7 @@ export function startMainApp() {
 
   app.whenReady().then(() => {
     migratePersistedOpenAiSecrets();
+    configureEmbeddedBrowserSession();
     registerProtocol();
     initializeDatabase();
     startAutomaticBackup({ runImmediately: true });

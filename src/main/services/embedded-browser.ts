@@ -1,9 +1,41 @@
+import { BrowserWindow, session } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
 import { matchUrlPattern } from '../lib/browser-url';
+import {
+  chromeLikeUserAgent,
+  popupBoundsFromFeatures,
+  shouldOpenEmbeddedBrowserPopup,
+} from '../lib/embedded-browser-policy';
 import { db } from '../database/connection';
 import { log } from '../app/state';
 
 export const BROWSER_PARTITION = 'persist:erp-browser';
+
+const GUEST_PERMISSIONS = new Set([
+  'clipboard-read',
+  'clipboard-sanitized-write',
+  'fullscreen',
+  'media',
+  'notifications',
+  'openExternal',
+  'pointerLock',
+  'storage-access',
+  'top-level-storage-access',
+  'window-management',
+]);
+
+let browserSessionConfigured = false;
+
+export function configureEmbeddedBrowserSession() {
+  if (browserSessionConfigured) return;
+  browserSessionConfigured = true;
+  const ses = session.fromPartition(BROWSER_PARTITION);
+  ses.setUserAgent(chromeLikeUserAgent(ses.getUserAgent()));
+  ses.setPermissionRequestHandler((_contents, permission, callback) => {
+    callback(GUEST_PERMISSIONS.has(permission));
+  });
+  ses.setPermissionCheckHandler((_contents, permission) => GUEST_PERMISSIONS.has(permission));
+}
 
 export function isEmbeddedBrowserGuest(contents) {
   try {
@@ -73,66 +105,56 @@ function loadHttpUrlInGuest(contents, url) {
   return true;
 }
 
-function foldPopupIntoGuest(opener, childWindow) {
-  const child = childWindow.webContents;
-  const fold = (targetUrl) => {
-    if (!loadHttpUrlInGuest(opener, targetUrl)) return false;
-    if (!childWindow.isDestroyed()) childWindow.destroy();
-    return true;
+function guestWindowPreferences() {
+  return {
+    partition: BROWSER_PARTITION,
+    nodeIntegration: false,
+    contextIsolation: true,
+    sandbox: true,
   };
-
-  child.setWindowOpenHandler(() => ({ action: 'deny' }));
-  child.on('will-navigate', (event, targetUrl) => {
-    if (!targetUrl || targetUrl === 'about:blank') return;
-    event.preventDefault();
-    fold(targetUrl);
-  });
-  child.on('will-redirect', (event, targetUrl) => {
-    event.preventDefault();
-    fold(targetUrl);
-  });
-  child.on('did-navigate', (_event, targetUrl) => {
-    if (targetUrl && targetUrl !== 'about:blank') fold(targetUrl);
-  });
-  setTimeout(() => {
-    if (!childWindow.isDestroyed()) childWindow.destroy();
-  }, 8000);
 }
 
 export function attachEmbeddedBrowserGuest(contents) {
   if (!contents || contents.__erpBrowserAttached) return;
   contents.__erpBrowserAttached = true;
 
-  contents.setWindowOpenHandler(({ url }) => {
-    const parsed = parseExternalHttpUrl(url);
+  contents.setWindowOpenHandler((details) => {
+    if (shouldOpenEmbeddedBrowserPopup(details)) {
+      const parsed = details.url && details.url !== 'about:blank'
+        ? parseExternalHttpUrl(details.url)
+        : null;
+      if (details.url && details.url !== 'about:blank' && !parsed) {
+        return { action: 'deny' };
+      }
+
+      const hostContents = contents.hostWebContents || contents;
+      const parent = BrowserWindow.fromWebContents(hostContents);
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          ...popupBoundsFromFeatures(details.features),
+          parent: parent && !parent.isDestroyed() ? parent : undefined,
+          autoHideMenuBar: true,
+          webPreferences: guestWindowPreferences(),
+        },
+      };
+    }
+
+    const parsed = parseExternalHttpUrl(details.url);
     if (parsed) {
       const nextUrl = parsed.toString();
       setImmediate(() => {
         loadHttpUrlInGuest(contents, nextUrl);
       });
-      return { action: 'deny' };
     }
-
-    if (!url || url === 'about:blank') {
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          show: false,
-          skipTaskbar: true,
-          webPreferences: {
-            nodeIntegration: false,
-            contextIsolation: true,
-            sandbox: true,
-          },
-        },
-      };
-    }
-
     return { action: 'deny' };
   });
 
   contents.on('did-create-window', (childWindow) => {
-    foldPopupIntoGuest(contents, childWindow);
+    if (!childWindow || childWindow.isDestroyed()) return;
+    attachEmbeddedBrowserGuest(childWindow.webContents);
+    childWindow.setMenuBarVisibility(false);
+    childWindow.show();
   });
 
   contents.on('will-navigate', (event, targetUrl) => {
