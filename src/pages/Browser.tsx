@@ -393,7 +393,7 @@ const BrowserPage: React.FC = () => {
               ))}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-y-auto discord-scrollbar p-3">
+            <div className="min-h-0 flex-1 overflow-hidden">
               {sideTab === 'bookmarks' && (
                 <BookmarkTree
                   tree={bookmarkTree}
@@ -406,11 +406,29 @@ const BrowserPage: React.FC = () => {
                     await window.electronAPI.removeBrowserBookmark(bookmark.id);
                     await refreshLists();
                   }}
+                  onCreateManualFolder={async () => {
+                    const result = await window.electronAPI.addBrowserBookmarkFolder();
+                    if (!result.success) {
+                      toast({ title: result.error || '폴더를 만들지 못했습니다.', variant: 'destructive' });
+                      return;
+                    }
+                    await refreshLists();
+                  }}
+                  onMoveManualItem={async (payload) => {
+                    const result = await window.electronAPI.moveManualBookmarkItem(payload);
+                    if (!result.success) {
+                      toast({ title: result.error || '순서를 바꾸지 못했습니다.', variant: 'destructive' });
+                      return;
+                    }
+                    if (result.items) setBookmarks(result.items);
+                    if (result.tree) setBookmarkTree(result.tree);
+                    else await refreshLists();
+                  }}
                 />
               )}
 
               {sideTab === 'scripts' && (
-                <div className="space-y-3">
+                <div className="h-full space-y-3 overflow-y-auto discord-scrollbar p-3">
                   <p className="text-[11px] leading-relaxed text-discord-muted">
                     매치되는 페이지에 스크립트가 주입됩니다. 직접 작성한 코드이므로 신뢰할 수 있는 내용만 저장하세요.
                   </p>
@@ -483,7 +501,7 @@ const BrowserPage: React.FC = () => {
               )}
 
               {hasOpenAiApiKey && sideTab === 'ai' && (
-                <div className="space-y-3">
+                <div className="h-full space-y-3 overflow-y-auto discord-scrollbar p-3">
                   <p className="text-[11px] leading-relaxed text-discord-muted">
                     현재 페이지({currentUrl === 'about:blank' ? '없음' : new URL(currentUrl, 'https://example.com').hostname})에 맞는 스크립트 초안을 만듭니다. 환경설정의 OpenAI 키를 사용합니다.
                   </p>

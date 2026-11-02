@@ -154,6 +154,58 @@ export const SCHEMA_MIGRATIONS = [
       );
     },
   },
+  {
+    version: 6,
+    name: 'browser_bookmark_folders',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS browser_bookmark_folders (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          parent_id TEXT,
+          created_at TEXT NOT NULL,
+          FOREIGN KEY (parent_id) REFERENCES browser_bookmark_folders(id)
+        )
+      `);
+      addColumnIfMissing(database, 'browser_bookmarks', 'folder_id', 'TEXT');
+    },
+  },
+  {
+    version: 7,
+    name: 'browser_bookmark_sort_order',
+    up(database) {
+      addColumnIfMissing(database, 'browser_bookmarks', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+      addColumnIfMissing(database, 'browser_bookmark_folders', 'sort_order', 'INTEGER NOT NULL DEFAULT 0');
+
+      const updateFolder = database.prepare('UPDATE browser_bookmark_folders SET sort_order = ? WHERE id = ?');
+      const foldersByParent = new Map();
+      database.prepare(
+        'SELECT id, parent_id FROM browser_bookmark_folders ORDER BY created_at ASC, name COLLATE NOCASE'
+      ).all().forEach((folder) => {
+        const key = folder.parent_id || '';
+        const list = foldersByParent.get(key) || [];
+        list.push(folder);
+        foldersByParent.set(key, list);
+      });
+      foldersByParent.forEach((list) => {
+        list.forEach((folder, index) => updateFolder.run(index, folder.id));
+      });
+
+      const updateBookmark = database.prepare('UPDATE browser_bookmarks SET sort_order = ? WHERE id = ?');
+      const bookmarksByFolder = new Map();
+      database.prepare(
+        'SELECT id, folder_id FROM browser_bookmarks ORDER BY created_at ASC'
+      ).all().forEach((bookmark) => {
+        const key = bookmark.folder_id || '';
+        const list = bookmarksByFolder.get(key) || [];
+        list.push(bookmark);
+        bookmarksByFolder.set(key, list);
+      });
+      bookmarksByFolder.forEach((list) => {
+        list.forEach((bookmark, index) => updateBookmark.run(index, bookmark.id));
+      });
+    },
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].version;

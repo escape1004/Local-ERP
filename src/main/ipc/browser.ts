@@ -10,7 +10,9 @@ import {
   buildBrowserBookmarkTree,
   collectRecordHttpUrls,
   getBrowserRecordLabel,
+  nextManualFolderName,
 } from '../lib/browser-bookmark-tree';
+import { moveManualTreeItem, normalizeManualParentId } from '../lib/browser-bookmark-move';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
   db,
@@ -73,10 +75,25 @@ function findMatchingRecords(targetUrl) {
 
 function listManualBookmarkRows() {
   return db.prepare(`
-    SELECT id, title, url, record_id AS recordId, created_at AS createdAt
+    SELECT id, title, url, record_id AS recordId, folder_id AS folderId, sort_order AS sortOrder, created_at AS createdAt
     FROM browser_bookmarks
-    ORDER BY created_at DESC
+    ORDER BY sort_order ASC, created_at ASC
   `).all();
+}
+
+function listManualFolderRows() {
+  return db.prepare(`
+    SELECT id, name, parent_id AS parentId, sort_order AS sortOrder, created_at AS createdAt
+    FROM browser_bookmark_folders
+    ORDER BY sort_order ASC, created_at ASC
+  `).all();
+}
+
+function nextManualSortOrder(table, parentColumn, parentId) {
+  const row = parentId
+    ? db.prepare(`SELECT MAX(sort_order) AS maxOrder FROM ${table} WHERE ${parentColumn} = ?`).get(parentId)
+    : db.prepare(`SELECT MAX(sort_order) AS maxOrder FROM ${table} WHERE ${parentColumn} IS NULL`).get();
+  return Number(row?.maxOrder ?? -1) + 1;
 }
 
 function listBookmarks() {
@@ -102,6 +119,7 @@ function listBookmarks() {
     categories,
     records,
     manualBookmarks: listManualBookmarkRows(),
+    manualFolders: listManualFolderRows(),
   });
 
   if (result.overlappingManualIds.length > 0) {
@@ -167,16 +185,117 @@ export function registerBrowserHandlers() {
 
     const id = crypto.randomUUID();
     const title = String(payload.title || '').trim() || matches[0]?.label || parsed.hostname;
+    const folderId = String(payload.folderId || '').trim() || null;
+    const folder = folderId
+      ? db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ?').get(folderId)
+      : null;
     db.prepare(`
-      INSERT INTO browser_bookmarks (id, title, url, record_id, created_at)
-      VALUES (?, ?, ?, ?, ?)
-    `).run(id, title, url, matches[0]?.id || null, nowIso());
+      INSERT INTO browser_bookmarks (id, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      title,
+      url,
+      matches[0]?.id || null,
+      folder?.id || null,
+      nextManualSortOrder('browser_bookmarks', 'folder_id', folder?.id || null),
+      nowIso(),
+    );
     return { success: true, bookmark: listBookmarks().items.find((item) => item.id === id) };
   });
 
   ipcMain.handle('browser:removeBookmark', (_event, id) => {
     db.prepare('DELETE FROM browser_bookmarks WHERE id = ?').run(String(id || ''));
     return { success: true };
+  });
+
+  ipcMain.handle('browser:addBookmarkFolder', (_event, payload = {}) => {
+    const existingNames = db.prepare('SELECT name FROM browser_bookmark_folders').all().map((row) => row.name);
+    const name = String(payload.name || '').trim() || nextManualFolderName(existingNames);
+    if (!name) return { success: false, error: '폴더 이름을 입력해주세요.' };
+    const parentId = String(payload.parentId || '').trim() || null;
+    const parent = parentId
+      ? db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ?').get(parentId)
+      : null;
+    const id = crypto.randomUUID();
+    const createdAt = nowIso();
+    const sortOrder = nextManualSortOrder('browser_bookmark_folders', 'parent_id', parent?.id || null);
+    db.prepare(`
+      INSERT INTO browser_bookmark_folders (id, name, parent_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(id, name, parent?.id || null, sortOrder, createdAt);
+    return {
+      success: true,
+      folder: { id, name, parentId: parent?.id || null, sortOrder, createdAt },
+    };
+  });
+
+  ipcMain.handle('browser:removeBookmarkFolder', (_event, id) => {
+    const folderId = String(id || '').trim();
+    if (!folderId) return { success: false, error: '폴더를 찾을 수 없습니다.' };
+    const folder = db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ?').get(folderId);
+    if (!folder) return { success: false, error: '폴더를 찾을 수 없습니다.' };
+
+    const collectIds = db.prepare('SELECT id FROM browser_bookmark_folders WHERE parent_id = ?');
+    const ids = [];
+    const seen = new Set();
+    const pending = [folderId];
+    while (pending.length > 0) {
+      const current = pending.pop();
+      if (seen.has(current)) continue;
+      seen.add(current);
+      ids.push(current);
+      collectIds.all(current).forEach((row) => pending.push(row.id));
+    }
+
+    const clearFolder = db.prepare('UPDATE browser_bookmarks SET folder_id = NULL WHERE folder_id = ?');
+    const removeFolder = db.prepare('DELETE FROM browser_bookmark_folders WHERE id = ?');
+    const remove = db.transaction((folderIds) => {
+      folderIds.forEach((item) => clearFolder.run(item));
+      [...folderIds].reverse().forEach((item) => removeFolder.run(item));
+    });
+    remove(ids);
+    return { success: true };
+  });
+
+  ipcMain.handle('browser:moveManualBookmarkItem', (_event, payload = {}) => {
+    const kind = payload.kind === 'folder' ? 'folder' : 'bookmark';
+    const id = String(payload.id || '').trim();
+    if (!id) return { success: false, error: '이동할 항목이 없습니다.' };
+    const parentId = normalizeManualParentId(payload.parentId);
+    const index = Number(payload.index);
+    const folders = listManualFolderRows();
+    const bookmarks = listManualBookmarkRows();
+    if (kind === 'bookmark' && !bookmarks.some((item) => item.id === id)) {
+      return { success: false, error: '북마크를 찾을 수 없습니다.' };
+    }
+    if (kind === 'folder' && !folders.some((item) => item.id === id)) {
+      return { success: false, error: '폴더를 찾을 수 없습니다.' };
+    }
+
+    const moved = moveManualTreeItem({
+      folders,
+      bookmarks,
+      kind,
+      id,
+      parentId,
+      index,
+    });
+    const updateFolder = db.prepare(
+      'UPDATE browser_bookmark_folders SET parent_id = ?, sort_order = ? WHERE id = ?'
+    );
+    const updateBookmark = db.prepare(
+      'UPDATE browser_bookmarks SET folder_id = ?, sort_order = ? WHERE id = ?'
+    );
+    db.transaction(() => {
+      moved.folders.forEach((folder) => {
+        updateFolder.run(folder.parentId || null, Number(folder.sortOrder ?? 0), folder.id);
+      });
+      moved.bookmarks.forEach((bookmark) => {
+        updateBookmark.run(bookmark.folderId || null, Number(bookmark.sortOrder ?? 0), bookmark.id);
+      });
+    })();
+    return { success: true, ...listBookmarks() };
   });
 
   ipcMain.handle('browser:listScripts', () => listScripts());

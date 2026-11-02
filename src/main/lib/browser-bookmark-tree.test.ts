@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest';
-import { MANUAL_BOOKMARK_FOLDER_ID, buildBrowserBookmarkTree } from './browser-bookmark-tree';
+import {
+  MANUAL_BOOKMARK_FOLDER_ID,
+  buildBrowserBookmarkTree,
+  nextManualFolderName,
+} from './browser-bookmark-tree';
+
+test('picks an unused default folder name', () => {
+  expect(nextManualFolderName([])).toBe('새 폴더');
+  expect(nextManualFolderName(['새 폴더'])).toBe('새 폴더 2');
+  expect(nextManualFolderName(['새 폴더', '새 폴더 2'])).toBe('새 폴더 3');
+});
 
 const movies = {
   id: 'movies',
@@ -39,6 +49,7 @@ test('puts record urls into category folders and nests subcategories', () => {
   expect(result.tree[1].bookmarks[0]).toMatchObject({
     source: 'record',
     title: 'Heat',
+    subtitle: 'https://youtu.be/abc123XYZ01',
     url: 'https://www.youtube.com/watch?v=abc123XYZ01',
   });
   expect(result.tree[1].children).toHaveLength(1);
@@ -46,6 +57,7 @@ test('puts record urls into category folders and nests subcategories', () => {
   expect(result.tree[1].children[0].bookmarks[0]).toMatchObject({
     source: 'record',
     title: 'Pacino',
+    subtitle: 'https://example.com/pacino',
     url: 'https://example.com/pacino',
   });
   expect(result.items.some((item) => item.source === 'manual')).toBe(true);
@@ -83,7 +95,7 @@ test('omits categories without urls and skips separators', () => {
   expect(result.items).toHaveLength(1);
 });
 
-test('uses text prefix fields as urls and labels with a non-url text field', () => {
+test('labels record bookmarks with the first two field values', () => {
   const clips = {
     id: 'clips',
     name: '클립',
@@ -101,7 +113,8 @@ test('uses text prefix fields as urls and labels with a non-url text field', () 
   expect(result.tree[0].id).toBe('clips');
   expect(result.tree[0].bookmarks[0]).toMatchObject({
     source: 'record',
-    title: 'Intro',
+    title: 'abc123XYZ01',
+    subtitle: 'Intro',
     url: 'https://www.youtube.com/watch?v=abc123XYZ01',
   });
 });
@@ -135,6 +148,65 @@ test('keeps a category folder when it has a url prefix field even without record
   expect(result.tree).toEqual([
     expect.objectContaining({ id: 'clips', name: '클립', bookmarks: [], children: [] }),
   ]);
+});
+
+test('places user folders under the direct-add root and keeps unfiled bookmarks', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [],
+    records: [],
+    manualBookmarks: [
+      { id: 'in-folder', title: '검색', url: 'https://www.google.com', folderId: 'shop', createdAt: '' },
+      { id: 'loose', title: '뉴스', url: 'https://example.com/news', createdAt: '' },
+    ],
+    manualFolders: [{ id: 'shop', name: '쇼핑', createdAt: '2026-01-01' }],
+  });
+
+  expect(result.tree).toHaveLength(1);
+  expect(result.tree[0]).toMatchObject({
+    id: MANUAL_BOOKMARK_FOLDER_ID,
+    bookmarks: [expect.objectContaining({ id: 'loose', folderId: null })],
+  });
+  expect(result.tree[0].children).toEqual([
+    expect.objectContaining({
+      id: 'shop',
+      name: '쇼핑',
+      kind: 'manual',
+      bookmarks: [expect.objectContaining({ id: 'in-folder', folderId: 'shop' })],
+    }),
+  ]);
+});
+
+test('orders manual folders and bookmarks by sortOrder', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [],
+    records: [],
+    manualFolders: [
+      { id: 'b', name: 'B', sortOrder: 1 },
+      { id: 'a', name: 'A', sortOrder: 0 },
+    ],
+    manualBookmarks: [
+      { id: 'second', title: 'Ann', url: 'https://a.example', sortOrder: 1, createdAt: '' },
+      { id: 'first', title: 'Zed', url: 'https://z.example', sortOrder: 0, createdAt: '' },
+    ],
+  });
+
+  expect(result.tree[0].children.map((folder) => folder.id)).toEqual(['a', 'b']);
+  expect(result.tree[0].bookmarks.map((bookmark) => bookmark.id)).toEqual(['first', 'second']);
+});
+
+test('keeps an empty manual folder in the tree', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [],
+    records: [],
+    manualFolders: [{ id: 'empty', name: '새 폴더' }],
+  });
+
+  expect(result.tree[0].children[0]).toMatchObject({
+    id: 'empty',
+    name: '새 폴더',
+    bookmarks: [],
+    children: [],
+  });
 });
 
 test('drops manual bookmarks that duplicate record urls', () => {

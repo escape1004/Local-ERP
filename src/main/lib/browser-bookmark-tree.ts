@@ -6,6 +6,17 @@ import {
 
 export const MANUAL_BOOKMARK_FOLDER_ID = '__manual__';
 
+export function nextManualFolderName(existingNames = []) {
+  const names = new Set(
+    existingNames.map((name) => String(name || '').trim()).filter(Boolean),
+  );
+  const base = '새 폴더';
+  if (!names.has(base)) return base;
+  let index = 2;
+  while (names.has(`${base} ${index}`)) index += 1;
+  return `${base} ${index}`;
+}
+
 function parseJson(value, fallback) {
   if (value && typeof value === 'object') return value;
   try {
@@ -68,39 +79,44 @@ export function collectRecordHttpUrls(record, category): string[] {
   return [...urls];
 }
 
-function fieldValueIsUrl(field, data) {
+function visibleLabelFields(category) {
+  return categoryFields(category)
+    .filter((field) => field && field.type !== 'file' && !field.hidden)
+    .sort((left, right) => Number(left.order ?? 0) - Number(right.order ?? 0));
+}
+
+function fieldStoredValue(field, data) {
   const value = data[field.id];
   const items = Array.isArray(value) ? value : [value];
-  return items.some((item) => (
-    isHttpUrlString(formatBrowserFieldValue(field, item)) || isHttpUrlString(item)
-  ));
+  return items
+    .map((item) => {
+      if (item === null || item === undefined || item === '') return '';
+      return String(item).trim();
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+export function getBrowserRecordLabels(record, category) {
+  const fields = visibleLabelFields(category);
+  const data = recordData(record);
+  const title = (fields[0] ? fieldStoredValue(fields[0], data) : '').trim();
+  const subtitle = (fields[1] ? fieldStoredValue(fields[1], data) : '').trim();
+  return {
+    title: title || record.id,
+    subtitle,
+  };
 }
 
 export function getBrowserRecordLabel(record, category) {
-  const fields = categoryFields(category);
-  const data = recordData(record);
-  const preferred = fields.find((field) => field.type === 'text' && !field.hidden && !fieldValueIsUrl(field, data))
-    ?? fields.find((field) => field.type !== 'file' && !field.hidden && !fieldValueIsUrl(field, data))
-    ?? fields.find((field) => field.type === 'text' && !field.hidden)
-    ?? fields.find((field) => field.type !== 'file' && !field.hidden)
-    ?? fields[0];
-  if (!preferred) return record.id;
-  const formatted = formatBrowserFieldValue(preferred, data[preferred.id]).trim();
-  if (!formatted) return record.id;
-  if (isHttpUrlString(formatted)) {
-    try {
-      return new URL(formatted).hostname.replace(/^www\./, '') || record.id;
-    } catch {
-      return record.id;
-    }
-  }
-  return formatted;
+  return getBrowserRecordLabels(record, category).title;
 }
 
 export function buildBrowserBookmarkTree({
   categories = [],
   records = [],
   manualBookmarks = [],
+  manualFolders = [],
 } = {}) {
   const parsedCategories = categories
     .filter((category) => category?.itemType !== 'separator')
@@ -122,12 +138,13 @@ export function buildBrowserBookmarkTree({
     const urls = collectRecordHttpUrls(record, category);
     if (urls.length === 0) return;
 
-    const title = getBrowserRecordLabel(record, category);
+    const labels = getBrowserRecordLabels(record, category);
     const list = autoBookmarksByCategory.get(category.id) || [];
     urls.forEach((url) => {
       list.push({
         id: `record:${record.id}:${url}`,
-        title,
+        title: labels.title,
+        subtitle: labels.subtitle,
         url,
         source: 'record',
         recordId: record.id,
@@ -189,19 +206,73 @@ export function buildBrowserBookmarkTree({
       ...bookmark,
       url,
       source: 'manual',
+      folderId: normalizeId(bookmark.folderId ?? bookmark.folder_id),
+      sortOrder: Number(bookmark.sortOrder ?? bookmark.sort_order ?? 0),
       recordId: bookmark.recordId || null,
       categoryId: bookmark.categoryId || null,
     });
   });
 
+  const parsedFolders = [];
+  const folderIds = new Set();
+  manualFolders.forEach((folder) => {
+    const id = normalizeId(folder?.id);
+    const name = String(folder?.name || '').trim();
+    if (!id || !name || folderIds.has(id) || id === MANUAL_BOOKMARK_FOLDER_ID) return;
+    folderIds.add(id);
+    parsedFolders.push({
+      id,
+      name,
+      parentId: normalizeId(folder.parentId ?? folder.parent_id),
+      sortOrder: Number(folder.sortOrder ?? folder.sort_order ?? 0),
+      createdAt: folder.createdAt || folder.created_at || '',
+    });
+  });
+  parsedFolders.forEach((folder) => {
+    if (folder.parentId && !folderIds.has(folder.parentId)) folder.parentId = null;
+  });
+
+  const bookmarksByFolder = new Map();
+  const unfiledManual = [];
+  normalizedManual.forEach((bookmark) => {
+    if (bookmark.folderId && folderIds.has(bookmark.folderId)) {
+      const list = bookmarksByFolder.get(bookmark.folderId) || [];
+      list.push(bookmark);
+      bookmarksByFolder.set(bookmark.folderId, list);
+      return;
+    }
+    unfiledManual.push({ ...bookmark, folderId: null });
+  });
+
+  const buildManualFolder = (folder) => ({
+    id: folder.id,
+    name: folder.name,
+    kind: 'manual',
+    children: parsedFolders
+      .filter((item) => item.parentId === folder.id)
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, 'ko') || left.id.localeCompare(right.id))
+      .map(buildManualFolder),
+    bookmarks: [...(bookmarksByFolder.get(folder.id) || [])]
+      .sort((left, right) => left.sortOrder - right.sortOrder || left.title.localeCompare(right.title, 'ko') || left.url.localeCompare(right.url)),
+  });
+
+  const manualChildren = parsedFolders
+    .filter((folder) => !folder.parentId)
+    .sort((left, right) => left.sortOrder - right.sortOrder || left.name.localeCompare(right.name, 'ko') || left.id.localeCompare(right.id))
+    .map(buildManualFolder);
+
   const tree = [];
-  if (normalizedManual.length > 0) {
+  if (manualChildren.length > 0 || unfiledManual.length > 0) {
     tree.push({
       id: MANUAL_BOOKMARK_FOLDER_ID,
       name: '직접 추가',
       kind: 'manual',
-      children: [],
-      bookmarks: normalizedManual,
+      children: manualChildren,
+      bookmarks: unfiledManual.sort((left, right) => (
+        left.sortOrder - right.sortOrder
+        || left.title.localeCompare(right.title, 'ko')
+        || left.url.localeCompare(right.url)
+      )),
     });
   }
   tree.push(...categoryRoots);
