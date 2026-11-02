@@ -3,6 +3,7 @@ import path from 'path';
 import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
 import { canonicalizeBrowserUrl } from '../lib/browser-url';
+import { normalizeBrowserSessionUrl } from '../lib/browser-window-url';
 import {
   BOOKMARK_BAR_FOLDER_ID,
   buildBrowserBookmarkTree,
@@ -13,15 +14,18 @@ import { buildRecordUrlMatchIndex } from '../lib/browser-record-match';
 import { moveManualTreeItem, normalizeManualParentId } from '../lib/browser-bookmark-move';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
+  appConfig,
   db,
   getConfiguredTranslationModel,
   getCurrentProfileIdOrThrow,
   log,
+  saveAppConfig,
 } from '../store';
 import {
   closeEmbeddedBrowserWindow,
   isEmbeddedBrowserWindowFocused,
   openEmbeddedBrowserWindow,
+  setRememberEmbeddedBrowserWindowBounds,
 } from '../app/browser-window';
 import { generateBrowserScriptWithOpenAi } from '../services/browser-ai';
 import { BROWSER_PARTITION } from '../services/embedded-browser';
@@ -166,6 +170,16 @@ export function registerBrowserHandlers() {
     return { success: true };
   });
   ipcMain.handle('browser:isWindowFocused', () => isEmbeddedBrowserWindowFocused());
+  ipcMain.handle('setRememberBrowserWindowBounds', (_event, enabled) => (
+    setRememberEmbeddedBrowserWindowBounds(enabled)
+  ));
+  ipcMain.handle('browser:saveLastUrl', (_event, url) => {
+    const normalized = normalizeBrowserSessionUrl(url);
+    if (!normalized || appConfig.browserLastUrl === normalized) return { success: true };
+    appConfig.browserLastUrl = normalized;
+    saveAppConfig();
+    return { success: true };
+  });
 
   ipcMain.handle('browser:canonicalizeUrl', (_event, input) => canonicalizeBrowserUrl(String(input || '')));
 

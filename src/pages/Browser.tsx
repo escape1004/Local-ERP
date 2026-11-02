@@ -287,6 +287,14 @@ const BrowserPage: React.FC = () => {
     };
   }, [currentUrl]);
 
+  React.useEffect(() => {
+    if (currentUrl === 'about:blank' && pendingUrlRef.current) return undefined;
+    const timer = window.setTimeout(() => {
+      void window.electronAPI.saveBrowserLastUrl(currentUrl || 'about:blank');
+    }, 400);
+    return () => window.clearTimeout(timer);
+  }, [currentUrl]);
+
   const matchesCurrentUrl = (item: BrowserBookmark) => (
     Boolean(item.url) && (item.url === canonicalCurrent || item.url === currentUrl)
   );

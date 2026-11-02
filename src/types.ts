@@ -131,6 +131,8 @@ export interface Config {
   backupInterval: number;
   backupEnabled?: boolean;
   rememberWindowBounds?: boolean;
+  rememberBrowserWindowBounds?: boolean;
+  browserStartupMode?: 'newtab' | 'continue';
   muteAudioWhenBackgrounded?: boolean;
   zoomPercent?: number;
   hasAppPassword?: boolean;
@@ -301,6 +303,8 @@ export interface ElectronAPI {
   setBackupInterval: (minutes: number) => Promise<{ success: boolean; error?: string }>;
   setBackupEnabled: (enabled: boolean) => Promise<{ success: boolean; backupEnabled?: boolean; error?: string }>;
   setRememberWindowBounds: (enabled: boolean) => Promise<{ success: boolean }>;
+  setRememberBrowserWindowBounds: (enabled: boolean) => Promise<{ success: boolean; rememberBrowserWindowBounds?: boolean }>;
+  setBrowserStartupMode: (mode: 'newtab' | 'continue') => Promise<{ success: boolean; browserStartupMode?: 'newtab' | 'continue'; error?: string }>;
   setMuteAudioWhenBackgrounded: (enabled: boolean) => Promise<{ success: boolean }>;
   setPictureInPictureActive: (active: boolean) => Promise<{ success: boolean }>;
   setViewerFullscreen: (enabled: boolean) => Promise<{ success: boolean; isFullscreen: boolean; error?: string }>;
@@ -343,6 +347,7 @@ export interface ElectronAPI {
   openBrowserWindow: (url?: string) => Promise<{ success: boolean; error?: string }>;
   closeBrowserWindow: () => Promise<{ success: boolean; error?: string }>;
   isBrowserWindowFocused: () => Promise<boolean>;
+  saveBrowserLastUrl: (url: string) => Promise<{ success: boolean }>;
   onBrowserOpenUrl: (callback: (url: string) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;

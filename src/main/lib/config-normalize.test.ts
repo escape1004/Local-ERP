@@ -10,6 +10,7 @@ import {
   normalizePasswordLockDurationMinutes,
   normalizePasswordLockMaxAttempts,
   normalizeThumbnailPreviewScale,
+  normalizeBrowserStartupMode,
   normalizeTranslationDisplayMode,
   normalizeTranslationModel,
   normalizeTranslationTargetLanguage,
@@ -51,6 +52,13 @@ test('lock and backup helpers reject invalid numbers', () => {
   assert.equal(normalizePasswordLockDurationMinutes(3.9), 3);
   assert.equal(normalizeIdleLockMinutes(-8), 0);
   assert.equal(normalizeIdleLockMinutes(12.8), 12);
+});
+
+test('normalizeBrowserStartupMode keeps continue and defaults to a new tab', () => {
+  assert.equal(normalizeBrowserStartupMode('continue'), 'continue');
+  assert.equal(normalizeBrowserStartupMode('newtab'), 'newtab');
+  assert.equal(normalizeBrowserStartupMode('unknown'), 'newtab');
+  assert.equal(normalizeBrowserStartupMode(undefined), 'newtab');
 });
 
 test('normalizeDateParseFormats de-duplicates and caps length', () => {

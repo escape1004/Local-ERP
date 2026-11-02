@@ -70,6 +70,13 @@ export function normalizeTranslationDisplayMode(value) {
   return value === 'inline-hover' ? 'inline-hover' : 'tooltip';
 }
 
+export const BROWSER_STARTUP_NEW_TAB = 'newtab';
+export const BROWSER_STARTUP_CONTINUE = 'continue';
+
+export function normalizeBrowserStartupMode(value) {
+  return value === BROWSER_STARTUP_CONTINUE ? BROWSER_STARTUP_CONTINUE : BROWSER_STARTUP_NEW_TAB;
+}
+
 export function normalizeBackupInterval(value) {
   const numericValue = Number(value);
   if (!Number.isFinite(numericValue)) return null;

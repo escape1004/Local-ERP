@@ -22,6 +22,7 @@ import {
   normalizePasswordLockDurationMinutes,
   normalizePasswordLockMaxAttempts,
   normalizeThumbnailPreviewScale,
+  normalizeBrowserStartupMode,
   normalizeTranslationDisplayMode,
   normalizeTranslationModel,
   normalizeTranslationTargetLanguage,
@@ -49,6 +50,7 @@ export {
   normalizePasswordLockDurationMinutes,
   normalizePasswordLockMaxAttempts,
   normalizeThumbnailPreviewScale,
+  normalizeBrowserStartupMode,
   normalizeTranslationDisplayMode,
   normalizeTranslationModel,
   normalizeTranslationTargetLanguage,
@@ -111,6 +113,10 @@ export const defaultConfig = {
   rememberWindowBounds: false,
   muteAudioWhenBackgrounded: false,
   windowBounds: null,
+  rememberBrowserWindowBounds: false,
+  browserWindowBounds: null,
+  browserStartupMode: 'newtab',
+  browserLastUrl: '',
   passwordHash: null,
   passwordLockMaxAttempts: 5,
   passwordLockDurationMinutes: 1,
@@ -236,6 +242,10 @@ export function getConfiguredPasswordLockDurationMinutes() {
 
 export function getConfiguredIdleLockMinutes() {
   return normalizeIdleLockMinutes(appConfig.idleLockMinutes) ?? 0;
+}
+
+export function getConfiguredBrowserStartupMode() {
+  return normalizeBrowserStartupMode(appConfig.browserStartupMode);
 }
 
 export function getPasswordLockUntil() {

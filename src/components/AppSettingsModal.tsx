@@ -1,6 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, HelpCircle, Keyboard, Languages, List, Loader2, Monitor, Plus, RefreshCw, Save, Settings, Shield, Trash2, X } from 'lucide-react';
+import { FolderOpen, Globe, HelpCircle, Keyboard, Languages, List, Loader2, Monitor, Plus, RefreshCw, Save, Settings, Shield, Trash2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
+import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Switch } from './ui/switch';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
@@ -32,6 +33,7 @@ const sections: SettingsSection[] = [
   { id: 'general', label: '일반', description: '기본 동작과 창 옵션', icon: Settings },
   { id: 'list', label: '리스트', description: '레코드 리스트 표시 방식', icon: List },
   { id: 'viewer', label: '뷰어', description: '이미지와 동영상 보기 환경', icon: Monitor },
+  { id: 'browser', label: '브라우저', description: '내장 브라우저 창과 시작 동작', icon: Globe },
   { id: 'security', label: '보안', description: '프로그램 비밀번호 관리', icon: Shield },
 ];
 
@@ -116,6 +118,7 @@ export function AppSettingsModal({
   const [viewerSeekSeconds, setViewerSeekSeconds] = useState('5');
   const [viewerMessage, setViewerMessage] = useState('');
   const [viewerAutoPlayMessage, setViewerAutoPlayMessage] = useState('');
+  const [browserMessage, setBrowserMessage] = useState('');
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
@@ -217,6 +220,7 @@ export function AppSettingsModal({
         setViewerSeekSeconds(String(nextConfig.videoSeekSeconds ?? 5));
         setViewerMessage('');
         setViewerAutoPlayMessage('');
+        setBrowserMessage('');
         setListMessage('');
         setDateFormatInput('');
         setDateFormatMessage('');
@@ -323,6 +327,32 @@ export function AppSettingsModal({
     setIsSaving(true);
     try {
       await window.electronAPI.setRememberWindowBounds(checked);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleRememberBrowserWindowBoundsChange = async (checked: boolean) => {
+    setConfig((prev) => (prev ? { ...prev, rememberBrowserWindowBounds: checked } : prev));
+    setBrowserMessage('');
+    setIsSaving(true);
+    try {
+      await window.electronAPI.setRememberBrowserWindowBounds(checked);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleBrowserStartupModeChange = async (mode: 'newtab' | 'continue') => {
+    const previousMode = config?.browserStartupMode === 'continue' ? 'continue' : 'newtab';
+    setConfig((prev) => (prev ? { ...prev, browserStartupMode: mode } : prev));
+    setBrowserMessage('');
+    setIsSaving(true);
+    try {
+      const result = await window.electronAPI.setBrowserStartupMode(mode);
+      if (result.success) return;
+      setConfig((prev) => (prev ? { ...prev, browserStartupMode: previousMode } : prev));
+      setBrowserMessage(result.error || '브라우저 시작 설정을 저장하지 못했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -883,6 +913,70 @@ export function AppSettingsModal({
 
     await persistIdleLockMinutes(minutes);
   };
+
+  const renderBrowserSection = () => (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">브라우저 위치 기억</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              내장 브라우저를 다시 열었을 때 마지막으로 사용한 창의 위치와 크기를 그대로 복원합니다.
+            </p>
+          </div>
+          <Switch
+            checked={Boolean(config?.rememberBrowserWindowBounds)}
+            onCheckedChange={handleRememberBrowserWindowBoundsChange}
+            disabled={!config || isSaving}
+            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">시작 시 설정</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          브라우저 창을 새로 열 때 빈 시작 화면을 보여줄지, 마지막으로 보던 페이지를 다시 열지 선택합니다.
+        </p>
+
+        <RadioGroup
+          className="mt-5 space-y-3"
+          value={config?.browserStartupMode === 'continue' ? 'continue' : 'newtab'}
+          onValueChange={(value) => {
+            if (value === 'continue' || value === 'newtab') {
+              void handleBrowserStartupModeChange(value);
+            }
+          }}
+          disabled={!config || isSaving}
+        >
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
+            <RadioGroupItem
+              value="newtab"
+              className="mt-0.5 border-gray-500 text-discord-accent"
+              disabled={!config || isSaving}
+            />
+            <span>
+              <span className="block text-sm font-medium text-white">새 탭 페이지 열기</span>
+              <span className="mt-1 block text-sm text-discord-muted">브라우저를 열면 빈 시작 화면을 보여줍니다.</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
+            <RadioGroupItem
+              value="continue"
+              className="mt-0.5 border-gray-500 text-discord-accent"
+              disabled={!config || isSaving}
+            />
+            <span>
+              <span className="block text-sm font-medium text-white">중단한 위치에서 계속하기</span>
+              <span className="mt-1 block text-sm text-discord-muted">마지막으로 보고 있던 페이지를 다시 엽니다.</span>
+            </span>
+          </label>
+        </RadioGroup>
+
+        {browserMessage ? <p className="mt-3 text-sm text-discord-muted">{browserMessage}</p> : null}
+      </div>
+    </div>
+  );
 
   const renderGeneralSection = () => (
     <div className="space-y-4">
@@ -1860,6 +1954,8 @@ export function AppSettingsModal({
                   ? renderListSection()
                   : currentSection.id === 'viewer'
                     ? renderViewerSection()
+                    : currentSection.id === 'browser'
+                      ? renderBrowserSection()
                     : currentSection.id === 'shortcuts'
                       ? renderShortcutsSection()
                       : renderSecuritySection()}

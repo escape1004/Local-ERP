@@ -50,6 +50,8 @@ import {
   getConfiguredPasswordLockDurationMinutes,
   normalizeIdleLockMinutes,
   getConfiguredIdleLockMinutes,
+  normalizeBrowserStartupMode,
+  getConfiguredBrowserStartupMode,
   getPasswordLockUntil,
   resetPasswordLockState,
   getTranslationLanguageLabel,
@@ -200,6 +202,8 @@ export function registerSettingsHandlers() {
       backupInterval: getConfiguredBackupInterval(),
       backupEnabled: appConfig.backupEnabled !== false,
       rememberWindowBounds: appConfig.rememberWindowBounds,
+      rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
+      browserStartupMode: getConfiguredBrowserStartupMode(),
       muteAudioWhenBackgrounded: appConfig.muteAudioWhenBackgrounded === true,
       zoomPercent: getConfiguredZoomPercent(),
       hasAppPassword: Boolean(appConfig.passwordHash),
@@ -384,6 +388,13 @@ export function registerSettingsHandlers() {
     appConfig.videoAutoPlay = enabled !== false;
     saveAppConfig();
     return { success: true };
+  });
+
+  ipcMain.handle('setBrowserStartupMode', (_event, mode) => {
+    const normalized = normalizeBrowserStartupMode(mode);
+    appConfig.browserStartupMode = normalized;
+    saveAppConfig();
+    return { success: true, browserStartupMode: normalized };
   });
 
   ipcMain.handle('setListThumbnailFit', (_event, fit) => {

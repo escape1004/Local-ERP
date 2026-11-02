@@ -87,6 +87,8 @@ const api: ElectronAPI = {
   setBackupInterval: (minutes: number) => ipcRenderer.invoke('setBackupInterval', minutes),
   setBackupEnabled: (enabled: boolean) => ipcRenderer.invoke('setBackupEnabled', enabled),
   setRememberWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberWindowBounds', enabled),
+  setRememberBrowserWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberBrowserWindowBounds', enabled),
+  setBrowserStartupMode: (mode: 'newtab' | 'continue') => ipcRenderer.invoke('setBrowserStartupMode', mode),
   setMuteAudioWhenBackgrounded: (enabled: boolean) => ipcRenderer.invoke('setMuteAudioWhenBackgrounded', enabled),
   setPictureInPictureActive: (active: boolean) => ipcRenderer.invoke('setPictureInPictureActive', active),
   setViewerFullscreen: (enabled: boolean) => ipcRenderer.invoke('viewer:setFullscreen', enabled),
@@ -152,6 +154,7 @@ const api: ElectronAPI = {
   openBrowserWindow: (url) => ipcRenderer.invoke('browser:openWindow', url),
   closeBrowserWindow: () => ipcRenderer.invoke('browser:closeWindow'),
   isBrowserWindowFocused: () => ipcRenderer.invoke('browser:isWindowFocused'),
+  saveBrowserLastUrl: (url: string) => ipcRenderer.invoke('browser:saveLastUrl', url),
   onBrowserOpenUrl: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, nextUrl: string) => callback(nextUrl);
     ipcRenderer.on('browser:open-url', listener);
