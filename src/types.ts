@@ -365,7 +365,23 @@ export interface ElectronAPI {
   saveBrowserScript: (payload: Partial<BrowserScript> & { name?: string; source?: string; matches?: string[] }) => Promise<{ success: boolean; script?: BrowserScript; error?: string }>;
   deleteBrowserScript: (id: string) => Promise<{ success: boolean; error?: string }>;
   findBrowserRecordsByUrl: (url: string) => Promise<BrowserRecordMatch[]>;
-  generateBrowserScript: (payload: { url: string; intent: string; selectedHtml?: string }) => Promise<{ success: boolean; name?: string; matches?: string[]; source?: string; error?: string }>;
+  generateBrowserScript: (payload: {
+    url: string;
+    intent?: string;
+    messages?: { role: 'user' | 'assistant'; content: string }[];
+    selectedHtml?: string;
+    pageHtml?: string;
+    title?: string;
+    includePageContext?: boolean;
+  }) => Promise<{
+    success: boolean;
+    reply?: string;
+    display?: string;
+    name?: string;
+    matches?: string[];
+    source?: string;
+    error?: string;
+  }>;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

@@ -13,6 +13,7 @@ import {
   Star,
 } from 'lucide-react';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
+import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
 import { TabBar } from '../components/browser/TabBar';
 import type { ManualDragItem } from '../components/browser/bookmark-dnd';
@@ -32,6 +33,7 @@ import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRendere
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
+import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
 import {
   closeBrowserTab,
   cycleBrowserTab,
@@ -59,6 +61,7 @@ type EmbeddedWebview = HTMLElement & {
   getTitle: () => string;
   getZoomFactor?: () => number;
   setZoomFactor?: (factor: number) => void;
+  executeJavaScript?: (code: string) => Promise<unknown>;
 };
 
 type WebviewIpcMessageEvent = Event & {
@@ -131,8 +134,10 @@ const BrowserPage: React.FC = () => {
   const [manualDrag, setManualDrag] = React.useState<ManualDragItem | null>(null);
   const [scripts, setScripts] = React.useState<BrowserScript[]>([]);
   const [draft, setDraft] = React.useState<BrowserScript>(emptyScript());
-  const [intent, setIntent] = React.useState('');
-  const [selectedHtml, setSelectedHtml] = React.useState('');
+  const [chatInput, setChatInput] = React.useState('');
+  const [chatMessages, setChatMessages] = React.useState<BrowserAiChatMessage[]>([]);
+  const [chatContextUrl, setChatContextUrl] = React.useState('');
+  const chatSeqRef = React.useRef(0);
   const [generating, setGenerating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = React.useState(false);
@@ -618,26 +623,92 @@ const BrowserPage: React.FC = () => {
     }
   };
 
-  const generateScript = async () => {
+  const captureActiveTabPage = async () => {
+    const webview = activeWebview();
+    const fallbackTitle = activeTab?.title && activeTab.title !== '새 탭' ? activeTab.title : '';
+    if (!webview || isBlankBrowserTab({ url: currentUrl })) {
+      return { title: fallbackTitle, html: '' };
+    }
+    try {
+      const result = await webview.executeJavaScript?.(getCaptureBrowserPageContextScript());
+      const captured = result && typeof result === 'object' ? result as { title?: unknown; html?: unknown } : null;
+      const html = typeof captured?.html === 'string' ? captured.html : '';
+      const title = typeof captured?.title === 'string' && captured.title.trim()
+        ? captured.title.trim()
+        : (webview.getTitle?.() || fallbackTitle);
+      return { title, html };
+    } catch {
+      try {
+        return { title: webview.getTitle?.() || fallbackTitle, html: '' };
+      } catch {
+        return { title: fallbackTitle, html: '' };
+      }
+    }
+  };
+
+  const nextChatId = () => {
+    chatSeqRef.current += 1;
+    return `chat-${chatSeqRef.current}`;
+  };
+
+  const resetChat = () => {
+    setChatInput('');
+    setChatMessages([]);
+    setChatContextUrl('');
+  };
+
+  const applyChatScript = (script: BrowserAiChatScript) => {
+    setDraft({
+      ...emptyScript(),
+      name: script.name,
+      matches: script.matches,
+      source: script.source,
+    });
+    setSideTab('scripts');
+    toast({ title: '스크립트 초안에 넣었습니다. 확인 후 저장하세요.' });
+  };
+
+  const sendChat = async () => {
+    const text = chatInput.trim();
+    if (!text || generating) return;
+    const history = chatMessages.map((message) => ({
+      role: message.role,
+      content: message.raw || message.content,
+    }));
+    setChatMessages((current) => [...current, { id: nextChatId(), role: 'user', content: text }]);
+    setChatInput('');
     setGenerating(true);
     try {
+      const includePageContext = chatContextUrl !== currentUrl;
+      const page = includePageContext ? await captureActiveTabPage() : { title: '', html: '' };
       const result = await window.electronAPI.generateBrowserScript({
         url: currentUrl,
-        intent,
-        selectedHtml,
+        title: page.title,
+        pageHtml: page.html,
+        includePageContext,
+        messages: [...history, { role: 'user', content: text }],
       });
-      if (!result.success || !result.source) {
-        toast({ title: result.error || '스크립트를 만들지 못했습니다.', variant: 'destructive' });
+      if (!result.success) {
+        toast({ title: result.error || '응답을 받지 못했습니다.', variant: 'destructive' });
         return;
       }
-      setDraft({
-        ...emptyScript(),
-        name: result.name || '새 스크립트',
-        matches: result.matches || ['*'],
-        source: result.source,
-      });
-      setSideTab('scripts');
-      toast({ title: '초안을 만들었습니다. 확인 후 저장하세요.' });
+      if (includePageContext) setChatContextUrl(currentUrl);
+      setChatMessages((current) => [
+        ...current,
+        {
+          id: nextChatId(),
+          role: 'assistant',
+          content: result.display || result.reply || '응답을 표시할 수 없습니다.',
+          raw: result.reply || result.display,
+          script: result.source
+            ? {
+              name: result.name || '새 스크립트',
+              matches: result.matches || ['*'],
+              source: result.source,
+            }
+            : null,
+        },
+      ]);
     } finally {
       setGenerating(false);
     }
@@ -974,32 +1045,17 @@ const BrowserPage: React.FC = () => {
               )}
 
               {hasOpenAiApiKey && sideTab === 'ai' && (
-                <div className="h-full space-y-3 overflow-y-auto discord-scrollbar p-3">
-                  <p className="text-[11px] leading-relaxed text-discord-muted">
-                    현재 페이지({currentUrl === 'about:blank' ? '없음' : new URL(currentUrl, 'https://example.com').hostname})에 맞는 스크립트 초안을 만듭니다. 환경설정의 OpenAI 키를 사용합니다.
-                  </p>
-                  <Textarea
-                    value={intent}
-                    onChange={(event) => setIntent(event.target.value)}
-                    className="min-h-[90px] bg-discord-bg border-gray-600 text-xs text-discord-text"
-                    placeholder="예: 레코드에 있는 유튜브 영상에 파란색 테두리를 그려줘"
-                  />
-                  <Textarea
-                    value={selectedHtml}
-                    onChange={(event) => setSelectedHtml(event.target.value)}
-                    className="min-h-[70px] bg-discord-bg border-gray-600 font-mono text-[11px] text-discord-text"
-                    placeholder="선택한 요소 HTML (선택)"
-                  />
-                  <BrowserTooltip label="현재 페이지에 맞는 스크립트 초안 만들기" wrapDisabled={generating || !intent.trim()}>
-                    <Button
-                      className="h-8 w-full bg-discord-accent hover:bg-blue-600 text-xs"
-                      disabled={generating || !intent.trim()}
-                      onClick={() => void generateScript()}
-                    >
-                      {generating ? '생성 중...' : '스크립트 초안 만들기'}
-                    </Button>
-                  </BrowserTooltip>
-                </div>
+                <BrowserAiChat
+                  currentUrl={currentUrl}
+                  contextUrl={chatContextUrl}
+                  generating={generating}
+                  messages={chatMessages}
+                  input={chatInput}
+                  onInputChange={setChatInput}
+                  onSend={() => void sendChat()}
+                  onNewChat={resetChat}
+                  onApplyScript={applyChatScript}
+                />
               )}
             </div>
           </aside>

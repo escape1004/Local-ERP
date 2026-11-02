@@ -405,10 +405,16 @@ export function registerBrowserHandlers() {
 
   ipcMain.handle('browser:generateScript', async (_event, payload = {}) => {
     try {
+      const includePageContext = payload.includePageContext !== false;
       const generated = await generateBrowserScriptWithOpenAi({
         url: payload.url,
+        title: payload.title,
         intent: payload.intent,
         selectedHtml: payload.selectedHtml,
+        pageHtml: payload.pageHtml,
+        messages: payload.messages,
+        includePageContext,
+        records: includePageContext ? findMatchingRecords(String(payload.url || '')) : [],
         model: getConfiguredTranslationModel(),
       });
       return { success: true, ...generated };
