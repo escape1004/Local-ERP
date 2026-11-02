@@ -145,9 +145,8 @@ function expectLatestSchema(database) {
   expect(getTableColumns(database, 'browser_scripts')).toEqual(expect.arrayContaining([
     'id', 'name', 'enabled', 'matches_json', 'run_at', 'source', 'updated_at',
   ]));
-  expect(database.prepare('SELECT name FROM browser_scripts WHERE id = ?').get('youtube-record-highlight')).toMatchObject({
-    name: '유튜브 레코드 영상 강조',
-  });
+  expect(database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
+    .toBeUndefined();
   expect(database.prepare('PRAGMA foreign_keys').get().foreign_keys).toBe(1);
   expect(String(database.prepare('PRAGMA journal_mode').get().journal_mode).toLowerCase()).toBe('wal');
 }
@@ -203,6 +202,30 @@ test('stamps an existing v1.1.19 database without rewriting user data', () => {
       "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'idx_record_view_counts_profile_category'"
     ).get();
     expect(indexCount.count).toBe(1);
+  });
+});
+
+test('removes the bundled youtube highlight script from an existing browser database', () => {
+  withMigrationDb((temp) => {
+    migrate(temp.database, temp.backupDir, {
+      migrations: SCHEMA_MIGRATIONS.filter((migration) => migration.version <= 7),
+    });
+    temp.database.prepare(`
+      INSERT INTO browser_scripts (id, name, enabled, matches_json, run_at, source, updated_at)
+      VALUES (?, ?, 1, ?, 'document-idle', ?, ?)
+    `).run(
+      'youtube-record-highlight',
+      '유튜브 레코드 영상 강조',
+      '["*://www.youtube.com/*"]',
+      'old()',
+      '2026-01-01',
+    );
+
+    const result = migrate(temp.database, temp.backupDir);
+
+    expect(result.appliedVersions).toEqual([8]);
+    expect(temp.database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
+      .toBeUndefined();
   });
 });
 

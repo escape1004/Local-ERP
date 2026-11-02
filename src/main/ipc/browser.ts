@@ -2,16 +2,12 @@ import crypto from 'crypto';
 import path from 'path';
 import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
-import {
-  canonicalizeBrowserUrl,
-  urlsReferToSameResource,
-} from '../lib/browser-url';
+import { canonicalizeBrowserUrl } from '../lib/browser-url';
 import {
   buildBrowserBookmarkTree,
-  collectRecordHttpUrls,
-  getBrowserRecordLabel,
   nextManualFolderName,
 } from '../lib/browser-bookmark-tree';
+import { buildRecordUrlMatchIndex } from '../lib/browser-record-match';
 import { moveManualTreeItem, normalizeManualParentId } from '../lib/browser-bookmark-move';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
@@ -40,6 +36,27 @@ function parseJson(value, fallback) {
   }
 }
 
+const RECORD_MATCH_CACHE_MS = 5000;
+let recordMatchCache = { profileId: '', builtAt: 0, index: null };
+
+function getRecordMatchIndex(profileId) {
+  const now = Date.now();
+  if (
+    recordMatchCache.index
+    && recordMatchCache.profileId === profileId
+    && now - recordMatchCache.builtAt < RECORD_MATCH_CACHE_MS
+  ) {
+    return recordMatchCache.index;
+  }
+
+  const index = buildRecordUrlMatchIndex({
+    categories: db.prepare('SELECT id, name, fields FROM categories WHERE profileId = ?').all(profileId),
+    records: db.prepare('SELECT id, categoryId, data FROM records WHERE profileId = ?').all(profileId),
+  });
+  recordMatchCache = { profileId, builtAt: now, index };
+  return index;
+}
+
 function findMatchingRecords(targetUrl) {
   const canonical = canonicalizeBrowserUrl(targetUrl);
   if (!canonical) return [];
@@ -51,26 +68,7 @@ function findMatchingRecords(targetUrl) {
     return [];
   }
 
-  const categories = db.prepare('SELECT id, name, fields FROM categories WHERE profileId = ?').all(profileId);
-  const categoryById = new Map(categories.map((category) => [
-    category.id,
-    { ...category, fields: parseJson(category.fields, []) },
-  ]));
-  const records = db.prepare('SELECT id, categoryId, data FROM records WHERE profileId = ?').all(profileId);
-
-  return records.flatMap((record) => {
-    const data = parseJson(record.data, {});
-    const category = categoryById.get(record.categoryId);
-    const urls = collectRecordHttpUrls({ ...record, data }, category)
-      .filter((item) => urlsReferToSameResource(item, canonical));
-    if (urls.length === 0) return [];
-    return [{
-      id: record.id,
-      categoryId: record.categoryId,
-      label: getBrowserRecordLabel({ ...record, data }, category),
-      urls,
-    }];
-  });
+  return getRecordMatchIndex(profileId).lookup(canonical);
 }
 
 function listManualBookmarkRows() {

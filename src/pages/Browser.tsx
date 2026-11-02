@@ -68,7 +68,7 @@ function emptyScript(): BrowserScript {
     id: '',
     name: '새 스크립트',
     enabled: true,
-    matches: ['*://www.youtube.com/*'],
+    matches: [],
     runAt: 'document-idle',
     source: '',
     updatedAt: '',
