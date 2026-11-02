@@ -206,12 +206,29 @@ export interface DashboardWarningsResult {
   items: DashboardWarningItem[];
 }
 
+export type BrowserBookmarkSource = 'manual' | 'record';
+
 export interface BrowserBookmark {
   id: string;
   title: string;
   url: string;
+  source?: BrowserBookmarkSource;
   recordId?: string | null;
+  categoryId?: string | null;
   createdAt: string;
+}
+
+export interface BrowserBookmarkFolder {
+  id: string;
+  name: string;
+  kind: 'manual' | 'category';
+  children: BrowserBookmarkFolder[];
+  bookmarks: BrowserBookmark[];
+}
+
+export interface BrowserBookmarkList {
+  items: BrowserBookmark[];
+  tree: BrowserBookmarkFolder[];
 }
 
 export interface BrowserScript {
@@ -303,7 +320,7 @@ export interface ElectronAPI {
   getBrowserPreloadPath: () => Promise<string>;
   getBrowserPartition: () => Promise<string>;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
-  listBrowserBookmarks: () => Promise<BrowserBookmark[]>;
+  listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
   removeBrowserBookmark: (id: string) => Promise<{ success: boolean; error?: string }>;
   listBrowserScripts: () => Promise<BrowserScript[]>;

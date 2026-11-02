@@ -102,10 +102,14 @@ export function matchUrlPattern(pattern: string, url: string): boolean {
   }
 }
 
+export function isHttpUrlString(value: unknown): value is string {
+  return typeof value === 'string' && /^https?:\/\/.+/i.test(value.trim());
+}
+
 export function collectHttpUrls(value: unknown, bucket: string[] = []): string[] {
   if (typeof value === 'string') {
     const trimmed = value.trim();
-    if (/^https?:\/\/.+/i.test(trimmed)) bucket.push(trimmed);
+    if (isHttpUrlString(trimmed)) bucket.push(trimmed);
     return bucket;
   }
   if (Array.isArray(value)) {

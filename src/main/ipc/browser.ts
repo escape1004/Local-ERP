@@ -4,9 +4,13 @@ import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
 import {
   canonicalizeBrowserUrl,
-  collectHttpUrls,
   urlsReferToSameResource,
 } from '../lib/browser-url';
+import {
+  buildBrowserBookmarkTree,
+  collectRecordHttpUrls,
+  getBrowserRecordLabel,
+} from '../lib/browser-bookmark-tree';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
   db,
@@ -29,23 +33,6 @@ function parseJson(value, fallback) {
   }
 }
 
-function getRecordLabel(record, category) {
-  const fields = Array.isArray(category?.fields) ? category.fields : parseJson(category?.fields, []);
-  const data = record.data && typeof record.data === 'object' ? record.data : parseJson(record.data, {});
-  const preferred = fields.find((field) => field.type === 'text' && !field.hidden)
-    ?? fields.find((field) => field.type !== 'file' && !field.hidden)
-    ?? fields[0];
-  if (!preferred) return record.id;
-  const value = data[preferred.id];
-  if (value === null || value === undefined || value === '') return record.id;
-  const rawText = String(value).trim();
-  if (!rawText) return record.id;
-  if (preferred.type === 'text') {
-    return `${preferred.textPrefix ?? ''}${rawText}${preferred.textSuffix ?? ''}`.trim() || record.id;
-  }
-  return rawText;
-}
-
 function findMatchingRecords(targetUrl) {
   const canonical = canonicalizeBrowserUrl(targetUrl);
   if (!canonical) return [];
@@ -66,24 +53,64 @@ function findMatchingRecords(targetUrl) {
 
   return records.flatMap((record) => {
     const data = parseJson(record.data, {});
-    const urls = collectHttpUrls(data).filter((item) => urlsReferToSameResource(item, canonical));
-    if (urls.length === 0) return [];
     const category = categoryById.get(record.categoryId);
+    const urls = collectRecordHttpUrls({ ...record, data }, category)
+      .filter((item) => urlsReferToSameResource(item, canonical));
+    if (urls.length === 0) return [];
     return [{
       id: record.id,
       categoryId: record.categoryId,
-      label: getRecordLabel({ ...record, data }, category),
-      urls: [...new Set(urls.map((item) => canonicalizeBrowserUrl(item) || item))],
+      label: getBrowserRecordLabel({ ...record, data }, category),
+      urls,
     }];
   });
 }
 
-function listBookmarks() {
+function listManualBookmarkRows() {
   return db.prepare(`
     SELECT id, title, url, record_id AS recordId, created_at AS createdAt
     FROM browser_bookmarks
     ORDER BY created_at DESC
   `).all();
+}
+
+function listBookmarks() {
+  let profileId = '';
+  try {
+    profileId = getCurrentProfileIdOrThrow();
+  } catch {
+    return { items: [], tree: [] };
+  }
+
+  const categories = db.prepare(`
+    SELECT id, name, parentId, fields, order_num, itemType
+    FROM categories
+    WHERE profileId = ?
+  `).all(profileId);
+  const records = db.prepare(`
+    SELECT id, categoryId, data, createdAt
+    FROM records
+    WHERE profileId = ?
+  `).all(profileId);
+
+  const result = buildBrowserBookmarkTree({
+    categories,
+    records,
+    manualBookmarks: listManualBookmarkRows(),
+  });
+
+  if (result.overlappingManualIds.length > 0) {
+    const remove = db.prepare('DELETE FROM browser_bookmarks WHERE id = ?');
+    const removeOverlaps = db.transaction((ids) => {
+      ids.forEach((id) => remove.run(id));
+    });
+    removeOverlaps(result.overlappingManualIds);
+  }
+
+  return {
+    items: result.items,
+    tree: result.tree,
+  };
 }
 
 function listScripts() {
@@ -110,17 +137,30 @@ export function registerBrowserHandlers() {
     const parsed = parseExternalHttpUrl(payload.url);
     if (!parsed) return { success: false, error: '북마크할 주소가 올바르지 않습니다.' };
     const url = canonicalizeBrowserUrl(parsed.toString()) || parsed.toString();
-    const existing = db.prepare('SELECT id FROM browser_bookmarks WHERE url = ?').get(url);
-    if (existing) return { success: true, bookmark: listBookmarks().find((item) => item.id === existing.id) };
-
     const matches = findMatchingRecords(url);
+    if (matches.length > 0) {
+      const listed = listBookmarks();
+      return {
+        success: true,
+        bookmark: listed.items.find((item) => item.source === 'record' && item.url === url),
+      };
+    }
+
+    const existing = db.prepare('SELECT id FROM browser_bookmarks WHERE url = ?').get(url);
+    if (existing) {
+      return {
+        success: true,
+        bookmark: listBookmarks().items.find((item) => item.id === existing.id),
+      };
+    }
+
     const id = crypto.randomUUID();
     const title = String(payload.title || '').trim() || matches[0]?.label || parsed.hostname;
     db.prepare(`
       INSERT INTO browser_bookmarks (id, title, url, record_id, created_at)
       VALUES (?, ?, ?, ?, ?)
     `).run(id, title, url, matches[0]?.id || null, nowIso());
-    return { success: true, bookmark: listBookmarks().find((item) => item.id === id) };
+    return { success: true, bookmark: listBookmarks().items.find((item) => item.id === id) };
   });
 
   ipcMain.handle('browser:removeBookmark', (_event, id) => {

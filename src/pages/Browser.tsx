@@ -11,12 +11,13 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react';
+import { BookmarkTree } from '../components/browser/BookmarkTree';
 import { Sidebar } from '../components/Sidebar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { toast } from '../components/ui/use-toast';
-import type { BrowserBookmark, BrowserScript } from '../types';
+import type { BrowserBookmark, BrowserBookmarkFolder, BrowserScript } from '../types';
 import { parseExternalHttpUrl } from '../lib/browserNavigation';
 
 type EmbeddedWebview = HTMLElement & {
@@ -66,6 +67,7 @@ const BrowserPage: React.FC = () => {
   const [loading, setLoading] = React.useState(false);
   const [sideTab, setSideTab] = React.useState<SideTab>('bookmarks');
   const [bookmarks, setBookmarks] = React.useState<BrowserBookmark[]>([]);
+  const [bookmarkTree, setBookmarkTree] = React.useState<BrowserBookmarkFolder[]>([]);
   const [scripts, setScripts] = React.useState<BrowserScript[]>([]);
   const [draft, setDraft] = React.useState<BrowserScript>(emptyScript());
   const [intent, setIntent] = React.useState('');
@@ -79,7 +81,8 @@ const BrowserPage: React.FC = () => {
       window.electronAPI.listBrowserBookmarks(),
       window.electronAPI.listBrowserScripts(),
     ]);
-    setBookmarks(nextBookmarks);
+    setBookmarks(nextBookmarks?.items || []);
+    setBookmarkTree(nextBookmarks?.tree || []);
     setScripts(nextScripts);
   }, []);
 
@@ -103,10 +106,11 @@ const BrowserPage: React.FC = () => {
   React.useEffect(() => {
     const onFocus = () => {
       void refreshOpenAiAvailability();
+      void refreshLists();
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
-  }, [refreshOpenAiAvailability]);
+  }, [refreshLists, refreshOpenAiAvailability]);
 
   React.useEffect(() => {
     if (!hasOpenAiApiKey && sideTab === 'ai') {
@@ -194,19 +198,25 @@ const BrowserPage: React.FC = () => {
     };
   }, [currentUrl]);
 
-  const currentBookmark = bookmarks.find((item) => item.url === canonicalCurrent || item.url === currentUrl);
-  const starred = Boolean(currentBookmark);
+  const matchesCurrentUrl = (item: BrowserBookmark) => (
+    Boolean(item.url) && (item.url === canonicalCurrent || item.url === currentUrl)
+  );
+  const currentManualBookmark = bookmarks.find((item) => item.source !== 'record' && matchesCurrentUrl(item));
+  const currentRecordBookmark = bookmarks.find((item) => item.source === 'record' && matchesCurrentUrl(item));
+  const recordLocked = Boolean(currentRecordBookmark);
+  const starred = Boolean(currentManualBookmark || currentRecordBookmark);
 
   const toggleBookmark = async () => {
-    if (currentUrl === 'about:blank') return;
-    if (currentBookmark) {
-      await window.electronAPI.removeBrowserBookmark(currentBookmark.id);
-    } else {
-      const result = await window.electronAPI.addBrowserBookmark({ url: currentUrl, title: pageTitle });
-      if (!result.success) {
-        toast({ title: result.error || '북마크를 저장하지 못했습니다.', variant: 'destructive' });
-        return;
-      }
+    if (currentUrl === 'about:blank' || recordLocked) return;
+    if (currentManualBookmark) {
+      await window.electronAPI.removeBrowserBookmark(currentManualBookmark.id);
+      await refreshLists();
+      return;
+    }
+    const result = await window.electronAPI.addBrowserBookmark({ url: currentUrl, title: pageTitle });
+    if (!result.success) {
+      toast({ title: result.error || '북마크를 저장하지 못했습니다.', variant: 'destructive' });
+      return;
     }
     await refreshLists();
   };
@@ -296,9 +306,17 @@ const BrowserPage: React.FC = () => {
             />
             <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
           </form>
-          <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => void toggleBookmark()} disabled={currentUrl === 'about:blank'}>
-            <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : ''} />
-          </Button>
+          <button
+            type="button"
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
+              recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
+            }`}
+            disabled={currentUrl === 'about:blank' || recordLocked}
+            title={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : '북마크'}
+            onClick={() => void toggleBookmark()}
+          >
+            <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
+          </button>
           <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => void openExternal()} disabled={currentUrl === 'about:blank'}>
             <ExternalLink size={16} />
           </Button>
@@ -352,39 +370,18 @@ const BrowserPage: React.FC = () => {
 
             <div className="min-h-0 flex-1 overflow-y-auto discord-scrollbar p-3">
               {sideTab === 'bookmarks' && (
-                <div className="space-y-1">
-                  {bookmarks.length === 0 && (
-                    <div className="py-8 text-center text-xs text-discord-muted">저장된 북마크가 없습니다.</div>
-                  )}
-                  {bookmarks.map((bookmark) => (
-                    <div key={bookmark.id} className="flex items-start gap-2 rounded-md px-2 py-1.5 hover:bg-discord-hover">
-                      <button
-                        type="button"
-                        className="min-w-0 flex-1 text-left"
-                        onClick={() => {
-                          setAddress(bookmark.url);
-                          navigateTo(bookmark.url);
-                        }}
-                      >
-                        <div className="truncate text-sm text-discord-text">{bookmark.title}</div>
-                        <div className="truncate text-[11px] text-discord-muted">{bookmark.url}</div>
-                        {bookmark.recordId && (
-                          <div className="mt-0.5 text-[11px] text-discord-accent">레코드 연결됨</div>
-                        )}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[11px] text-discord-muted hover:text-red-400"
-                        onClick={async () => {
-                          await window.electronAPI.removeBrowserBookmark(bookmark.id);
-                          await refreshLists();
-                        }}
-                      >
-                        삭제
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <BookmarkTree
+                  tree={bookmarkTree}
+                  activeUrls={[canonicalCurrent, currentUrl].filter(Boolean)}
+                  onOpen={(bookmark) => {
+                    setAddress(bookmark.url);
+                    navigateTo(bookmark.url);
+                  }}
+                  onRemoveManual={async (bookmark) => {
+                    await window.electronAPI.removeBrowserBookmark(bookmark.id);
+                    await refreshLists();
+                  }}
+                />
               )}
 
               {sideTab === 'scripts' && (
