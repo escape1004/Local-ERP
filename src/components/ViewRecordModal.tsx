@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { X, ChevronRight, HelpCircle, Upload, Archive, ImageOff } from 'lucide-react';
 import { useERPStore } from '../hooks/useERPStore';
 import { useLoadingStore } from '../hooks/useLoadingStore';
-import { Category, DataRecord } from '../types';
+import { Category, DataRecord, RelatedRecordSummary } from '../types';
 import { Button } from './ui/button';
 import { toast } from './ui/use-toast';
 import { ViewerModal } from './ViewerModal';
@@ -15,6 +15,7 @@ import { AnimatedModal } from './ui/animated-modal';
 import { FieldValueRenderer } from './records/FieldValueRenderer';
 import { CustomThumbnailBadge } from './records/ThumbnailCell';
 import { ReferringRecordsPanel } from './records/ReferringRecordsPanel';
+import { RelatedRecordsPanel } from './records/RelatedRecordsPanel';
 import { isCustomThumbnailRecord } from '../lib/recordFields';
 import {
   getCategoryFileField,
@@ -66,6 +67,7 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
   const [duration, setDuration] = React.useState<number | null>(null); // 동영상 전체 길이(초)
   const [lastValidDuration, setLastValidDuration] = React.useState<number | null>(null);
   const [regenLoading, setRegenLoading] = React.useState(false);
+  const [relatedRecords, setRelatedRecords] = useState<RelatedRecordSummary[]>([]);
 
   const openViewer = useCallback((
     nextFilePath: string,
@@ -250,11 +252,33 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
   const showReferringRecordsPanel = Boolean(
     isOpen && category?.parentId && referringSourceCategory && referringRelationFields.length > 0
   );
+  const showRelatedRecordsPanel = Boolean(isOpen && record && category && !category.parentId);
 
   React.useEffect(() => {
     if (!showReferringRecordsPanel || !referringSourceCategory) return;
     void loadRecords(referringSourceCategory.id);
   }, [loadRecords, referringSourceCategory, showReferringRecordsPanel]);
+
+  React.useEffect(() => {
+    if (!isOpen || !record?.id || !showRelatedRecordsPanel) {
+      setRelatedRecords([]);
+      return undefined;
+    }
+
+    let cancelled = false;
+    window.electronAPI.listRelatedRecords(record.id)
+      .then((rows) => {
+        if (!cancelled) setRelatedRecords(rows);
+      })
+      .catch((error) => {
+        console.error('Failed to load related records:', error);
+        if (!cancelled) setRelatedRecords([]);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, record?.id, showRelatedRecordsPanel]);
 
   const handleViewRelatedRecord = useCallback((relatedRecord: DataRecord, relatedCategory: Category) => {
     onClose();
@@ -978,6 +1002,16 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
             category={referringSourceCategory}
             records={referringRecords}
             onSelectRecord={handleSelectReferringRecord}
+          />
+        </div>
+      )}
+      {showRelatedRecordsPanel && (
+        <div className="absolute left-[calc(100%+0.75rem)] top-0 h-full w-80">
+          <RelatedRecordsPanel
+            key={record.id}
+            records={relatedRecords}
+            categories={categories}
+            onSelectRecord={onViewRecord ? handleViewRelatedRecord : undefined}
           />
         </div>
       )}

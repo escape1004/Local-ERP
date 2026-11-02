@@ -19,7 +19,7 @@ interface ERPStore {
   deleteCategory: (id: string) => Promise<DeleteCategoryResult>;
   reorderCategories: (categories: Category[]) => Promise<void>;
   addRecord: (record: NewRecord) => Promise<string>;
-  updateRecord: (id: string, data: Record<string, any>) => Promise<void>;
+  updateRecord: (id: string, data: Record<string, any>, relatedRecordIds?: string[]) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
   selectCategory: (id: string | null) => void;
   setSearchTerm: (term: string) => void;
@@ -235,8 +235,8 @@ export const useERPStore = create<ERPStore>((set, get) => ({
     return id;
   },
 
-  updateRecord: async (id, data) => {
-    await window.electronAPI.updateRecord(id, data);
+  updateRecord: async (id, data, relatedRecordIds) => {
+    await window.electronAPI.updateRecord(id, data, relatedRecordIds);
     if (get().selectedCategoryId) {
       // 캐시 무효화 후 새로 로드
       try {

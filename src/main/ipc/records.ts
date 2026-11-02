@@ -186,11 +186,17 @@ import {
   readImportRowsFromFile,
   importCategoryRecordsFromRows
 } from '../import-export';
+import {
+  deleteRelatedRecordLinks,
+  listRelatedRecords,
+  saveRelatedRecordIds,
+  searchRelatedRecordCandidates,
+} from '../lib/record-references';
 
 export function registerRecordHandlers() {
 
 
-  async function handleUpdateRecord(_, id, data) {
+  async function handleUpdateRecord(_, id, data, relatedRecordIds) {
     try {
       log('=== handleUpdateRecord 시작 ===', { id, dataKeys: Object.keys(data) });
 
@@ -203,6 +209,7 @@ export function registerRecordHandlers() {
       const dataToSave = { ...data };
       const requestedThumbnailTimestamp = Number(dataToSave.__thumbnailTimestamp);
       delete dataToSave.__thumbnailTimestamp;
+      delete dataToSave.relatedRecordIds;
 
       await checkDuplicateFields(record.categoryId, dataToSave, id, profileId);
 
@@ -376,6 +383,8 @@ export function registerRecordHandlers() {
         // 썸네일 생성 실패는 레코드 업데이트를 막지 않음
       }
 
+      saveRelatedRecordIds(db, id, relatedRecordIds, profileId);
+
       log('=== handleUpdateRecord 완료 ===');
       return { success: true };
     } catch (error) {
@@ -507,6 +516,7 @@ export function registerRecordHandlers() {
       } catch (error) {
         log('썸네일 생성 블록 예외', { error: error.message, stack: error.stack });
       }
+      saveRelatedRecordIds(db, recordId, record.relatedRecordIds, profileId);
       return recordId;
     } catch (error) {
       log('[addRecord] 최상위 예외', { error: error.message, stack: error.stack });
@@ -546,12 +556,30 @@ export function registerRecordHandlers() {
         // 썸네일 삭제 실패는 레코드 삭제를 막지 않음
       }
 
+      deleteRelatedRecordLinks(db, id);
       db.prepare('DELETE FROM records WHERE id = ? AND profileId = ?').run(id, profileId);
       return { success: true };
     } catch (error) {
       log('Error in deleteRecord:', error);
       throw error;
     }
+  });
+
+  ipcMain.handle('db:listRelatedRecords', async (_, recordId) => {
+    const profileId = getCurrentProfileIdOrThrow();
+    if (!recordId) throw new Error('Record ID is required');
+    ensureRecordBelongsToCurrentProfile(recordId);
+    return listRelatedRecords(db, recordId, profileId);
+  });
+
+  ipcMain.handle('db:searchRelatedRecords', async (_, payload = {}) => {
+    const profileId = getCurrentProfileIdOrThrow();
+    return searchRelatedRecordCandidates(db, {
+      profileId,
+      query: payload?.query,
+      excludeId: payload?.excludeId,
+      limit: payload?.limit,
+    });
   });
 
   ipcMain.handle('db:checkDuplicate', async (_, categoryId, fieldId, value, recordId = null) => {

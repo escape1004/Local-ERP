@@ -186,6 +186,7 @@ import {
   readImportRowsFromFile,
   importCategoryRecordsFromRows
 } from '../import-export';
+import { deleteRelatedRecordLinksForProfile } from '../lib/record-references';
 
 export function registerProfileHandlers() {
 
@@ -278,6 +279,7 @@ export function registerProfileHandlers() {
       cleanupThumbnailsForCategory(categoryId);
     });
 
+    deleteRelatedRecordLinksForProfile(db, profileId);
     db.prepare('DELETE FROM records WHERE profileId = ?').run(profileId);
     db.prepare('DELETE FROM categories WHERE profileId = ?').run(profileId);
     db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);

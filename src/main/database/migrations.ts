@@ -175,6 +175,32 @@ export const SCHEMA_MIGRATIONS = [
       `).run();
     },
   },
+  {
+    version: 9,
+    name: 'record_references',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS record_references (
+          source_record_id TEXT NOT NULL,
+          target_record_id TEXT NOT NULL,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          PRIMARY KEY (source_record_id, target_record_id),
+          CHECK (source_record_id <> target_record_id)
+        )
+      `);
+      if (!indexExists(database, 'idx_record_references_source_sort')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_record_references_source_sort ON record_references(source_record_id, sort_order)'
+        );
+      }
+      if (!indexExists(database, 'idx_record_references_target')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_record_references_target ON record_references(target_record_id, created_at)'
+        );
+      }
+    },
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].version;

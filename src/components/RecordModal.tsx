@@ -29,6 +29,7 @@ import {
 } from '../lib/recordFields';
 import { getRelationDisplayLabel, getRelationPrimaryLabel, getRelationSecondaryLabel } from '../utils/relationDisplay';
 import { TextCaseContextMenu } from './records/TextCaseContextMenu';
+import { RelatedRecordsEditor } from './records/RelatedRecordsEditor';
 import type { Config } from '../types';
 import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId, isTranslationEnabledField } from '../lib/translation';
 import {
@@ -81,6 +82,9 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   const [pendingAmbiguousCurrentValues, setPendingAmbiguousCurrentValues] = useState<string[]>([]);
   const [config, setConfig] = useState<Config | null>(null);
   const [translatingFieldIds, setTranslatingFieldIds] = useState<Set<string>>(new Set());
+  const [relatedRecordIds, setRelatedRecordIds] = useState<string[]>([]);
+  const [relatedRecordsLoaded, setRelatedRecordsLoaded] = useState(false);
+  const canEditRelatedRecords = Boolean(category && !category.parentId);
 
   const firstFieldRef = useRef<HTMLInputElement | HTMLTextAreaElement | HTMLButtonElement>(null);
 
@@ -102,6 +106,41 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     setDuplicateErrors({});
     setOpenComboboxes({});
   }, [isOpen, record, category]);
+
+  useEffect(() => {
+    if (!isOpen) {
+      setRelatedRecordIds([]);
+      setRelatedRecordsLoaded(false);
+      return undefined;
+    }
+
+    if (!canEditRelatedRecords || !record?.id) {
+      setRelatedRecordIds([]);
+      setRelatedRecordsLoaded(true);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setRelatedRecordsLoaded(false);
+    window.electronAPI.listRelatedRecords(record.id)
+      .then((rows) => {
+        if (!cancelled) {
+          setRelatedRecordIds(rows.map((row) => row.id));
+          setRelatedRecordsLoaded(true);
+        }
+      })
+      .catch((error) => {
+        console.error('Failed to load related records:', error);
+        if (!cancelled) {
+          setRelatedRecordIds([]);
+          setRelatedRecordsLoaded(true);
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canEditRelatedRecords, isOpen, record?.id]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -219,6 +258,9 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       showAlert('자동 번역 진행 중', '자동 번역이 완료된 뒤 저장할 수 있습니다.', 'warning');
       return;
     }
+    if (canEditRelatedRecords && !relatedRecordsLoaded) {
+      return;
+    }
     const isValid = validateForm();
     if (!isValid) {
       showAlert('오류', '필수 입력 항목을 모두 입력해주세요.', 'error');
@@ -233,7 +275,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
         }
       });
       if (record) {
-        await updateRecord(record.id, normalizedFormData);
+        await updateRecord(record.id, normalizedFormData, canEditRelatedRecords ? relatedRecordIds : undefined);
         
         // 파일 필드가 변경되었는지 확인하고 썸네일 재생성 이벤트 발생
         const fileField = category.fields.find(f => f.type === 'file');
@@ -266,7 +308,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
           categoryId: category.id,
           data: normalizedFormData,
           createdAt: now,
-          updatedAt: now
+          updatedAt: now,
+          ...(canEditRelatedRecords ? { relatedRecordIds } : {}),
         };
         await addRecord(newRecord);
       }
@@ -1398,7 +1441,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                           isValidating ||
                           isDuplicateChecking ||
                           pendingDuplicateChecks.size > 0 ||
-                          translatingFieldIds.size > 0;
+                          translatingFieldIds.size > 0 ||
+                          (canEditRelatedRecords && !relatedRecordsLoaded);
 
   // 카테고리 경로 구하기 (ViewRecordModal 참고)
   const getParentPath = useCallback((currentCategory: Category): Category[] => {
@@ -1480,6 +1524,14 @@ export const RecordModal: React.FC<RecordModalProps> = ({
               <div className="text-discord-muted text-center py-8">
                 카테고리를 먼저 선택하거나, 필드가 정의된 카테고리를 선택하세요.
               </div>
+            )}
+            {canEditRelatedRecords && (
+              <RelatedRecordsEditor
+                key={isOpen ? (record?.id ?? 'new') : 'closed'}
+                sourceRecordId={record?.id}
+                value={relatedRecordIds}
+                onChange={setRelatedRecordIds}
+              />
             )}
           </div>
         </div>

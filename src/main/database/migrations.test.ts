@@ -124,6 +124,7 @@ function expectLatestSchema(database) {
   expect(tableExists(database, 'browser_bookmarks')).toBe(true);
   expect(tableExists(database, 'browser_bookmark_folders')).toBe(true);
   expect(tableExists(database, 'browser_scripts')).toBe(true);
+  expect(tableExists(database, 'record_references')).toBe(true);
   expect(getTableColumns(database, 'profiles')).toEqual(expect.arrayContaining([
     'id', 'name', 'avatarColor', 'createdAt', 'updatedAt',
   ]));
@@ -144,6 +145,9 @@ function expectLatestSchema(database) {
   ]));
   expect(getTableColumns(database, 'browser_scripts')).toEqual(expect.arrayContaining([
     'id', 'name', 'enabled', 'matches_json', 'run_at', 'source', 'updated_at',
+  ]));
+  expect(getTableColumns(database, 'record_references')).toEqual(expect.arrayContaining([
+    'source_record_id', 'target_record_id', 'sort_order', 'created_at',
   ]));
   expect(database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
     .toBeUndefined();
@@ -223,9 +227,27 @@ test('removes the bundled youtube highlight script from an existing browser data
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([8]);
+    expect(result.appliedVersions).toEqual([8, 9]);
     expect(temp.database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
       .toBeUndefined();
+    expect(tableExists(temp.database, 'record_references')).toBe(true);
+  });
+});
+
+test('adds record_references when upgrading from version 8', () => {
+  withMigrationDb((temp) => {
+    migrate(temp.database, temp.backupDir, {
+      migrations: SCHEMA_MIGRATIONS.filter((migration) => migration.version <= 8),
+    });
+    expect(tableExists(temp.database, 'record_references')).toBe(false);
+
+    const result = migrate(temp.database, temp.backupDir);
+
+    expect(result.appliedVersions).toEqual([9]);
+    expect(tableExists(temp.database, 'record_references')).toBe(true);
+    expect(getTableColumns(temp.database, 'record_references')).toEqual(expect.arrayContaining([
+      'source_record_id', 'target_record_id', 'sort_order', 'created_at',
+    ]));
   });
 });
 

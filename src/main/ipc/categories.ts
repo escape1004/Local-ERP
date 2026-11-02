@@ -186,6 +186,7 @@ import {
   readImportRowsFromFile,
   importCategoryRecordsFromRows
 } from '../import-export';
+import { deleteRelatedRecordLinksForCategories } from '../lib/record-references';
 
 export function registerCategoryHandlers() {
 
@@ -248,6 +249,7 @@ export function registerCategoryHandlers() {
       totalThumbnailCount += cleanupThumbnailsForCategory(categoryId);
     });
 
+    deleteRelatedRecordLinksForCategories(db, profileId, subtreeIds);
     db.prepare(`DELETE FROM records WHERE profileId = ? AND categoryId IN (${getSqlPlaceholders(subtreeIds.length)})`).run(profileId, ...subtreeIds);
     db.prepare(`DELETE FROM categories WHERE profileId = ? AND id IN (${getSqlPlaceholders(subtreeIds.length)})`).run(profileId, ...subtreeIds);
     categoryDirs

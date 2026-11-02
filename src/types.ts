@@ -72,10 +72,27 @@ export interface DataRecord {
 }
 
 export interface NewRecord {
+  id?: string;
   categoryId: string;
   data: any;
   createdAt?: string;
   updatedAt?: string;
+  relatedRecordIds?: string[];
+}
+
+export interface RelatedRecordSummary {
+  id: string;
+  categoryId: string;
+  categoryName: string;
+  label: string;
+  thumbnailPath?: string | null;
+  record: DataRecord;
+}
+
+export interface RelatedRecordSearchPayload {
+  query?: string;
+  excludeId?: string;
+  limit?: number;
 }
 
 // DB 뷰어 관련 타입
@@ -292,8 +309,10 @@ export interface ElectronAPI {
   importCategoryRecords: (categoryId: string, format: 'csv' | 'xlsx') => Promise<{ success: boolean; canceled?: boolean; path?: string; importedCount?: number; duplicateCount?: number; skippedCount?: number; unresolvedRelationCount?: number; duplicateFields?: string[]; format?: 'csv' | 'xlsx'; error?: string }>;
   getRecords: (categoryId: string) => Promise<DataRecord[]>;
   addRecord: (record: NewRecord) => Promise<string>;
-  updateRecord: (id: string, data: Record<string, any>) => Promise<void>;
+  updateRecord: (id: string, data: Record<string, any>, relatedRecordIds?: string[]) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
+  listRelatedRecords: (recordId: string) => Promise<RelatedRecordSummary[]>;
+  searchRelatedRecords: (payload: RelatedRecordSearchPayload) => Promise<RelatedRecordSummary[]>;
   exportCategory: (categoryId: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   importCategories: () => Promise<{ success: boolean; importedCount?: number; error?: string }>;
   getCategories: () => Promise<Category[]>;
