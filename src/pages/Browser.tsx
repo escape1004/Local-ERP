@@ -55,6 +55,9 @@ const BrowserPage: React.FC = () => {
   const [searchParams] = useSearchParams();
   const requestedUrl = searchParams.get('url') || '';
   const webviewRef = React.useRef<EmbeddedWebview | null>(null);
+  const webviewHostRef = React.useRef<HTMLDivElement | null>(null);
+  const addressFocusedRef = React.useRef(false);
+  const pendingUrlRef = React.useRef(parseExternalHttpUrl(requestedUrl)?.toString() || '');
 
   const [preloadPath, setPreloadPath] = React.useState('');
   const [partition, setPartition] = React.useState('persist:erp-browser');
@@ -123,7 +126,9 @@ const BrowserPage: React.FC = () => {
     try {
       const nextUrl = webview.getURL() || 'about:blank';
       setCurrentUrl(nextUrl);
-      setAddress(nextUrl === 'about:blank' ? '' : nextUrl);
+      if (!addressFocusedRef.current) {
+        setAddress(nextUrl === 'about:blank' ? '' : nextUrl);
+      }
       setPageTitle(webview.getTitle() || '브라우저');
       setCanGoBack(webview.canGoBack());
       setCanGoForward(webview.canGoForward());
@@ -138,39 +143,36 @@ const BrowserPage: React.FC = () => {
       toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
       return;
     }
+    const nextUrl = parsed.toString();
+    pendingUrlRef.current = nextUrl;
+    setAddress(nextUrl);
     const webview = webviewRef.current;
     if (webview?.loadURL) {
-      webview.loadURL(parsed.toString());
+      webview.loadURL(nextUrl);
       return;
     }
-    setCurrentUrl(parsed.toString());
+    setCurrentUrl(nextUrl);
   }, []);
 
   React.useEffect(() => {
     return window.electronAPI.onBrowserOpenUrl((nextUrl) => {
-      const parsed = parseExternalHttpUrl(nextUrl);
-      if (!parsed) return;
-      setAddress(parsed.toString());
-      navigateTo(parsed.toString());
+      navigateTo(nextUrl);
     });
   }, [navigateTo]);
 
   React.useEffect(() => {
-    if (!requestedUrl) return;
-    const parsed = parseExternalHttpUrl(requestedUrl);
-    if (!parsed) return;
-    setAddress(parsed.toString());
-    const webview = webviewRef.current;
-    if (webview?.loadURL) {
-      webview.loadURL(parsed.toString());
-    } else {
-      setCurrentUrl(parsed.toString());
-    }
-  }, [requestedUrl]);
+    const host = webviewHostRef.current;
+    if (!preloadPath || !host) return;
 
-  const bindWebview = React.useCallback((node: EmbeddedWebview | null) => {
-    webviewRef.current = node;
-    if (!node) return;
+    const webview = document.createElement('webview') as EmbeddedWebview;
+    webview.className = 'h-full w-full';
+    webview.style.display = 'inline-flex';
+    webview.style.width = '100%';
+    webview.style.height = '100%';
+    webview.setAttribute('partition', partition);
+    webview.setAttribute('preload', toPreloadUrl(preloadPath));
+    webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no, sandbox=yes');
+    webview.src = 'about:blank';
 
     const onNav = () => {
       setLoading(false);
@@ -181,15 +183,33 @@ const BrowserPage: React.FC = () => {
       const title = (event as Event & { title?: string }).title;
       if (title) setPageTitle(title);
     };
+    let started = false;
+    const loadPending = () => {
+      if (started) return;
+      const nextUrl = pendingUrlRef.current;
+      if (!nextUrl) return;
+      started = true;
+      webview.loadURL(nextUrl);
+    };
 
-    node.addEventListener('did-start-loading', onStart);
-    node.addEventListener('did-stop-loading', onNav);
-    node.addEventListener('did-navigate', onNav);
-    node.addEventListener('did-navigate-in-page', onNav);
-    node.addEventListener('did-finish-load', onNav);
-    node.addEventListener('page-title-updated', onTitle);
-    node.addEventListener('did-fail-load', onNav);
-  }, [syncNavigation]);
+    webview.addEventListener('did-attach', loadPending);
+    webview.addEventListener('dom-ready', loadPending);
+    webview.addEventListener('did-start-loading', onStart);
+    webview.addEventListener('did-stop-loading', onNav);
+    webview.addEventListener('did-navigate', onNav);
+    webview.addEventListener('did-navigate-in-page', onNav);
+    webview.addEventListener('did-finish-load', onNav);
+    webview.addEventListener('page-title-updated', onTitle);
+    webview.addEventListener('did-fail-load', onNav);
+
+    host.replaceChildren(webview);
+    webviewRef.current = webview;
+
+    return () => {
+      webviewRef.current = null;
+      host.replaceChildren();
+    };
+  }, [partition, preloadPath, syncNavigation]);
 
   const [canonicalCurrent, setCanonicalCurrent] = React.useState('');
   React.useEffect(() => {
@@ -308,6 +328,13 @@ const BrowserPage: React.FC = () => {
             <Input
               value={address}
               onChange={(event) => setAddress(event.target.value)}
+              onFocus={() => {
+                addressFocusedRef.current = true;
+              }}
+              onBlur={() => {
+                addressFocusedRef.current = false;
+                syncNavigation();
+              }}
               placeholder="https:// 주소 입력"
               className="h-8 bg-discord-sidebar border-gray-600 text-sm text-discord-text"
             />
@@ -331,20 +358,11 @@ const BrowserPage: React.FC = () => {
 
         <div className="flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1 bg-black">
-            {preloadPath ? (
-              React.createElement('webview', {
-                ref: bindWebview,
-                className: 'h-full w-full',
-                style: { display: 'inline-flex', width: '100%', height: '100%' },
-                partition,
-                preload: toPreloadUrl(preloadPath),
-                src: parseExternalHttpUrl(requestedUrl)?.toString() || 'about:blank',
-                webpreferences: 'contextIsolation=yes, nodeIntegration=no, sandbox=yes',
-              })
-            ) : (
-              <div className="flex h-full items-center justify-center text-sm text-discord-muted">브라우저 준비 중...</div>
+            <div ref={webviewHostRef} className="h-full w-full" />
+            {!preloadPath && (
+              <div className="absolute inset-0 flex items-center justify-center text-sm text-discord-muted">브라우저 준비 중...</div>
             )}
-            {currentUrl === 'about:blank' && (
+            {currentUrl === 'about:blank' && !loading && !pendingUrlRef.current && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-discord-bg/80">
                 <div className="text-center text-sm text-discord-muted">
                   <Globe className="mx-auto mb-2" size={28} />
