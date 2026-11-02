@@ -1,5 +1,6 @@
 import { expect, test } from 'vitest';
 import {
+  BOOKMARK_BAR_FOLDER_ID,
   MANUAL_BOOKMARK_FOLDER_ID,
   buildBrowserBookmarkTree,
   nextManualFolderName,
@@ -147,6 +148,43 @@ test('keeps a category folder when it has a url prefix field even without record
   const result = buildBrowserBookmarkTree({ categories: [clips], records: [] });
   expect(result.tree).toEqual([
     expect.objectContaining({ id: 'clips', name: '클립', bookmarks: [], children: [] }),
+  ]);
+});
+
+test('shows an empty direct-add folder when only bookmark-bar items exist', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [],
+    records: [],
+    manualBookmarks: [
+      { id: 'bar-1', title: '검색', url: 'https://www.google.com', folderId: BOOKMARK_BAR_FOLDER_ID, createdAt: '' },
+    ],
+  });
+
+  expect(result.bar).toEqual([
+    expect.objectContaining({ id: 'bar-1', folderId: BOOKMARK_BAR_FOLDER_ID }),
+  ]);
+  expect(result.tree[0]).toMatchObject({
+    id: MANUAL_BOOKMARK_FOLDER_ID,
+    bookmarks: [],
+    children: [],
+  });
+});
+
+test('keeps bookmark-bar manuals off the sidebar tree', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [],
+    records: [],
+    manualBookmarks: [
+      { id: 'bar-1', title: '검색', url: 'https://www.google.com', folderId: BOOKMARK_BAR_FOLDER_ID, sortOrder: 0, createdAt: '' },
+      { id: 'loose', title: '뉴스', url: 'https://example.com/news', createdAt: '' },
+    ],
+  });
+
+  expect(result.bar).toEqual([
+    expect.objectContaining({ id: 'bar-1', folderId: BOOKMARK_BAR_FOLDER_ID, source: 'manual' }),
+  ]);
+  expect(result.tree[0].bookmarks).toEqual([
+    expect.objectContaining({ id: 'loose', folderId: null }),
   ]);
 });
 

@@ -5,6 +5,7 @@ import {
 } from './browser-url';
 
 export const MANUAL_BOOKMARK_FOLDER_ID = '__manual__';
+export const BOOKMARK_BAR_FOLDER_ID = '__bar__';
 
 export function nextManualFolderName(existingNames = []) {
   const names = new Set(
@@ -218,7 +219,7 @@ export function buildBrowserBookmarkTree({
   manualFolders.forEach((folder) => {
     const id = normalizeId(folder?.id);
     const name = String(folder?.name || '').trim();
-    if (!id || !name || folderIds.has(id) || id === MANUAL_BOOKMARK_FOLDER_ID) return;
+    if (!id || !name || folderIds.has(id) || id === MANUAL_BOOKMARK_FOLDER_ID || id === BOOKMARK_BAR_FOLDER_ID) return;
     folderIds.add(id);
     parsedFolders.push({
       id,
@@ -234,7 +235,12 @@ export function buildBrowserBookmarkTree({
 
   const bookmarksByFolder = new Map();
   const unfiledManual = [];
+  const barManual = [];
   normalizedManual.forEach((bookmark) => {
+    if (bookmark.folderId === BOOKMARK_BAR_FOLDER_ID) {
+      barManual.push({ ...bookmark, folderId: BOOKMARK_BAR_FOLDER_ID });
+      return;
+    }
     if (bookmark.folderId && folderIds.has(bookmark.folderId)) {
       const list = bookmarksByFolder.get(bookmark.folderId) || [];
       list.push(bookmark);
@@ -262,7 +268,7 @@ export function buildBrowserBookmarkTree({
     .map(buildManualFolder);
 
   const tree = [];
-  if (manualChildren.length > 0 || unfiledManual.length > 0) {
+  if (manualChildren.length > 0 || unfiledManual.length > 0 || barManual.length > 0) {
     tree.push({
       id: MANUAL_BOOKMARK_FOLDER_ID,
       name: '직접 추가',
@@ -277,12 +283,19 @@ export function buildBrowserBookmarkTree({
   }
   tree.push(...categoryRoots);
 
+  const bar = barManual.sort((left, right) => (
+    left.sortOrder - right.sortOrder
+    || left.title.localeCompare(right.title, 'ko')
+    || left.url.localeCompare(right.url)
+  ));
+
   return {
     tree,
     items: [
       ...normalizedManual,
       ...[...autoBookmarksByCategory.values()].flat(),
     ],
+    bar,
     overlappingManualIds,
   };
 }

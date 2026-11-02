@@ -1,6 +1,7 @@
 import React from 'react';
 import { ChevronDown, ChevronRight, Folder, Link2, Plus, Star } from 'lucide-react';
 import { MANUAL_BOOKMARK_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder } from '../../types';
+import { MANUAL_DRAG_THRESHOLD_PX, type ManualDragItem } from './bookmark-dnd';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -12,9 +13,8 @@ import { FIELD_TOOLTIP_CLASSNAME } from '../records/FieldValueRenderer';
 import { cn } from '../../lib/utils';
 
 const FOLDER_ROW_HEIGHT = 36;
-const DRAG_PREFIX = 'erp-manual:';
 
-type DragItem = { kind: 'bookmark' | 'folder'; id: string };
+type DragItem = ManualDragItem;
 type DropTarget =
   | { mode: 'into'; folderId: string }
   | { mode: 'folders'; parentId: string; index: number }
@@ -25,6 +25,9 @@ type BookmarkTreeProps = {
   activeUrls?: string[];
   onOpen: (bookmark: BrowserBookmark) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
+  onRenameManual: (bookmark: BrowserBookmark, title: string) => void | Promise<void>;
+  onDragChange?: (item: ManualDragItem | null) => void;
+  externalDrag?: ManualDragItem | null;
   onCreateManualFolder: () => void | Promise<void>;
   onRenameManualFolder: (folder: BrowserBookmarkFolder, name: string) => void | Promise<void>;
   onRemoveManualFolder: (folder: BrowserBookmarkFolder) => void | Promise<void>;
@@ -34,6 +37,15 @@ type BookmarkTreeProps = {
     parentId: string | null;
     index: number;
   }) => void | Promise<void>;
+};
+
+type BookmarkEditProps = {
+  renamingId: string | null;
+  renameDraft: string;
+  onRenameDraftChange: (value: string) => void;
+  onStartRename: (bookmark: BrowserBookmark) => void;
+  onSubmitRename: () => void;
+  onCancelRename: () => void;
 };
 
 type FolderEditProps = {
@@ -49,10 +61,8 @@ type FolderEditProps = {
 type DndContextValue = {
   dragging: DragItem | null;
   dropTarget: DropTarget | null;
-  blockedFolderIds: Set<string>;
-  setDragging: (item: DragItem | null) => void;
-  setDropTarget: (target: DropTarget | null) => void;
-  commitDrop: (target: DropTarget) => void;
+  armDrag: (item: DragItem, event: React.PointerEvent) => void;
+  consumeClickSuppression: () => boolean;
 };
 
 const ManualDndContext = React.createContext<DndContextValue | null>(null);
@@ -86,21 +96,25 @@ function sameDropTarget(left: DropTarget | null, right: DropTarget | null) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
-function encodeDragItem(item: DragItem) {
-  return `${DRAG_PREFIX}${JSON.stringify(item)}`;
+function findBookmark(folders: BrowserBookmarkFolder[], id: string): BrowserBookmark | null {
+  for (const folder of folders) {
+    const match = folder.bookmarks.find((bookmark) => bookmark.id === id);
+    if (match) return match;
+    const nested = findBookmark(folder.children, id);
+    if (nested) return nested;
+  }
+  return null;
 }
 
 function InsertLine({
   active,
-  onDragOver,
-  onDrop,
+  target,
 }: {
   active: boolean;
-  onDragOver: React.DragEventHandler;
-  onDrop: React.DragEventHandler;
+  target: DropTarget;
 }) {
   return (
-    <div className="relative h-2" onDragOver={onDragOver} onDrop={onDrop}>
+    <div className="relative h-4" data-manual-drop={JSON.stringify(target)}>
       <div
         className={cn(
           'absolute inset-x-2 top-1/2 h-0.5 -translate-y-1/2 rounded-full',
@@ -114,41 +128,48 @@ function InsertLine({
 function BookmarkRow({
   bookmark,
   depth,
+  parentId,
+  insertIndex,
   active,
   onOpen,
   onRemoveManual,
+  bookmarkEdit,
 }: {
   bookmark: BrowserBookmark;
   depth: number;
+  parentId: string;
+  insertIndex: number;
   active: boolean;
   onOpen: (bookmark: BrowserBookmark) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
+  bookmarkEdit: BookmarkEditProps;
 }) {
   const dnd = React.useContext(ManualDndContext);
   const isRecord = bookmark.source === 'record';
   const secondary = isRecord ? bookmark.subtitle : bookmarkHost(bookmark.url);
   const dragging = dnd?.dragging?.kind === 'bookmark' && dnd.dragging.id === bookmark.id;
-  const canDrag = !isRecord && Boolean(dnd);
-  const draggedRef = React.useRef(false);
+  const renaming = bookmarkEdit.renamingId === bookmark.id;
+  const canDrag = !isRecord && !renaming && Boolean(dnd);
 
   const row = (
     <div
       className={cn(
-        'group flex items-start gap-2 rounded-md py-1.5 pr-2',
+        'group flex items-start gap-2 rounded-md py-1.5 pr-2 select-none',
         active ? 'bg-discord-accent/20' : 'hover:bg-discord-hover',
         canDrag && 'cursor-grab active:cursor-grabbing',
         dragging && 'opacity-50',
       )}
       style={{ paddingLeft: 32 + depth * 20 }}
-      draggable={canDrag}
-      onDragStart={(event) => {
+      data-manual-item={
+        !isRecord && insertIndex >= 0
+          ? JSON.stringify({ id: bookmark.id, parentId, index: insertIndex })
+          : undefined
+      }
+      onDragStart={(event) => event.preventDefault()}
+      onPointerDown={(event) => {
         if (!canDrag || !dnd) return;
-        draggedRef.current = true;
-        event.dataTransfer.setData('text/plain', encodeDragItem({ kind: 'bookmark', id: bookmark.id }));
-        event.dataTransfer.effectAllowed = 'move';
-        dnd.setDragging({ kind: 'bookmark', id: bookmark.id });
+        dnd.armDrag({ kind: 'bookmark', id: bookmark.id }, event);
       }}
-      onDragEnd={() => dnd?.setDragging(null)}
     >
       <span
         className={cn(
@@ -156,30 +177,57 @@ function BookmarkRow({
           isRecord ? 'bg-discord-accent' : 'bg-yellow-400',
         )}
       />
-      <button
-        type="button"
+      <div
+        role="button"
+        tabIndex={0}
         className="min-w-0 flex-1 text-left"
         title={bookmark.url}
         onClick={() => {
-          if (draggedRef.current) {
-            draggedRef.current = false;
-            return;
-          }
+          if (renaming) return;
+          if (dnd?.consumeClickSuppression()) return;
           onOpen(bookmark);
+        }}
+        onKeyDown={(event) => {
+          if (renaming) return;
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            onOpen(bookmark);
+          }
         }}
       >
         <div className="flex items-center gap-1.5">
           {isRecord ? (
             <Link2 size={13} className="shrink-0 text-discord-accent" />
           ) : (
-            <Star size={13} className="shrink-0 fill-yellow-400 text-yellow-400" />
+            <span className="w-3.5 shrink-0 text-center text-sm leading-none text-discord-muted">-</span>
           )}
-          <span className="truncate text-sm text-discord-text">{bookmark.title}</span>
+          {renaming ? (
+            <input
+              autoFocus
+              value={bookmarkEdit.renameDraft}
+              className="h-6 min-w-0 flex-1 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => bookmarkEdit.onRenameDraftChange(event.target.value)}
+              onBlur={() => bookmarkEdit.onSubmitRename()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  bookmarkEdit.onSubmitRename();
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  bookmarkEdit.onCancelRename();
+                }
+              }}
+            />
+          ) : (
+            <span className="truncate text-sm text-discord-text whitespace-pre">{bookmark.title}</span>
+          )}
         </div>
         {secondary ? (
           <div className="truncate pl-[18px] text-[11px] text-discord-muted">{secondary}</div>
         ) : null}
-      </button>
+      </div>
     </div>
   );
 
@@ -187,8 +235,11 @@ function BookmarkRow({
 
   return (
     <ContextMenu>
-      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuTrigger asChild>
+        <div>{row}</div>
+      </ContextMenuTrigger>
       <ContextMenuContent>
+        <ContextMenuItem onSelect={() => bookmarkEdit.onStartRename(bookmark)}>이름 변경</ContextMenuItem>
         <ContextMenuItem
           className="text-red-400 focus:text-red-400"
           onSelect={() => onRemoveManual(bookmark)}
@@ -209,6 +260,7 @@ function FolderNode({
   onOpen,
   onRemoveManual,
   folderEdit,
+  bookmarkEdit,
 }: {
   folder: BrowserBookmarkFolder;
   depth: number;
@@ -218,29 +270,17 @@ function FolderNode({
   onOpen: (bookmark: BrowserBookmark) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
   folderEdit: FolderEditProps;
+  bookmarkEdit: BookmarkEditProps;
 }) {
   const dnd = React.useContext(ManualDndContext);
   const open = expanded.has(folder.id);
   const total = countBookmarks(folder);
   const isManual = folder.kind === 'manual';
   const canDrag = Boolean(dnd) && isManual && folder.id !== MANUAL_BOOKMARK_FOLDER_ID;
-  const canDropInto = Boolean(dnd)
-    && isManual
-    && dnd.dragging
-    && !dnd.blockedFolderIds.has(folder.id)
-    && !(dnd.dragging.kind === 'folder' && dnd.dragging.id === folder.id);
   const dragging = dnd?.dragging?.kind === 'folder' && dnd.dragging.id === folder.id;
   const dropInto = dnd?.dropTarget?.mode === 'into' && dnd.dropTarget.folderId === folder.id;
-  const draggedRef = React.useRef(false);
   const renaming = folderEdit.renamingId === folder.id;
   const canEditFolder = isManual && folder.id !== MANUAL_BOOKMARK_FOLDER_ID;
-
-  const setInsertTarget = (event: React.DragEvent, target: DropTarget) => {
-    event.preventDefault();
-    event.stopPropagation();
-    event.dataTransfer.dropEffect = 'move';
-    if (!sameDropTarget(dnd?.dropTarget || null, target)) dnd?.setDropTarget(target);
-  };
 
   const folderChildren = folder.children.filter((child) => dnd?.dragging?.kind !== 'folder' || child.id !== dnd.dragging.id);
   const folderBookmarks = folder.bookmarks.filter((bookmark) => (
@@ -251,30 +291,18 @@ function FolderNode({
       <div
         className="sticky bg-discord-sidebar"
         style={{ top: depth * FOLDER_ROW_HEIGHT, zIndex: 30 - depth, height: FOLDER_ROW_HEIGHT }}
-        draggable={canDrag && !renaming}
-        onDragStart={(event) => {
+        data-manual-drop={isManual ? JSON.stringify({ mode: 'into', folderId: folder.id }) : undefined}
+        onDragStart={(event) => event.preventDefault()}
+        onPointerDown={(event) => {
           if (!canDrag || renaming || !dnd) return;
-          draggedRef.current = true;
-          event.dataTransfer.setData('text/plain', encodeDragItem({ kind: 'folder', id: folder.id }));
-          event.dataTransfer.effectAllowed = 'move';
-          dnd.setDragging({ kind: 'folder', id: folder.id });
-        }}
-        onDragEnd={() => dnd?.setDragging(null)}
-        onDragOver={(event) => {
-          if (!canDropInto || !dnd?.dragging) return;
-          setInsertTarget(event, { mode: 'into', folderId: folder.id });
-        }}
-        onDrop={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          if (canDropInto) dnd?.commitDrop({ mode: 'into', folderId: folder.id });
+          dnd.armDrag({ kind: 'folder', id: folder.id }, event);
         }}
       >
         <div
           role="button"
           tabIndex={0}
           className={cn(
-            'flex h-full w-full items-center gap-1.5 overflow-hidden pr-2 text-left hover:bg-discord-hover',
+            'flex h-full w-full select-none items-center gap-1.5 overflow-hidden pr-2 text-left hover:bg-discord-hover',
             canDrag && !renaming && 'cursor-grab active:cursor-grabbing',
             dragging && 'opacity-50',
             dropInto && 'bg-discord-accent/20',
@@ -282,10 +310,7 @@ function FolderNode({
           style={{ paddingLeft: 12 + depth * 20 }}
           onClick={() => {
             if (renaming) return;
-            if (draggedRef.current) {
-              draggedRef.current = false;
-              return;
-            }
+            if (dnd?.consumeClickSuppression()) return;
             onToggle(folder.id);
           }}
           onKeyDown={(event) => {
@@ -358,12 +383,7 @@ function FolderNode({
           {isManual && dnd?.dragging?.kind === 'folder' && (
             <InsertLine
               active={dnd.dropTarget?.mode === 'folders' && dnd.dropTarget.parentId === folder.id && dnd.dropTarget.index === 0}
-              onDragOver={(event) => setInsertTarget(event, { mode: 'folders', parentId: folder.id, index: 0 })}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                dnd.commitDrop({ mode: 'folders', parentId: folder.id, index: 0 });
-              }}
+              target={{ mode: 'folders', parentId: folder.id, index: 0 }}
             />
           )}
           {folder.children.map((child) => (
@@ -377,6 +397,7 @@ function FolderNode({
                 onOpen={onOpen}
                 onRemoveManual={onRemoveManual}
                 folderEdit={folderEdit}
+                bookmarkEdit={bookmarkEdit}
               />
               {isManual && dnd?.dragging?.kind === 'folder' && child.id !== dnd.dragging.id && (
                 <InsertLine
@@ -385,15 +406,10 @@ function FolderNode({
                     && dnd.dropTarget.parentId === folder.id
                     && dnd.dropTarget.index === folderChildren.findIndex((item) => item.id === child.id) + 1
                   }
-                  onDragOver={(event) => {
-                    const nextIndex = folderChildren.findIndex((item) => item.id === child.id) + 1;
-                    setInsertTarget(event, { mode: 'folders', parentId: folder.id, index: Math.max(0, nextIndex) });
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const nextIndex = folderChildren.findIndex((item) => item.id === child.id) + 1;
-                    dnd.commitDrop({ mode: 'folders', parentId: folder.id, index: Math.max(0, nextIndex) });
+                  target={{
+                    mode: 'folders',
+                    parentId: folder.id,
+                    index: Math.max(0, folderChildren.findIndex((item) => item.id === child.id) + 1),
                   }}
                 />
               )}
@@ -402,12 +418,7 @@ function FolderNode({
           {isManual && dnd?.dragging?.kind === 'bookmark' && (
             <InsertLine
               active={dnd.dropTarget?.mode === 'bookmarks' && dnd.dropTarget.parentId === folder.id && dnd.dropTarget.index === 0}
-              onDragOver={(event) => setInsertTarget(event, { mode: 'bookmarks', parentId: folder.id, index: 0 })}
-              onDrop={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                dnd.commitDrop({ mode: 'bookmarks', parentId: folder.id, index: 0 });
-              }}
+              target={{ mode: 'bookmarks', parentId: folder.id, index: 0 }}
             />
           )}
           {folder.bookmarks.map((bookmark) => (
@@ -415,9 +426,12 @@ function FolderNode({
               <BookmarkRow
                 bookmark={bookmark}
                 depth={depth}
+                parentId={folder.id}
+                insertIndex={isManual ? folderBookmarks.findIndex((item) => item.id === bookmark.id) : -1}
                 active={activeUrls.includes(bookmark.url)}
                 onOpen={onOpen}
                 onRemoveManual={onRemoveManual}
+                bookmarkEdit={bookmarkEdit}
               />
               {isManual && dnd?.dragging?.kind === 'bookmark' && bookmark.source !== 'record' && bookmark.id !== dnd.dragging.id && (
                 <InsertLine
@@ -426,15 +440,10 @@ function FolderNode({
                     && dnd.dropTarget.parentId === folder.id
                     && dnd.dropTarget.index === folderBookmarks.findIndex((item) => item.id === bookmark.id) + 1
                   }
-                  onDragOver={(event) => {
-                    const nextIndex = folderBookmarks.findIndex((item) => item.id === bookmark.id) + 1;
-                    setInsertTarget(event, { mode: 'bookmarks', parentId: folder.id, index: Math.max(0, nextIndex) });
-                  }}
-                  onDrop={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    const nextIndex = folderBookmarks.findIndex((item) => item.id === bookmark.id) + 1;
-                    dnd.commitDrop({ mode: 'bookmarks', parentId: folder.id, index: Math.max(0, nextIndex) });
+                  target={{
+                    mode: 'bookmarks',
+                    parentId: folder.id,
+                    index: Math.max(0, folderBookmarks.findIndex((item) => item.id === bookmark.id) + 1),
                   }}
                 />
               )}
@@ -451,6 +460,9 @@ export function BookmarkTree({
   activeUrls = [],
   onOpen,
   onRemoveManual,
+  onRenameManual,
+  onDragChange,
+  externalDrag = null,
   onCreateManualFolder,
   onRenameManualFolder,
   onRemoveManualFolder,
@@ -463,6 +475,32 @@ export function BookmarkTree({
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameDraft, setRenameDraft] = React.useState('');
   const renamingIdRef = React.useRef<string | null>(null);
+  const [renamingBookmarkId, setRenamingBookmarkId] = React.useState<string | null>(null);
+  const [bookmarkRenameDraft, setBookmarkRenameDraft] = React.useState('');
+  const renamingBookmarkIdRef = React.useRef<string | null>(null);
+  const pendingDragRef = React.useRef<{ item: DragItem; x: number; y: number } | null>(null);
+  const suppressClickRef = React.useRef(false);
+  const draggingRef = React.useRef<DragItem | null>(null);
+  const dropTargetRef = React.useRef<DropTarget | null>(null);
+  const treeRef = React.useRef(tree);
+  const externalDragRef = React.useRef(externalDrag);
+  treeRef.current = tree;
+  externalDragRef.current = externalDrag;
+
+  React.useEffect(() => {
+    if (!externalDrag) return;
+    if (draggingRef.current?.kind === externalDrag.kind && draggingRef.current?.id === externalDrag.id) return;
+    draggingRef.current = externalDrag;
+    setDragging(externalDrag);
+    if (externalDrag.kind === 'bookmark') {
+      setExpanded((current) => {
+        if (current.has(MANUAL_BOOKMARK_FOLDER_ID)) return current;
+        const next = new Set(current);
+        next.add(MANUAL_BOOKMARK_FOLDER_ID);
+        return next;
+      });
+    }
+  }, [externalDrag]);
 
   const toggle = (id: string) => {
     setExpanded((current) => {
@@ -488,12 +526,6 @@ export function BookmarkTree({
     }
   };
 
-  const blockedFolderIds = React.useMemo(() => {
-    if (dragging?.kind !== 'folder') return new Set<string>();
-    const source = findFolder(tree, dragging.id);
-    return new Set(source ? collectFolderIds(source) : [dragging.id]);
-  }, [dragging, tree]);
-
   React.useEffect(() => {
     if (!dropTarget || dropTarget.mode !== 'into') return;
     const folderId = dropTarget.folderId;
@@ -508,41 +540,53 @@ export function BookmarkTree({
     return () => window.clearTimeout(timer);
   }, [dropTarget]);
 
+  const clearDrag = React.useCallback(() => {
+    pendingDragRef.current = null;
+    draggingRef.current = null;
+    dropTargetRef.current = null;
+    setDragging(null);
+    setDropTarget(null);
+    onDragChange?.(null);
+  }, [onDragChange]);
+
   const commitDrop = React.useCallback((target: DropTarget) => {
-    if (!dragging) return;
+    const current = draggingRef.current;
+    if (!current) return;
     const destFolderId = target.mode === 'into' ? target.folderId : target.parentId;
-    if (dragging.kind === 'folder' && blockedFolderIds.has(destFolderId) && target.mode === 'into') {
-      setDragging(null);
-      setDropTarget(null);
-      return;
+    if (current.kind === 'folder' && target.mode === 'into') {
+      const source = findFolder(treeRef.current, current.id);
+      const blocked = new Set(source ? collectFolderIds(source) : [current.id]);
+      if (blocked.has(destFolderId)) {
+        clearDrag();
+        return;
+      }
     }
 
-    const destFolder = findFolder(tree, destFolderId);
+    const destFolder = findFolder(treeRef.current, destFolderId);
     const parentId = destFolderId === MANUAL_BOOKMARK_FOLDER_ID ? null : destFolderId;
     let index = 0;
     if (target.mode === 'into') {
-      const siblings = dragging.kind === 'folder'
-        ? (destFolder?.children || []).filter((item) => item.id !== dragging.id)
-        : (destFolder?.bookmarks || []).filter((item) => item.id !== dragging.id);
+      const siblings = current.kind === 'folder'
+        ? (destFolder?.children || []).filter((item) => item.id !== current.id)
+        : (destFolder?.bookmarks || []).filter((item) => item.id !== current.id);
       index = siblings.length;
     } else {
       index = target.index;
     }
 
-    setExpanded((current) => {
-      const next = new Set(current);
+    setExpanded((expandedFolders) => {
+      const next = new Set(expandedFolders);
       next.add(destFolderId);
       return next;
     });
-    setDragging(null);
-    setDropTarget(null);
+    clearDrag();
     void onMoveManualItem({
-      kind: dragging.kind,
-      id: dragging.id,
+      kind: current.kind,
+      id: current.id,
       parentId,
       index,
     });
-  }, [blockedFolderIds, dragging, onMoveManualItem, tree]);
+  }, [clearDrag, onMoveManualItem]);
 
   const folderEdit = React.useMemo<FolderEditProps>(() => ({
     renamingId,
@@ -574,17 +618,152 @@ export function BookmarkTree({
     },
   }), [onRemoveManualFolder, onRenameManualFolder, renameDraft, renamingId, tree]);
 
+  const bookmarkEdit = React.useMemo<BookmarkEditProps>(() => ({
+    renamingId: renamingBookmarkId,
+    renameDraft: bookmarkRenameDraft,
+    onRenameDraftChange: setBookmarkRenameDraft,
+    onStartRename: (bookmark) => {
+      renamingBookmarkIdRef.current = bookmark.id;
+      setRenamingBookmarkId(bookmark.id);
+      setBookmarkRenameDraft(bookmark.title);
+    },
+    onSubmitRename: () => {
+      const id = renamingBookmarkIdRef.current;
+      if (!id) return;
+      const bookmark = findBookmark(tree, id);
+      const title = bookmarkRenameDraft;
+      renamingBookmarkIdRef.current = null;
+      setRenamingBookmarkId(null);
+      if (!bookmark || title === bookmark.title) return;
+      void onRenameManual(bookmark, title);
+    },
+    onCancelRename: () => {
+      renamingBookmarkIdRef.current = null;
+      setRenamingBookmarkId(null);
+    },
+  }), [bookmarkRenameDraft, onRenameManual, renamingBookmarkId, tree]);
+
+  const armDrag = React.useCallback((item: DragItem, event: React.PointerEvent) => {
+    if (event.button !== 0) return;
+    if ((event.target as HTMLElement | null)?.closest('input, textarea')) return;
+    pendingDragRef.current = { item, x: event.clientX, y: event.clientY };
+  }, []);
+
+  const consumeClickSuppression = React.useCallback(() => {
+    if (!suppressClickRef.current) return false;
+    suppressClickRef.current = false;
+    return true;
+  }, []);
+
+  React.useEffect(() => {
+    const readDropTarget = (event: PointerEvent): DropTarget | null => {
+      const current = draggingRef.current;
+      if (!current) return null;
+      const hovered = document.elementFromPoint(event.clientX, event.clientY);
+      if (!hovered || hovered.closest('[data-bookmark-bar]')) return null;
+
+      const zone = hovered.closest('[data-manual-drop]') as HTMLElement | null;
+      if (zone?.dataset.manualDrop) {
+        try {
+          const target = JSON.parse(zone.dataset.manualDrop) as DropTarget;
+          if (target.mode === 'into' && current.kind === 'folder') {
+            const source = findFolder(treeRef.current, current.id);
+            const blocked = new Set(source ? collectFolderIds(source) : [current.id]);
+            if (blocked.has(target.folderId)) return null;
+          }
+          if (target.mode === 'into' && current.kind === 'folder' && target.folderId === current.id) return null;
+          if (target.mode === 'folders' && current.kind !== 'folder') return null;
+          if (target.mode === 'bookmarks' && current.kind !== 'bookmark') return null;
+          return target;
+        } catch {
+          return null;
+        }
+      }
+
+      const item = hovered.closest('[data-manual-item]') as HTMLElement | null;
+      if (current.kind === 'bookmark' && item?.dataset.manualItem) {
+        try {
+          const meta = JSON.parse(item.dataset.manualItem) as { id?: string; parentId: string; index: number };
+          if (!meta.parentId || meta.id === current.id || !Number.isFinite(meta.index) || meta.index < 0) return null;
+          const rect = item.getBoundingClientRect();
+          const index = event.clientY < rect.top + rect.height / 2 ? meta.index : meta.index + 1;
+          return { mode: 'bookmarks', parentId: meta.parentId, index };
+        } catch {
+          return null;
+        }
+      }
+      if (current.kind === 'bookmark' && hovered.closest('[data-manual-tree]')) {
+        return { mode: 'into', folderId: MANUAL_BOOKMARK_FOLDER_ID };
+      }
+      return null;
+    };
+
+    const onMove = (event: PointerEvent) => {
+      const pending = pendingDragRef.current;
+      if (pending && !draggingRef.current) {
+        const dx = event.clientX - pending.x;
+        const dy = event.clientY - pending.y;
+        if ((dx * dx) + (dy * dy) < MANUAL_DRAG_THRESHOLD_PX * MANUAL_DRAG_THRESHOLD_PX) return;
+        pendingDragRef.current = null;
+        suppressClickRef.current = true;
+        draggingRef.current = pending.item;
+        setDragging(pending.item);
+        onDragChange?.(pending.item);
+      }
+
+      if (!draggingRef.current && externalDragRef.current) {
+        draggingRef.current = externalDragRef.current;
+      }
+      const current = draggingRef.current;
+      if (!current) return;
+      event.preventDefault();
+      const target = readDropTarget(event);
+      if (!sameDropTarget(dropTargetRef.current, target)) {
+        dropTargetRef.current = target;
+        setDropTarget(target);
+      }
+    };
+
+    const onUp = (event: PointerEvent) => {
+      pendingDragRef.current = null;
+      if (!draggingRef.current && externalDragRef.current) {
+        draggingRef.current = externalDragRef.current;
+      }
+      const current = draggingRef.current;
+      if (!current) return;
+      const hovered = document.elementFromPoint(event.clientX, event.clientY);
+      if (hovered?.closest('[data-bookmark-bar]')) {
+        draggingRef.current = null;
+        dropTargetRef.current = null;
+        setDragging(null);
+        setDropTarget(null);
+        onDragChange?.(null);
+      } else {
+        const target = readDropTarget(event) || dropTargetRef.current;
+        if (target) commitDrop(target);
+        else clearDrag();
+      }
+      window.setTimeout(() => {
+        suppressClickRef.current = false;
+      }, 0);
+    };
+
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+    return () => {
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+    };
+  }, [clearDrag, commitDrop, onDragChange]);
+
   const dndValue = React.useMemo<DndContextValue>(() => ({
     dragging,
     dropTarget,
-    blockedFolderIds,
-    setDragging: (item) => {
-      setDragging(item);
-      if (!item) setDropTarget(null);
-    },
-    setDropTarget,
-    commitDrop,
-  }), [blockedFolderIds, commitDrop, dragging, dropTarget]);
+    armDrag,
+    consumeClickSuppression,
+  }), [armDrag, consumeClickSuppression, dragging, dropTarget]);
 
   return (
     <ManualDndContext.Provider value={dndValue}>
@@ -615,7 +794,10 @@ export function BookmarkTree({
             <TooltipContent side="top" align="center" className={FIELD_TOOLTIP_CLASSNAME}>직접 추가 폴더 만들기</TooltipContent>
           </Tooltip>
         </div>
-        <div className={cn('min-h-0 flex-1 overflow-y-auto discord-scrollbar px-3 pb-3', dragging && 'select-none')}>
+        <div
+          data-manual-tree="true"
+          className={cn('min-h-0 flex-1 overflow-y-auto discord-scrollbar px-3 pb-3', dragging && 'select-none')}
+        >
           {tree.length === 0 ? (
             <div className="py-8 text-center text-xs text-discord-muted">저장된 북마크가 없습니다.</div>
           ) : (
@@ -630,6 +812,7 @@ export function BookmarkTree({
                 onOpen={onOpen}
                 onRemoveManual={onRemoveManual}
                 folderEdit={folderEdit}
+                bookmarkEdit={bookmarkEdit}
               />
             ))
           )}

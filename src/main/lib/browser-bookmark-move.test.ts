@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { MANUAL_BOOKMARK_FOLDER_ID } from './browser-bookmark-tree';
+import { BOOKMARK_BAR_FOLDER_ID, MANUAL_BOOKMARK_FOLDER_ID } from './browser-bookmark-tree';
 import { moveManualTreeItem } from './browser-bookmark-move';
 
 const folders = [
@@ -70,6 +70,54 @@ test('nests a folder under another folder', () => {
   expect(result.folders.find((item) => item.id === 'shop')).toMatchObject({ parentId: 'news', sortOrder: 0 });
   expect(result.folders.find((item) => item.id === 'inner')).toMatchObject({ parentId: 'news', sortOrder: 1 });
   expect(result.folders.find((item) => item.id === 'news')).toMatchObject({ parentId: null, sortOrder: 0 });
+});
+
+test('moves a bookmark from the bookmark bar back to the list', () => {
+  const withBar = [
+    ...bookmarks,
+    { id: 'bar', title: 'Bar', url: 'https://bar.example', folderId: BOOKMARK_BAR_FOLDER_ID, sortOrder: 0 },
+  ];
+  const result = moveManualTreeItem({
+    folders,
+    bookmarks: withBar,
+    kind: 'bookmark',
+    id: 'bar',
+    parentId: null,
+    index: 0,
+  });
+
+  expect(result.bookmarks.find((item) => item.id === 'bar')).toMatchObject({ folderId: null, sortOrder: 0 });
+  expect(result.bookmarks.find((item) => item.id === 'a')).toMatchObject({ folderId: null, sortOrder: 1 });
+});
+
+test('moves a bookmark onto the bookmark bar', () => {
+  const result = moveManualTreeItem({
+    folders,
+    bookmarks,
+    kind: 'bookmark',
+    id: 'a',
+    parentId: BOOKMARK_BAR_FOLDER_ID,
+    index: 0,
+  });
+
+  expect(result.bookmarks.find((item) => item.id === 'a')).toMatchObject({
+    folderId: BOOKMARK_BAR_FOLDER_ID,
+    sortOrder: 0,
+  });
+  expect(result.bookmarks.find((item) => item.id === 'b')).toMatchObject({ folderId: null, sortOrder: 0 });
+});
+
+test('rejects moving a folder onto the bookmark bar', () => {
+  const result = moveManualTreeItem({
+    folders,
+    bookmarks,
+    kind: 'folder',
+    id: 'shop',
+    parentId: BOOKMARK_BAR_FOLDER_ID,
+    index: 0,
+  });
+
+  expect(result.folders).toEqual(folders);
 });
 
 test('rejects moving a folder into itself or a descendant', () => {

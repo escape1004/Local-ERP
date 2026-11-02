@@ -209,6 +209,7 @@ export interface DashboardWarningsResult {
 export type BrowserBookmarkSource = 'manual' | 'record';
 
 export const MANUAL_BOOKMARK_FOLDER_ID = '__manual__';
+export const BOOKMARK_BAR_FOLDER_ID = '__bar__';
 
 export interface BrowserBookmark {
   id: string;
@@ -248,6 +249,7 @@ export interface BrowserBookmarkFolder {
 export interface BrowserBookmarkList {
   items: BrowserBookmark[];
   tree: BrowserBookmarkFolder[];
+  bar: BrowserBookmark[];
 }
 
 export interface BrowserScript {
@@ -346,10 +348,11 @@ export interface ElectronAPI {
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string; folderId?: string | null }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
   removeBrowserBookmark: (id: string) => Promise<{ success: boolean; error?: string }>;
+  renameBrowserBookmark: (payload: { id: string; title: string }) => Promise<{ success: boolean; items?: BrowserBookmark[]; tree?: BrowserBookmarkFolder[]; bar?: BrowserBookmark[]; error?: string }>;
   addBrowserBookmarkFolder: (payload?: { name?: string; parentId?: string | null }) => Promise<{ success: boolean; folder?: BrowserManualFolder; error?: string }>;
   renameBrowserBookmarkFolder: (payload: { id: string; name: string }) => Promise<{ success: boolean; folder?: BrowserManualFolder; error?: string }>;
   removeBrowserBookmarkFolder: (id: string) => Promise<{ success: boolean; error?: string }>;
-  moveManualBookmarkItem: (payload: BrowserManualMovePayload) => Promise<{ success: boolean; items?: BrowserBookmark[]; tree?: BrowserBookmarkFolder[]; error?: string }>;
+  moveManualBookmarkItem: (payload: BrowserManualMovePayload) => Promise<{ success: boolean; items?: BrowserBookmark[]; tree?: BrowserBookmarkFolder[]; bar?: BrowserBookmark[]; error?: string }>;
   listBrowserScripts: () => Promise<BrowserScript[]>;
   saveBrowserScript: (payload: Partial<BrowserScript> & { name?: string; source?: string; matches?: string[] }) => Promise<{ success: boolean; script?: BrowserScript; error?: string }>;
   deleteBrowserScript: (id: string) => Promise<{ success: boolean; error?: string }>;

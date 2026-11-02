@@ -1,4 +1,4 @@
-import { MANUAL_BOOKMARK_FOLDER_ID } from './browser-bookmark-tree';
+import { BOOKMARK_BAR_FOLDER_ID, MANUAL_BOOKMARK_FOLDER_ID } from './browser-bookmark-tree';
 
 type ManualFolderRow = {
   id: string;
@@ -84,7 +84,9 @@ export function moveManualTreeItem({
   if (kind === 'bookmark') {
     const current = bookmarks.find((bookmark) => bookmark.id === id);
     if (!current) return { folders, bookmarks };
-    if (destParent && !folders.some((folder) => folder.id === destParent)) return { folders, bookmarks };
+    if (destParent && destParent !== BOOKMARK_BAR_FOLDER_ID && !folders.some((folder) => folder.id === destParent)) {
+      return { folders, bookmarks };
+    }
 
     const sourceParent = normalizeManualParentId(current.folderId);
     const destSiblings = siblingManualBookmarks(bookmarks, destParent).filter((bookmark) => bookmark.id !== id);
@@ -112,7 +114,7 @@ export function moveManualTreeItem({
   if (kind === 'folder') {
     const current = folders.find((folder) => folder.id === id);
     if (!current) return { folders, bookmarks };
-    if (destParent === id || (destParent && isManualFolderDescendant(folders, id, destParent))) {
+    if (destParent === id || destParent === BOOKMARK_BAR_FOLDER_ID || (destParent && isManualFolderDescendant(folders, id, destParent))) {
       return { folders, bookmarks };
     }
     if (destParent && !folders.some((folder) => folder.id === destParent)) return { folders, bookmarks };

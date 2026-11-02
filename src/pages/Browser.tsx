@@ -12,14 +12,23 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react';
+import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
+import type { ManualDragItem } from '../components/browser/bookmark-dnd';
 import { Button } from '../components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../components/ui/dropdown-menu';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
-import type { BrowserBookmark, BrowserBookmarkFolder, BrowserScript } from '../types';
+import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
 import { parseExternalHttpUrl } from '../lib/browserNavigation';
 
 type EmbeddedWebview = HTMLElement & {
@@ -96,6 +105,8 @@ const BrowserPage: React.FC = () => {
   const [sidePanelOpen, setSidePanelOpen] = React.useState(true);
   const [bookmarks, setBookmarks] = React.useState<BrowserBookmark[]>([]);
   const [bookmarkTree, setBookmarkTree] = React.useState<BrowserBookmarkFolder[]>([]);
+  const [barBookmarks, setBarBookmarks] = React.useState<BrowserBookmark[]>([]);
+  const [manualDrag, setManualDrag] = React.useState<ManualDragItem | null>(null);
   const [scripts, setScripts] = React.useState<BrowserScript[]>([]);
   const [draft, setDraft] = React.useState<BrowserScript>(emptyScript());
   const [intent, setIntent] = React.useState('');
@@ -111,8 +122,25 @@ const BrowserPage: React.FC = () => {
     ]);
     setBookmarks(nextBookmarks?.items || []);
     setBookmarkTree(nextBookmarks?.tree || []);
+    setBarBookmarks(nextBookmarks?.bar || []);
     setScripts(nextScripts);
   }, []);
+
+  const applyBookmarkLists = React.useCallback((result?: { items?: BrowserBookmark[]; tree?: BrowserBookmarkFolder[]; bar?: BrowserBookmark[] } | null) => {
+    if (result?.items) setBookmarks(result.items);
+    if (result?.bar) setBarBookmarks(result.bar);
+    if (result?.tree) setBookmarkTree(result.tree);
+  }, []);
+
+  const renameManualBookmark = async (bookmark: BrowserBookmark, title: string) => {
+    const result = await window.electronAPI.renameBrowserBookmark({ id: bookmark.id, title });
+    if (!result.success) {
+      toast({ title: result.error || '북마크 이름을 바꾸지 못했습니다.', variant: 'destructive' });
+      return;
+    }
+    if (result.items || result.tree || result.bar) applyBookmarkLists(result);
+    else await refreshLists();
+  };
 
   const refreshOpenAiAvailability = React.useCallback(async () => {
     const config = await window.electronAPI.getConfig();
@@ -267,14 +295,21 @@ const BrowserPage: React.FC = () => {
   const recordLocked = Boolean(currentRecordBookmark);
   const starred = Boolean(currentManualBookmark || currentRecordBookmark);
 
-  const toggleBookmark = async () => {
+  const saveTargets = React.useMemo(() => collectManualSaveTargets(bookmarkTree), [bookmarkTree]);
+
+  const removeCurrentBookmark = async () => {
+    if (!currentManualBookmark) return;
+    await window.electronAPI.removeBrowserBookmark(currentManualBookmark.id);
+    await refreshLists();
+  };
+
+  const saveBookmarkTo = async (folderId: string | null) => {
     if (currentUrl === 'about:blank' || recordLocked) return;
-    if (currentManualBookmark) {
-      await window.electronAPI.removeBrowserBookmark(currentManualBookmark.id);
-      await refreshLists();
-      return;
-    }
-    const result = await window.electronAPI.addBrowserBookmark({ url: currentUrl, title: pageTitle });
+    const result = await window.electronAPI.addBrowserBookmark({
+      url: currentUrl,
+      title: pageTitle,
+      folderId,
+    });
     if (!result.success) {
       toast({ title: result.error || '북마크를 저장하지 못했습니다.', variant: 'destructive' });
       return;
@@ -383,20 +418,52 @@ const BrowserPage: React.FC = () => {
             </BrowserTooltip>
           </form>
           <BrowserTooltip
-            label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크 추가'}
-            wrapDisabled={currentUrl === 'about:blank' || recordLocked}
+            label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
+            wrapDisabled
           >
-            <button
-              type="button"
-              className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
-                recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
-              }`}
-              disabled={currentUrl === 'about:blank' || recordLocked}
-              aria-label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크 추가'}
-              onClick={() => void toggleBookmark()}
-            >
-              <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
-            </button>
+            {starred && !recordLocked ? (
+              <button
+                type="button"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
+                disabled={currentUrl === 'about:blank'}
+                aria-label="북마크 해제"
+                onClick={() => void removeCurrentBookmark()}
+              >
+                <Star size={16} className="fill-yellow-400 text-yellow-400" />
+              </button>
+            ) : (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button
+                    type="button"
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
+                      recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
+                    }`}
+                    disabled={currentUrl === 'about:blank' || recordLocked}
+                    aria-label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : '북마크할 위치 선택'}
+                  >
+                    <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="end"
+                  className="max-h-72 min-w-[180px] overflow-y-auto border-gray-700 bg-discord-sidebar text-discord-text discord-scrollbar"
+                >
+                  {saveTargets.map((target, index) => (
+                    <React.Fragment key={`${target.id ?? 'manual'}:${target.name}`}>
+                      {index === 1 && <DropdownMenuSeparator className="bg-gray-700" />}
+                      <DropdownMenuItem
+                        className="cursor-pointer text-discord-text hover:bg-discord-hover focus:bg-discord-hover focus:text-discord-text"
+                        style={{ paddingLeft: 8 + target.depth * 12 }}
+                        onSelect={() => void saveBookmarkTo(target.id)}
+                      >
+                        {target.name}
+                      </DropdownMenuItem>
+                    </React.Fragment>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
           </BrowserTooltip>
           <BrowserTooltip label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}>
             <Button
@@ -409,6 +476,44 @@ const BrowserPage: React.FC = () => {
             </Button>
           </BrowserTooltip>
         </div>
+
+        <BookmarkBar
+          bookmarks={barBookmarks}
+          activeUrls={[canonicalCurrent, currentUrl].filter(Boolean)}
+          acceptDrop={manualDrag?.kind === 'bookmark'}
+          draggingId={manualDrag?.kind === 'bookmark' ? manualDrag.id : null}
+          onOpen={(bookmark) => {
+            setAddress(bookmark.url);
+            navigateTo(bookmark.url);
+          }}
+          onRemove={async (bookmark) => {
+            await window.electronAPI.removeBrowserBookmark(bookmark.id);
+            await refreshLists();
+          }}
+          onRename={renameManualBookmark}
+          onDragChange={(item) => {
+            setManualDrag(item);
+            if (item?.kind === 'bookmark') {
+              setSidePanelOpen(true);
+              setSideTab('bookmarks');
+            }
+          }}
+          onDropBookmark={(payload) => {
+            void window.electronAPI.moveManualBookmarkItem({
+              kind: 'bookmark',
+              id: payload.id,
+              parentId: BOOKMARK_BAR_FOLDER_ID,
+              index: payload.index,
+            }).then(async (result) => {
+              if (!result.success) {
+                toast({ title: result.error || '북마크 바로 옮기지 못했습니다.', variant: 'destructive' });
+                return;
+              }
+              if (result.items || result.tree || result.bar) applyBookmarkLists(result);
+              else await refreshLists();
+            });
+          }}
+        />
 
         <div className="flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1 bg-black">
@@ -462,6 +567,9 @@ const BrowserPage: React.FC = () => {
                     await window.electronAPI.removeBrowserBookmark(bookmark.id);
                     await refreshLists();
                   }}
+                  onRenameManual={renameManualBookmark}
+                  onDragChange={setManualDrag}
+                  externalDrag={manualDrag}
                   onCreateManualFolder={async () => {
                     const result = await window.electronAPI.addBrowserBookmarkFolder();
                     if (!result.success) {
@@ -492,8 +600,7 @@ const BrowserPage: React.FC = () => {
                       toast({ title: result.error || '순서를 바꾸지 못했습니다.', variant: 'destructive' });
                       return;
                     }
-                    if (result.items) setBookmarks(result.items);
-                    if (result.tree) setBookmarkTree(result.tree);
+                    if (result.items || result.tree || result.bar) applyBookmarkLists(result);
                     else await refreshLists();
                   }}
                 />

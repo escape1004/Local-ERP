@@ -161,6 +161,7 @@ const api: ElectronAPI = {
   listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),
   addBrowserBookmark: (payload) => ipcRenderer.invoke('browser:addBookmark', payload),
   removeBrowserBookmark: (id) => ipcRenderer.invoke('browser:removeBookmark', id),
+  renameBrowserBookmark: (payload) => ipcRenderer.invoke('browser:renameBookmark', payload),
   addBrowserBookmarkFolder: (payload) => ipcRenderer.invoke('browser:addBookmarkFolder', payload),
   renameBrowserBookmarkFolder: (payload) => ipcRenderer.invoke('browser:renameBookmarkFolder', payload),
   removeBrowserBookmarkFolder: (id) => ipcRenderer.invoke('browser:removeBookmarkFolder', id),

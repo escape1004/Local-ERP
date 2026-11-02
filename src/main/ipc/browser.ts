@@ -4,7 +4,9 @@ import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
 import { canonicalizeBrowserUrl } from '../lib/browser-url';
 import {
+  BOOKMARK_BAR_FOLDER_ID,
   buildBrowserBookmarkTree,
+  MANUAL_BOOKMARK_FOLDER_ID,
   nextManualFolderName,
 } from '../lib/browser-bookmark-tree';
 import { buildRecordUrlMatchIndex } from '../lib/browser-record-match';
@@ -99,7 +101,7 @@ function listBookmarks() {
   try {
     profileId = getCurrentProfileIdOrThrow();
   } catch {
-    return { items: [], tree: [] };
+    return { items: [], tree: [], bar: [] };
   }
 
   const categories = db.prepare(`
@@ -131,7 +133,16 @@ function listBookmarks() {
   return {
     items: result.items,
     tree: result.tree,
+    bar: result.bar,
   };
+}
+
+function resolveManualFolderId(folderId) {
+  const text = String(folderId || '').trim();
+  if (!text || text === MANUAL_BOOKMARK_FOLDER_ID) return null;
+  if (text === BOOKMARK_BAR_FOLDER_ID) return BOOKMARK_BAR_FOLDER_ID;
+  const folder = db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ?').get(text);
+  return folder?.id || null;
 }
 
 function listScripts() {
@@ -183,10 +194,7 @@ export function registerBrowserHandlers() {
 
     const id = crypto.randomUUID();
     const title = String(payload.title || '').trim() || matches[0]?.label || parsed.hostname;
-    const folderId = String(payload.folderId || '').trim() || null;
-    const folder = folderId
-      ? db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ?').get(folderId)
-      : null;
+    const folderId = resolveManualFolderId(payload.folderId);
     db.prepare(`
       INSERT INTO browser_bookmarks (id, title, url, record_id, folder_id, sort_order, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -195,8 +203,8 @@ export function registerBrowserHandlers() {
       title,
       url,
       matches[0]?.id || null,
-      folder?.id || null,
-      nextManualSortOrder('browser_bookmarks', 'folder_id', folder?.id || null),
+      folderId,
+      nextManualSortOrder('browser_bookmarks', 'folder_id', folderId),
       nowIso(),
     );
     return { success: true, bookmark: listBookmarks().items.find((item) => item.id === id) };
@@ -205,6 +213,16 @@ export function registerBrowserHandlers() {
   ipcMain.handle('browser:removeBookmark', (_event, id) => {
     db.prepare('DELETE FROM browser_bookmarks WHERE id = ?').run(String(id || ''));
     return { success: true };
+  });
+
+  ipcMain.handle('browser:renameBookmark', (_event, payload = {}) => {
+    const id = String(payload.id || '').trim();
+    const title = payload.title == null ? '' : String(payload.title);
+    if (!id) return { success: false, error: '북마크를 찾을 수 없습니다.' };
+    const bookmark = db.prepare('SELECT id FROM browser_bookmarks WHERE id = ?').get(id);
+    if (!bookmark) return { success: false, error: '북마크를 찾을 수 없습니다.' };
+    db.prepare('UPDATE browser_bookmarks SET title = ? WHERE id = ?').run(title, id);
+    return { success: true, ...listBookmarks() };
   });
 
   ipcMain.handle('browser:addBookmarkFolder', (_event, payload = {}) => {
