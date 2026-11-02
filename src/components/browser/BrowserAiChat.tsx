@@ -29,6 +29,7 @@ type BrowserAiChatProps = {
   onSend: () => void;
   onNewChat: () => void;
   onApplyScript: (script: BrowserAiChatScript) => void;
+  onTestScript: (script: BrowserAiChatScript) => void;
 };
 
 function tabHostLabel(url: string) {
@@ -71,6 +72,7 @@ export function BrowserAiChat({
   onSend,
   onNewChat,
   onApplyScript,
+  onTestScript,
 }: BrowserAiChatProps) {
   const listRef = React.useRef<HTMLDivElement | null>(null);
   const canSend = Boolean(input.trim()) && !generating;
@@ -122,12 +124,21 @@ export function BrowserAiChat({
           >
             <div className="whitespace-pre-wrap break-words">{message.content}</div>
             {message.script?.source ? (
-              <Button
-                className="mt-2 h-7 w-full bg-discord-accent hover:bg-blue-600 text-[11px]"
-                onClick={() => onApplyScript(message.script as BrowserAiChatScript)}
-              >
-                스크립트에 적용
-              </Button>
+              <div className="mt-2 space-y-1.5">
+                <Button
+                  className="h-7 w-full bg-discord-accent hover:bg-blue-600 text-[11px]"
+                  onClick={() => onApplyScript(message.script as BrowserAiChatScript)}
+                >
+                  스크립트에 적용
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-7 w-full border-gray-600 text-[11px]"
+                  onClick={() => onTestScript(message.script as BrowserAiChatScript)}
+                >
+                  스크립트 테스트
+                </Button>
+              </div>
             ) : null}
           </div>
         ))}

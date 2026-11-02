@@ -3,6 +3,7 @@ import {
   canonicalizeBrowserUrl,
   collectHttpUrls,
   matchUrlPattern,
+  scriptMatchesUrl,
   urlsReferToSameResource,
 } from './browser-url';
 
@@ -25,6 +26,13 @@ test('matches tampermonkey-style url patterns', () => {
   expect(matchUrlPattern('https://www.youtube.com/*', 'https://www.youtube.com/feed/subscriptions')).toBe(true);
   expect(matchUrlPattern('*://www.youtube.com/*', 'https://www.youtube.com/watch?v=1')).toBe(true);
   expect(matchUrlPattern('https://example.com/*', 'https://other.com/')).toBe(false);
+});
+
+test('treats a script as related only when the active page matches', () => {
+  expect(scriptMatchesUrl(['https://www.youtube.com/*'], 'https://www.youtube.com/watch?v=1')).toBe(true);
+  expect(scriptMatchesUrl(['https://www.youtube.com/*'], 'https://example.com/')).toBe(false);
+  expect(scriptMatchesUrl(['https://www.youtube.com/*'], 'about:blank')).toBe(false);
+  expect(scriptMatchesUrl([], 'https://www.youtube.com/watch?v=1')).toBe(false);
 });
 
 test('compares record urls after canonicalization and collects http strings', () => {

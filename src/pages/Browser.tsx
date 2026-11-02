@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
 import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
+import { BrowserScriptModal } from '../components/browser/BrowserScriptModal';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
 import { TabBar } from '../components/browser/TabBar';
 import type { ManualDragItem } from '../components/browser/bookmark-dnd';
@@ -26,13 +27,13 @@ import {
   DropdownMenuTrigger,
 } from '../components/ui/dropdown-menu';
 import { Input } from '../components/ui/input';
-import { Textarea } from '../components/ui/textarea';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
+import { scriptMatchesUrl } from '../main/lib/browser-url';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
 import {
   closeBrowserTab,
@@ -97,6 +98,10 @@ function BrowserTooltip({
   );
 }
 
+function wrapOneShotUserscript(source: string) {
+  return `(function(){try{${source}\n}catch(error){console.error('[ERP userscript]', error);}})();`;
+}
+
 function emptyScript(): BrowserScript {
   return {
     id: '',
@@ -134,6 +139,7 @@ const BrowserPage: React.FC = () => {
   const [manualDrag, setManualDrag] = React.useState<ManualDragItem | null>(null);
   const [scripts, setScripts] = React.useState<BrowserScript[]>([]);
   const [draft, setDraft] = React.useState<BrowserScript>(emptyScript());
+  const [scriptModalOpen, setScriptModalOpen] = React.useState(false);
   const [chatInput, setChatInput] = React.useState('');
   const [chatMessages, setChatMessages] = React.useState<BrowserAiChatMessage[]>([]);
   const [chatContextUrl, setChatContextUrl] = React.useState('');
@@ -286,6 +292,7 @@ const BrowserPage: React.FC = () => {
 
   const lastOpenedTabRef = React.useRef({ url: '', at: 0 });
   const pendingLoadRef = React.useRef(new Map<string, string>());
+  const pendingTestScriptRef = React.useRef<{ tabId: string; source: string; armed: boolean } | null>(null);
 
   const loadUrlInTab = React.useCallback((tabId: string, nextUrl: string) => {
     patchTab(tabId, { url: nextUrl, title: titleForBrowserTab(nextUrl), loading: true });
@@ -477,7 +484,21 @@ const BrowserPage: React.FC = () => {
         }
         syncTabFromWebview(tabId, webview, { loading: false });
       };
-      const onStart = () => patchTab(tabId, { loading: true });
+      const onStart = () => {
+        patchTab(tabId, { loading: true });
+        const pending = pendingTestScriptRef.current;
+        if (pending && pending.tabId === tabId) pending.armed = true;
+      };
+      const onFinish = () => {
+        onNav();
+        const pending = pendingTestScriptRef.current;
+        if (!pending || pending.tabId !== tabId || !pending.armed) return;
+        pendingTestScriptRef.current = null;
+        const source = pending.source;
+        window.setTimeout(() => {
+          void webview.executeJavaScript?.(wrapOneShotUserscript(source)).catch(() => undefined);
+        }, 400);
+      };
       const onTitle = (event: Event) => {
         const title = (event as Event & { title?: string }).title;
         if (title) patchTab(tabId, { title: titleForBrowserTab(webview.getURL?.() || NEW_TAB_URL, title) });
@@ -504,9 +525,13 @@ const BrowserPage: React.FC = () => {
       webview.addEventListener('did-stop-loading', onNav);
       webview.addEventListener('did-navigate', onNav);
       webview.addEventListener('did-navigate-in-page', onNav);
-      webview.addEventListener('did-finish-load', onNav);
+      webview.addEventListener('did-finish-load', onFinish);
       webview.addEventListener('page-title-updated', onTitle);
-      webview.addEventListener('did-fail-load', onNav);
+      webview.addEventListener('did-fail-load', () => {
+        onNav();
+        const pending = pendingTestScriptRef.current;
+        if (pending?.tabId === tabId && pending.armed) pendingTestScriptRef.current = null;
+      });
       webview.addEventListener('ipc-message', (event: Event) => {
         const message = event as WebviewIpcMessageEvent;
         if (message.channel === 'browser:mouse-button') {
@@ -616,8 +641,22 @@ const BrowserPage: React.FC = () => {
         return;
       }
       setDraft(result.script);
+      setScriptModalOpen(false);
       await refreshLists();
-      toast({ title: '스크립트를 저장했습니다. 페이지를 새로고침하면 적용됩니다.' });
+      const appliesToCurrentPage = scriptMatchesUrl(result.script.matches, currentUrl);
+      const webview = activeWebview();
+      if (appliesToCurrentPage && webview) {
+        try {
+          webview.reload();
+        } catch {
+          // webview methods can throw before attachment
+        }
+      }
+      toast({
+        title: appliesToCurrentPage
+          ? '스크립트를 저장했습니다.'
+          : '스크립트를 저장했습니다. 현재 페이지는 대상이 아니라 적용하지 않았습니다.',
+      });
     } finally {
       setSaving(false);
     }
@@ -657,15 +696,53 @@ const BrowserPage: React.FC = () => {
     setChatContextUrl('');
   };
 
+  const openScriptModal = (script: BrowserScript) => {
+    setDraft(script);
+    setScriptModalOpen(true);
+  };
+
   const applyChatScript = (script: BrowserAiChatScript) => {
-    setDraft({
+    openScriptModal({
       ...emptyScript(),
       name: script.name,
       matches: script.matches,
       source: script.source,
     });
-    setSideTab('scripts');
     toast({ title: '스크립트 초안에 넣었습니다. 확인 후 저장하세요.' });
+  };
+
+  const deleteDraft = async () => {
+    if (!draft.id) return;
+    const result = await window.electronAPI.deleteBrowserScript(draft.id);
+    if (!result.success) {
+      toast({ title: result.error || '스크립트를 삭제하지 못했습니다.', variant: 'destructive' });
+      return;
+    }
+    setDraft(emptyScript());
+    setScriptModalOpen(false);
+    await refreshLists();
+    toast({ title: '스크립트를 삭제했습니다.' });
+  };
+
+  const testChatScript = (script: BrowserAiChatScript) => {
+    const webview = activeWebview();
+    const tabId = activeTabIdRef.current;
+    if (!webview || !tabId || isBlankBrowserTab({ url: currentUrl })) {
+      toast({ title: '테스트를 적용할 페이지가 없습니다.', variant: 'destructive' });
+      return;
+    }
+    if (!scriptMatchesUrl(script.matches, currentUrl)) {
+      toast({ title: '현재 페이지는 이 스크립트의 대상이 아닙니다.', variant: 'destructive' });
+      return;
+    }
+    pendingTestScriptRef.current = { tabId, source: script.source, armed: false };
+    try {
+      webview.reload();
+      toast({ title: '테스트 스크립트를 1회 적용합니다.' });
+    } catch {
+      pendingTestScriptRef.current = null;
+      toast({ title: '페이지를 새로고침하지 못했습니다.', variant: 'destructive' });
+    }
   };
 
   const sendChat = async () => {
@@ -965,81 +1042,36 @@ const BrowserPage: React.FC = () => {
               )}
 
               {sideTab === 'scripts' && (
-                <div className="h-full space-y-3 overflow-y-auto discord-scrollbar p-3">
-                  <p className="text-[11px] leading-relaxed text-discord-muted">
-                    매치되는 페이지에 스크립트가 주입됩니다. 직접 작성한 코드이므로 신뢰할 수 있는 내용만 저장하세요.
-                  </p>
-                  <div className="space-y-1">
+                <div className="flex h-full flex-col">
+                  <div className="min-h-0 flex-1 space-y-1 overflow-y-auto discord-scrollbar p-3">
+                    {scripts.length === 0 && (
+                      <p className="px-1 py-6 text-center text-[11px] leading-relaxed text-discord-muted">
+                        저장된 스크립트가 없습니다.
+                      </p>
+                    )}
                     {scripts.map((script) => (
                       <BrowserTooltip key={script.id} label={`${script.name} (${script.enabled ? '켜짐' : '꺼짐'})`}>
                         <button
                           type="button"
-                          onClick={() => setDraft(script)}
-                          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
-                            draft.id === script.id ? 'bg-discord-accent text-white' : 'text-discord-text hover:bg-discord-hover'
-                          }`}
+                          onClick={() => openScriptModal(script)}
+                          className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs text-discord-text hover:bg-discord-hover"
                         >
                           <span className="truncate">{script.name}</span>
-                          <span className="ml-2 shrink-0 opacity-70">{script.enabled ? '켜짐' : '꺼짐'}</span>
+                          <span className="ml-2 shrink-0 text-discord-muted">{script.enabled ? '켜짐' : '꺼짐'}</span>
                         </button>
                       </BrowserTooltip>
                     ))}
                   </div>
-                  <BrowserTooltip label="새 스크립트 만들기">
-                    <Button variant="outline" className="h-8 w-full border-gray-600 text-xs" onClick={() => setDraft(emptyScript())}>
-                      새 스크립트
-                    </Button>
-                  </BrowserTooltip>
-                  <Input
-                    value={draft.name}
-                    onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
-                    className="h-8 bg-discord-bg border-gray-600 text-xs text-discord-text"
-                    placeholder="스크립트 이름"
-                  />
-                  <Input
-                    value={draft.matches.join(', ')}
-                    onChange={(event) => setDraft((current) => ({
-                      ...current,
-                      matches: event.target.value.split(',').map((item) => item.trim()).filter(Boolean),
-                    }))}
-                    className="h-8 bg-discord-bg border-gray-600 text-xs text-discord-text"
-                    placeholder="매치 패턴, 쉼표로 구분"
-                  />
-                  <label className="flex items-center gap-2 text-xs text-discord-muted">
-                    <input
-                      type="checkbox"
-                      checked={draft.enabled}
-                      onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))}
-                    />
-                    사용
-                  </label>
-                  <Textarea
-                    value={draft.source}
-                    onChange={(event) => setDraft((current) => ({ ...current, source: event.target.value }))}
-                    className="min-h-[180px] bg-discord-bg border-gray-600 font-mono text-[11px] text-discord-text"
-                    placeholder="window.erp.findRecordsByUrl(url) 를 사용할 수 있습니다."
-                  />
-                  <div className="flex gap-2">
-                    <BrowserTooltip label="스크립트 저장" wrapDisabled={saving}>
-                      <Button className="h-8 flex-1 bg-discord-accent hover:bg-blue-600 text-xs" disabled={saving} onClick={() => void saveDraft()}>
-                        저장
+                  <div className="shrink-0 border-t border-gray-800 p-3">
+                    <BrowserTooltip label="새 스크립트 만들기">
+                      <Button
+                        variant="outline"
+                        className="h-8 w-full border-gray-600 text-xs"
+                        onClick={() => openScriptModal(emptyScript())}
+                      >
+                        새 스크립트
                       </Button>
                     </BrowserTooltip>
-                    {draft.id && (
-                      <BrowserTooltip label="스크립트 삭제">
-                        <Button
-                          variant="outline"
-                          className="h-8 border-gray-600 text-xs text-red-400"
-                          onClick={async () => {
-                            await window.electronAPI.deleteBrowserScript(draft.id);
-                            setDraft(emptyScript());
-                            await refreshLists();
-                          }}
-                        >
-                          삭제
-                        </Button>
-                      </BrowserTooltip>
-                    )}
                   </div>
                 </div>
               )}
@@ -1055,6 +1087,7 @@ const BrowserPage: React.FC = () => {
                   onSend={() => void sendChat()}
                   onNewChat={resetChat}
                   onApplyScript={applyChatScript}
+                  onTestScript={testChatScript}
                 />
               )}
             </div>
@@ -1062,6 +1095,15 @@ const BrowserPage: React.FC = () => {
           )}
         </div>
       </div>
+      <BrowserScriptModal
+        open={scriptModalOpen}
+        draft={draft}
+        saving={saving}
+        onChange={setDraft}
+        onClose={() => setScriptModalOpen(false)}
+        onSave={() => void saveDraft()}
+        onDelete={draft.id ? () => void deleteDraft() : undefined}
+      />
     </div>
   );
 };

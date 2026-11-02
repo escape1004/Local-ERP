@@ -86,6 +86,12 @@ export function urlsReferToSameResource(left: string, right: string): boolean {
   return Boolean(a && b && a === b);
 }
 
+export function scriptMatchesUrl(matches: unknown, url: string): boolean {
+  const target = String(url || '').trim();
+  if (!target || target === 'about:blank') return false;
+  return (Array.isArray(matches) ? matches : []).some((pattern) => matchUrlPattern(String(pattern || ''), target));
+}
+
 export function matchUrlPattern(pattern: string, url: string): boolean {
   const normalizedPattern = String(pattern || '').trim();
   const target = String(url || '').trim();
