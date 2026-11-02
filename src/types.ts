@@ -319,6 +319,10 @@ export interface ElectronAPI {
   onRandomRecordShortcut: (callback: () => void) => () => void;
   getBrowserPreloadPath: () => Promise<string>;
   getBrowserPartition: () => Promise<string>;
+  openBrowserWindow: (url?: string) => Promise<{ success: boolean; error?: string }>;
+  closeBrowserWindow: () => Promise<{ success: boolean; error?: string }>;
+  isBrowserWindowFocused: () => Promise<boolean>;
+  onBrowserOpenUrl: (callback: (url: string) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;

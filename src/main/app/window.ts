@@ -1,57 +1,24 @@
 import { app, BrowserWindow, ipcMain, protocol } from 'electron';
 import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
-import { buildContentSecurityPolicy } from './csp';
+import { closeEmbeddedBrowserWindow } from './browser-window';
 import {
-  attachEmbeddedBrowserGuest,
-  isEmbeddedBrowserGuest,
-} from '../services/embedded-browser';
+  attachNavigationGuards,
+  attachWebviewGuards,
+  bindWindowControl,
+  ensureRendererSessionGuards,
+  iconPath,
+  rendererWebPreferences,
+} from './window-guards';
 import {
   appConfig,
   applyWindowZoom,
   isolatedRendererUrl,
-  isDev,
-  isPreview,
   log,
   saveAppConfig,
 } from '../store';
 
-function isAllowedNavigationUrl(targetUrl) {
-  try {
-    const parsed = new URL(targetUrl);
-    if (isolatedRendererUrl) {
-      return parsed.origin === new URL(isolatedRendererUrl).origin;
-    }
-    if (process.env.VITE_DEV_SERVER_URL) {
-      return parsed.origin === 'http://localhost:5174' || parsed.origin === 'http://127.0.0.1:5174';
-    }
-    if (parsed.protocol !== 'file:') return false;
-
-    const distRoot = path.resolve(electronDistDir, '..', 'dist');
-    const filePath = decodeURIComponent(parsed.pathname);
-    const normalizedPath = process.platform === 'win32' && filePath.startsWith('/')
-      ? filePath.slice(1)
-      : filePath;
-    const relative = path.relative(distRoot, path.resolve(normalizedPath));
-    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
-  } catch {
-    return false;
-  }
-}
-
-function attachNavigationGuards(contents) {
-  contents.setWindowOpenHandler(() => ({ action: 'deny' }));
-  contents.on('will-navigate', (event, targetUrl) => {
-    if (!isAllowedNavigationUrl(targetUrl)) {
-      event.preventDefault();
-    }
-  });
-  contents.on('will-redirect', (event, targetUrl) => {
-    if (!isAllowedNavigationUrl(targetUrl)) {
-      event.preventDefault();
-    }
-  });
-}
+export { iconPath } from './window-guards';
 
 export function registerProtocol() {
   protocol.registerFileProtocol('app', (request, callback) => {
@@ -72,11 +39,8 @@ export function registerProtocol() {
   });
 }
 
-export const iconPath = (isDev || isPreview)
-  ? path.join(electronDistDir, '..', 'resources', 'icon.ico')
-  : path.join(process.resourcesPath, 'resources', 'icon.ico');
-
 export function createWindow() {
+  bindWindowControl();
   const rememberedBounds = appConfig.rememberWindowBounds ? appConfig.windowBounds : null;
   const mainWindow = new BrowserWindow({
     width: rememberedBounds?.width || 1920,
@@ -84,16 +48,7 @@ export function createWindow() {
     x: typeof rememberedBounds?.x === 'number' ? rememberedBounds.x : undefined,
     y: typeof rememberedBounds?.y === 'number' ? rememberedBounds.y : undefined,
     frame: false,
-    webPreferences: {
-      preload: path.join(electronDistDir, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      webviewTag: true,
-      webSecurity: true,
-      allowRunningInsecureContent: false,
-      navigateOnDragDrop: false
-    },
+    webPreferences: { ...rendererWebPreferences },
     icon: iconPath
   });
 
@@ -145,26 +100,9 @@ export function createWindow() {
     }, 150);
   };
 
-  const contentSecurityPolicy = buildContentSecurityPolicy();
-  mainWindow.webContents.session.webRequest.onHeadersReceived((details, callback) => {
-    callback({
-      responseHeaders: {
-        ...details.responseHeaders,
-        'Content-Security-Policy': [contentSecurityPolicy]
-      }
-    });
-  });
-  mainWindow.webContents.session.setPermissionRequestHandler((_contents, permission, callback) => {
-    callback(permission === 'clipboard-sanitized-write' || permission === 'clipboard-read');
-  });
+  ensureRendererSessionGuards(mainWindow.webContents.session);
   attachNavigationGuards(mainWindow.webContents);
-  mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
-    if (isEmbeddedBrowserGuest(guestContents)) {
-      attachEmbeddedBrowserGuest(guestContents);
-      return;
-    }
-    attachNavigationGuards(guestContents);
-  });
+  attachWebviewGuards(mainWindow.webContents);
 
   // 개발 모드에서는 Vite 개발 서버 URL을 사용
   if (isolatedRendererUrl) {
@@ -229,7 +167,10 @@ export function createWindow() {
 
   mainWindow.on('move', queueSaveWindowBounds);
   mainWindow.on('resize', queueSaveWindowBounds);
-  mainWindow.on('close', saveWindowBounds);
+  mainWindow.on('close', () => {
+    saveWindowBounds();
+    closeEmbeddedBrowserWindow();
+  });
   mainWindow.on('blur', syncWindowAudioMute);
   mainWindow.on('focus', syncWindowAudioMute);
   mainWindow.on('show', syncWindowAudioMute);
@@ -240,27 +181,6 @@ export function createWindow() {
     mainWindow.webContents.send('viewer:fullscreen-changed', false);
   });
   syncWindowAudioMute();
-
-  // 창 제어 이벤트 처리
-  ipcMain.on('window-control', (_, command) => {
-    if (command !== 'minimize' && command !== 'maximize' && command !== 'restore' && command !== 'close') {
-      return;
-    }
-    switch (command) {
-      case 'minimize':
-        mainWindow.minimize();
-        break;
-      case 'maximize':
-        mainWindow.maximize();
-        break;
-      case 'restore':
-        mainWindow.restore();
-        break;
-      case 'close':
-        mainWindow.close();
-        break;
-    }
-  });
 
   ipcMain.removeHandler?.('setRememberWindowBounds');
   ipcMain.handle('setRememberWindowBounds', (_event, enabled) => {

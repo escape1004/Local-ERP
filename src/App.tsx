@@ -3,7 +3,7 @@ import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Plus, X } from 'lucide-react';
 import Index from './pages/Index';
 import Dashboard from './pages/Dashboard';
@@ -29,6 +29,7 @@ import { useERPStore } from './hooks/useERPStore';
 import { useLoadingStore } from './hooks/useLoadingStore';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { toast } from './components/ui/use-toast';
+import { isStandaloneBrowserWindow } from './lib/browserNavigation';
 import type { AppUpdateState, Profile } from './types';
 
 const queryClient = new QueryClient();
@@ -70,6 +71,23 @@ function isDefaultProfile(profile: Pick<Profile, 'name'>) {
   return profile.name === DEFAULT_PROFILE_NAME;
 }
 
+function BrowserRoute() {
+  const standalone = isStandaloneBrowserWindow();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    if (standalone) return undefined;
+    const url = searchParams.get('url') || '';
+    void window.electronAPI.openBrowserWindow(url || undefined);
+    navigate('/dashboard', { replace: true });
+    return undefined;
+  }, [navigate, searchParams, standalone]);
+
+  if (!standalone) return null;
+  return <BrowserPage />;
+}
+
 const RouterContent = () => {
   const navigate = useNavigate();
 
@@ -97,7 +115,7 @@ const RouterContent = () => {
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/browser" element={<BrowserPage />} />
+      <Route path="/browser" element={<BrowserRoute />} />
       <Route path="/category" element={<Index />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
@@ -302,7 +320,13 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    if (requiresPassword || !hasAppPassword || idleLockMinutes <= 0 || isCheckingPassword) {
+    if (
+      isStandaloneBrowserWindow()
+      || requiresPassword
+      || !hasAppPassword
+      || idleLockMinutes <= 0
+      || isCheckingPassword
+    ) {
       return;
     }
 
@@ -317,24 +341,36 @@ const App = () => {
     });
 
     const intervalId = window.setInterval(() => {
-      if (hasFocusedMediaPlayback()) {
-        lastActivityAtRef.current = Date.now();
-        return;
-      }
+      void (async () => {
+        if (hasFocusedMediaPlayback()) {
+          lastActivityAtRef.current = Date.now();
+          return;
+        }
 
-      if (Date.now() - lastActivityAtRef.current < idleLockMinutes * 60 * 1000) {
-        return;
-      }
+        try {
+          if (await window.electronAPI.isBrowserWindowFocused()) {
+            lastActivityAtRef.current = Date.now();
+            return;
+          }
+        } catch {
+          // Ignore IPC failures while checking the browser window.
+        }
 
-      setIsAppSettingsOpen(false);
-      setIsAppUpdateOpen(false);
-      setIsCreateProfileOpen(false);
-      setShowDeleteConfirm(false);
-      setShowPassword(false);
-      setPasswordInput('');
-      setPasswordError('');
-      setRequiresPassword(true);
-      void silenceAppForLock();
+        if (Date.now() - lastActivityAtRef.current < idleLockMinutes * 60 * 1000) {
+          return;
+        }
+
+        setIsAppSettingsOpen(false);
+        setIsAppUpdateOpen(false);
+        setIsCreateProfileOpen(false);
+        setShowDeleteConfirm(false);
+        setShowPassword(false);
+        setPasswordInput('');
+        setPasswordError('');
+        setRequiresPassword(true);
+        void silenceAppForLock();
+        void window.electronAPI.closeBrowserWindow();
+      })();
     }, 1000);
 
     return () => {
@@ -359,6 +395,11 @@ const App = () => {
   };
 
   useEffect(() => {
+    if (isStandaloneBrowserWindow()) {
+      setIsCheckingPassword(false);
+      return;
+    }
+
     let cancelled = false;
 
     const bootstrap = async () => {
@@ -618,6 +659,27 @@ const App = () => {
       setDeleteTargetProfile(null);
     }
   };
+
+  if (isStandaloneBrowserWindow()) {
+    return (
+      <QueryClientProvider client={queryClient}>
+        <TooltipProvider>
+          <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
+            <TitleBar title="브라우저" showUtilityButtons={false} />
+            <div className="flex-1 min-h-0">
+              <HashRouter>
+                <Routes>
+                  <Route path="/browser" element={<BrowserPage />} />
+                  <Route path="*" element={<Navigate to="/browser" replace />} />
+                </Routes>
+              </HashRouter>
+              <Toaster />
+            </div>
+          </div>
+        </TooltipProvider>
+      </QueryClientProvider>
+    );
+  }
 
   return (
     <QueryClientProvider client={queryClient}>

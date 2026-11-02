@@ -668,15 +668,9 @@ export const Sidebar: React.FC = () => {
         </button>
         <button
           onClick={() => {
-            navigate('/browser');
-            setShowDbViewer(false);
-            selectCategory(null);
+            void window.electronAPI.openBrowserWindow();
           }}
-          className={`mt-1 w-full flex items-center gap-3 px-3 py-2 rounded transition-colors ${
-            location.pathname === '/browser' || location.hash.startsWith('#/browser')
-              ? 'bg-discord-accent text-white'
-              : 'hover:bg-discord-hover text-discord-text'
-          }`}
+          className="mt-1 w-full flex items-center gap-3 px-3 py-2 rounded transition-colors hover:bg-discord-hover text-discord-text"
         >
           <Globe size={18} />
           <span className="text-sm font-medium">브라우저</span>

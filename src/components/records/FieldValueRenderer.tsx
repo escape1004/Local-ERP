@@ -1,9 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Check, ExternalLink, Globe, Languages, X } from 'lucide-react';
 import type { Category, DataRecord, FieldDefinition } from '../../types';
-import { useERPStore } from '../../hooks/useERPStore';
-import { getInAppBrowserRoute } from '../../lib/browserNavigation';
 import { toast } from '../ui/use-toast';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { formatFieldDisplayValue } from '../../lib/fieldFormat';
@@ -190,16 +187,23 @@ function UrlValue({
   variant: 'list' | 'detail';
   onSelectRow?: () => void;
 }) {
-  const navigate = useNavigate();
-  const selectCategory = useERPStore((state) => state.selectCategory);
-  const setShowDbViewer = useERPStore((state) => state.setShowDbViewer);
-
-  const openInAppBrowser = (event: React.MouseEvent) => {
+  const openInAppBrowser = async (event: React.MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
-    selectCategory(null);
-    setShowDbViewer(false);
-    navigate(getInAppBrowserRoute(url));
+    try {
+      const result = await window.electronAPI.openBrowserWindow(url);
+      if (!result.success) {
+        toast({
+          title: '브라우저를 열 수 없습니다.',
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: '브라우저를 열 수 없습니다.',
+        variant: 'destructive',
+      });
+    }
   };
 
   const openUrl = async (event: React.MouseEvent) => {

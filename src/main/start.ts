@@ -1,4 +1,5 @@
 import { app, BrowserWindow } from 'electron';
+import { isEmbeddedBrowserAppWindow } from './app/browser-window';
 import { db, migratePersistedOpenAiSecrets } from './store';
 import { createWindow, registerProtocol } from './app/window';
 import { initializeDatabase } from './database';
@@ -7,7 +8,8 @@ import { registerLocalVideoProtocol, startVideoHttpServer } from './services/vid
 import { registerAllIpcHandlers } from './ipc';
 
 export function focusExistingInstance() {
-  const window = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed());
+  const windows = BrowserWindow.getAllWindows().filter((item) => !item.isDestroyed());
+  const window = windows.find((item) => !isEmbeddedBrowserAppWindow(item)) || windows[0];
   if (!window) {
     if (app.isReady()) {
       createWindow();

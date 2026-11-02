@@ -18,6 +18,11 @@ import {
   getCurrentProfileIdOrThrow,
   log,
 } from '../store';
+import {
+  closeEmbeddedBrowserWindow,
+  isEmbeddedBrowserWindowFocused,
+  openEmbeddedBrowserWindow,
+} from '../app/browser-window';
 import { generateBrowserScriptWithOpenAi } from '../services/browser-ai';
 import { BROWSER_PARTITION } from '../services/embedded-browser';
 
@@ -128,6 +133,12 @@ function listScripts() {
 export function registerBrowserHandlers() {
   ipcMain.handle('browser:getPreloadPath', () => path.join(electronDistDir, 'browser-preload.js'));
   ipcMain.handle('browser:getPartition', () => BROWSER_PARTITION);
+  ipcMain.handle('browser:openWindow', (_event, url) => openEmbeddedBrowserWindow(url));
+  ipcMain.handle('browser:closeWindow', () => {
+    closeEmbeddedBrowserWindow();
+    return { success: true };
+  });
+  ipcMain.handle('browser:isWindowFocused', () => isEmbeddedBrowserWindowFocused());
 
   ipcMain.handle('browser:canonicalizeUrl', (_event, input) => canonicalizeBrowserUrl(String(input || '')));
 

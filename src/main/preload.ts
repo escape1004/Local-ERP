@@ -149,6 +149,14 @@ const api: ElectronAPI = {
   },
   getBrowserPreloadPath: () => ipcRenderer.invoke('browser:getPreloadPath'),
   getBrowserPartition: () => ipcRenderer.invoke('browser:getPartition'),
+  openBrowserWindow: (url) => ipcRenderer.invoke('browser:openWindow', url),
+  closeBrowserWindow: () => ipcRenderer.invoke('browser:closeWindow'),
+  isBrowserWindowFocused: () => ipcRenderer.invoke('browser:isWindowFocused'),
+  onBrowserOpenUrl: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, nextUrl: string) => callback(nextUrl);
+    ipcRenderer.on('browser:open-url', listener);
+    return () => ipcRenderer.removeListener('browser:open-url', listener);
+  },
   canonicalizeBrowserUrl: (url) => ipcRenderer.invoke('browser:canonicalizeUrl', url),
   listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),
   addBrowserBookmark: (payload) => ipcRenderer.invoke('browser:addBookmark', payload),

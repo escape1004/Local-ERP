@@ -26,3 +26,17 @@ export function parseExternalHttpUrl(input: string): URL | null {
 export function getInAppBrowserRoute(url: string) {
   return `/browser?url=${encodeURIComponent(url)}`;
 }
+
+export function isStandaloneBrowserRole(search?: string) {
+  const query = search
+    ?? (typeof window !== 'undefined' ? window.location.search : '');
+  try {
+    return new URLSearchParams(query).get('role') === 'browser';
+  } catch {
+    return false;
+  }
+}
+
+export function isStandaloneBrowserWindow() {
+  return isStandaloneBrowserRole();
+}

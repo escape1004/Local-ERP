@@ -12,7 +12,6 @@ import {
   Star,
 } from 'lucide-react';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
-import { Sidebar } from '../components/Sidebar';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
@@ -148,6 +147,15 @@ const BrowserPage: React.FC = () => {
   }, []);
 
   React.useEffect(() => {
+    return window.electronAPI.onBrowserOpenUrl((nextUrl) => {
+      const parsed = parseExternalHttpUrl(nextUrl);
+      if (!parsed) return;
+      setAddress(parsed.toString());
+      navigateTo(parsed.toString());
+    });
+  }, [navigateTo]);
+
+  React.useEffect(() => {
     if (!requestedUrl) return;
     const parsed = parseExternalHttpUrl(requestedUrl);
     if (!parsed) return;
@@ -279,7 +287,6 @@ const BrowserPage: React.FC = () => {
 
   return (
     <div className="flex h-full overflow-hidden">
-      <Sidebar />
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
         <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
           <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} onClick={() => webviewRef.current?.goBack()}>

@@ -7,17 +7,21 @@ interface CSSPropertiesWithWebkit extends CSSProperties {
 }
 
 interface TitleBarProps {
-  onOpenSettings: () => void;
-  onOpenUpdate: () => void;
+  title?: string;
+  onOpenSettings?: () => void;
+  onOpenUpdate?: () => void;
   updateAvailable?: boolean;
   settingsDisabled?: boolean;
+  showUtilityButtons?: boolean;
 }
 
 export function TitleBar({
+  title = 'Local ERP',
   onOpenSettings,
   onOpenUpdate,
   updateAvailable = false,
   settingsDisabled = false,
+  showUtilityButtons = true,
 }: TitleBarProps) {
   const electronAPI = window.electronAPI as ElectronAPI;
 
@@ -51,7 +55,7 @@ export function TitleBar({
           alt="App Icon" 
           className="w-4 h-4" 
         />
-        <span className="text-sm font-medium">Local ERP</span>
+        <span className="text-sm font-medium">{title}</span>
       </div>
 
       {/* 창 제어 버튼 */}
@@ -59,7 +63,7 @@ export function TitleBar({
         className="flex h-full"
         style={{ WebkitAppRegion: 'no-drag' } as CSSPropertiesWithWebkit}
       >
-        {updateAvailable && (
+        {showUtilityButtons && updateAvailable && (
           <button
             onClick={onOpenUpdate}
             className="flex h-full w-12 items-center justify-center text-yellow-400 transition-colors hover:bg-yellow-500/15 hover:text-yellow-300"
@@ -69,14 +73,16 @@ export function TitleBar({
             <AlertTriangle className="h-4 w-4" />
           </button>
         )}
-        <button
-          onClick={onOpenSettings}
-          disabled={settingsDisabled}
-          className="w-12 h-full transition-colors flex items-center justify-center hover:bg-[#404249] hover:text-white disabled:cursor-default disabled:text-[#5F6670] disabled:hover:bg-transparent disabled:hover:text-[#5F6670]"
-          aria-label="환경설정"
-        >
-          <Settings className="w-4 h-4" />
-        </button>
+        {showUtilityButtons && (
+          <button
+            onClick={onOpenSettings}
+            disabled={settingsDisabled}
+            className="w-12 h-full transition-colors flex items-center justify-center hover:bg-[#404249] hover:text-white disabled:cursor-default disabled:text-[#5F6670] disabled:hover:bg-transparent disabled:hover:text-[#5F6670]"
+            aria-label="환경설정"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+        )}
         <button
           onClick={handleMinimize}
           className="w-12 h-full hover:bg-[#404249] hover:text-white transition-colors flex items-center justify-center"
