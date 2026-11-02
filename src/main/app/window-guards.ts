@@ -2,10 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
 import { buildContentSecurityPolicy } from './csp';
-import {
-  attachEmbeddedBrowserGuest,
-  isEmbeddedBrowserGuest,
-} from '../services/embedded-browser';
+import { attachEmbeddedBrowserGuest } from '../services/embedded-browser';
 import {
   isolatedRendererUrl,
   isDev,
@@ -73,11 +70,7 @@ export function ensureRendererSessionGuards(session) {
 
 export function attachWebviewGuards(contents) {
   contents.on('did-attach-webview', (_event, guestContents) => {
-    if (isEmbeddedBrowserGuest(guestContents)) {
-      attachEmbeddedBrowserGuest(guestContents);
-      return;
-    }
-    attachNavigationGuards(guestContents);
+    attachEmbeddedBrowserGuest(guestContents);
   });
 }
 

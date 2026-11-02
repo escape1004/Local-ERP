@@ -152,6 +152,9 @@ const BrowserPage: React.FC = () => {
     try {
       const nextUrl = webview.getURL() || 'about:blank';
       setCurrentUrl(nextUrl);
+      if (nextUrl && nextUrl !== 'about:blank') {
+        pendingUrlRef.current = nextUrl;
+      }
       if (!addressFocusedRef.current) {
         const display = nextUrl === 'about:blank' ? '' : nextUrl;
         addressRef.current = display;
@@ -201,6 +204,7 @@ const BrowserPage: React.FC = () => {
     webview.setAttribute('partition', partition);
     webview.setAttribute('preload', toPreloadUrl(preloadPath));
     webview.setAttribute('webpreferences', 'contextIsolation=yes, nodeIntegration=no, sandbox=yes');
+    webview.setAttribute('allowpopups', 'true');
     webview.src = 'about:blank';
 
     const onNav = () => {

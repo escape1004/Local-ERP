@@ -66,6 +66,39 @@ export function injectMatchingScripts(contents) {
   });
 }
 
+function loadHttpUrlInGuest(contents, url) {
+  const parsed = parseExternalHttpUrl(url);
+  if (!parsed || !contents || contents.isDestroyed()) return false;
+  void contents.loadURL(parsed.toString());
+  return true;
+}
+
+function foldPopupIntoGuest(opener, childWindow) {
+  const child = childWindow.webContents;
+  const fold = (targetUrl) => {
+    if (!loadHttpUrlInGuest(opener, targetUrl)) return false;
+    if (!childWindow.isDestroyed()) childWindow.destroy();
+    return true;
+  };
+
+  child.setWindowOpenHandler(() => ({ action: 'deny' }));
+  child.on('will-navigate', (event, targetUrl) => {
+    if (!targetUrl || targetUrl === 'about:blank') return;
+    event.preventDefault();
+    fold(targetUrl);
+  });
+  child.on('will-redirect', (event, targetUrl) => {
+    event.preventDefault();
+    fold(targetUrl);
+  });
+  child.on('did-navigate', (_event, targetUrl) => {
+    if (targetUrl && targetUrl !== 'about:blank') fold(targetUrl);
+  });
+  setTimeout(() => {
+    if (!childWindow.isDestroyed()) childWindow.destroy();
+  }, 8000);
+}
+
 export function attachEmbeddedBrowserGuest(contents) {
   if (!contents || contents.__erpBrowserAttached) return;
   contents.__erpBrowserAttached = true;
@@ -73,9 +106,33 @@ export function attachEmbeddedBrowserGuest(contents) {
   contents.setWindowOpenHandler(({ url }) => {
     const parsed = parseExternalHttpUrl(url);
     if (parsed) {
-      void contents.loadURL(parsed.toString());
+      const nextUrl = parsed.toString();
+      setImmediate(() => {
+        loadHttpUrlInGuest(contents, nextUrl);
+      });
+      return { action: 'deny' };
     }
+
+    if (!url || url === 'about:blank') {
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          show: false,
+          skipTaskbar: true,
+          webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+          },
+        },
+      };
+    }
+
     return { action: 'deny' };
+  });
+
+  contents.on('did-create-window', (childWindow) => {
+    foldPopupIntoGuest(contents, childWindow);
   });
 
   contents.on('will-navigate', (event, targetUrl) => {
