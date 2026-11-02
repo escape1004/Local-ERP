@@ -7,6 +7,8 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from '../ui/context-menu';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { FIELD_TOOLTIP_CLASSNAME } from '../records/FieldValueRenderer';
 import { cn } from '../../lib/utils';
 
 const FOLDER_ROW_HEIGHT = 36;
@@ -596,15 +598,22 @@ export function BookmarkTree({
             <Link2 size={12} className="text-discord-accent" />
             레코드
           </span>
-          <button
-            type="button"
-            className="ml-auto inline-flex h-6 w-6 items-center justify-center rounded-md text-discord-muted hover:bg-discord-hover hover:text-discord-text disabled:opacity-50"
-            title="직접 추가 폴더 만들기"
-            disabled={creating}
-            onClick={() => void createFolder()}
-          >
-            <Plus size={14} />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span className="ml-auto inline-flex">
+                <button
+                  type="button"
+                  className="inline-flex h-6 w-6 items-center justify-center rounded-md text-discord-muted hover:bg-discord-hover hover:text-discord-text disabled:opacity-50"
+                  aria-label="직접 추가 폴더 만들기"
+                  disabled={creating}
+                  onClick={() => void createFolder()}
+                >
+                  <Plus size={14} />
+                </button>
+              </span>
+            </TooltipTrigger>
+            <TooltipContent side="top" align="center" className={FIELD_TOOLTIP_CLASSNAME}>직접 추가 폴더 만들기</TooltipContent>
+          </Tooltip>
         </div>
         <div className={cn('min-h-0 flex-1 overflow-y-auto discord-scrollbar px-3 pb-3', dragging && 'select-none')}>
           {tree.length === 0 ? (

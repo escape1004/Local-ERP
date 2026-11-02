@@ -5,8 +5,9 @@ import {
   ArrowRight,
   Bookmark,
   Code2,
-  ExternalLink,
   Globe,
+  PanelRightClose,
+  PanelRightOpen,
   RotateCw,
   Sparkles,
   Star,
@@ -15,7 +16,9 @@ import { BookmarkTree } from '../components/browser/BookmarkTree';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
 import { Textarea } from '../components/ui/textarea';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from '../components/ui/use-toast';
+import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
 import type { BrowserBookmark, BrowserBookmarkFolder, BrowserScript } from '../types';
 import { parseExternalHttpUrl } from '../lib/browserNavigation';
 
@@ -37,6 +40,27 @@ type SideTab = 'bookmarks' | 'scripts' | 'ai';
 function toPreloadUrl(filePath: string) {
   const normalized = filePath.replace(/\\/g, '/');
   return `file:///${normalized.replace(/^\/+/, '')}`;
+}
+
+function BrowserTooltip({
+  label,
+  wrapDisabled,
+  children,
+}: {
+  label: string;
+  wrapDisabled?: boolean;
+  children: React.ReactElement;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        {wrapDisabled ? <span className="inline-flex">{children}</span> : children}
+      </TooltipTrigger>
+      <TooltipContent side="top" align="center" className={FIELD_TOOLTIP_CLASSNAME}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function emptyScript(): BrowserScript {
@@ -69,6 +93,7 @@ const BrowserPage: React.FC = () => {
   const [canGoForward, setCanGoForward] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [sideTab, setSideTab] = React.useState<SideTab>('bookmarks');
+  const [sidePanelOpen, setSidePanelOpen] = React.useState(true);
   const [bookmarks, setBookmarks] = React.useState<BrowserBookmark[]>([]);
   const [bookmarkTree, setBookmarkTree] = React.useState<BrowserBookmarkFolder[]>([]);
   const [scripts, setScripts] = React.useState<BrowserScript[]>([]);
@@ -301,27 +326,25 @@ const BrowserPage: React.FC = () => {
     }
   };
 
-  const openExternal = async () => {
-    if (currentUrl === 'about:blank') return;
-    const result = await window.electronAPI.openExternal(currentUrl);
-    if (!result.success) {
-      toast({ title: '외부 브라우저에서 열 수 없습니다.', variant: 'destructive' });
-    }
-  };
-
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
         <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
-          <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} onClick={() => webviewRef.current?.goBack()}>
-            <ArrowLeft size={16} />
-          </Button>
-          <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoForward} onClick={() => webviewRef.current?.goForward()}>
-            <ArrowRight size={16} />
-          </Button>
-          <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => webviewRef.current?.reload()}>
-            <RotateCw size={16} className={loading ? 'animate-spin' : ''} />
-          </Button>
+          <BrowserTooltip label="뒤로" wrapDisabled={!canGoBack}>
+            <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
+              <ArrowLeft size={16} />
+            </Button>
+          </BrowserTooltip>
+          <BrowserTooltip label="앞으로" wrapDisabled={!canGoForward}>
+            <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoForward} aria-label="앞으로" onClick={() => webviewRef.current?.goForward()}>
+              <ArrowRight size={16} />
+            </Button>
+          </BrowserTooltip>
+          <BrowserTooltip label={loading ? '불러오는 중' : '새로고침'}>
+            <Button variant="ghost" className="h-8 w-8 p-0" aria-label="새로고침" onClick={() => webviewRef.current?.reload()}>
+              <RotateCw size={16} className={loading ? 'animate-spin' : ''} />
+            </Button>
+          </BrowserTooltip>
           <form
             className="flex min-w-0 flex-1 items-center gap-2"
             onSubmit={(event) => {
@@ -351,22 +374,36 @@ const BrowserPage: React.FC = () => {
               placeholder="https:// 주소 입력"
               className="h-8 bg-discord-sidebar border-gray-600 text-sm text-discord-text"
             />
-            <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
+            <BrowserTooltip label="입력한 주소로 이동">
+              <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
+            </BrowserTooltip>
           </form>
-          <button
-            type="button"
-            className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
-              recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
-            }`}
-            disabled={currentUrl === 'about:blank' || recordLocked}
-            title={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : '북마크'}
-            onClick={() => void toggleBookmark()}
+          <BrowserTooltip
+            label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크 추가'}
+            wrapDisabled={currentUrl === 'about:blank' || recordLocked}
           >
-            <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
-          </button>
-          <Button variant="ghost" className="h-8 w-8 p-0" onClick={() => void openExternal()} disabled={currentUrl === 'about:blank'}>
-            <ExternalLink size={16} />
-          </Button>
+            <button
+              type="button"
+              className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
+                recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
+              }`}
+              disabled={currentUrl === 'about:blank' || recordLocked}
+              aria-label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크 추가'}
+              onClick={() => void toggleBookmark()}
+            >
+              <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
+            </button>
+          </BrowserTooltip>
+          <BrowserTooltip label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}>
+            <Button
+              variant="ghost"
+              className="h-8 w-8 p-0"
+              aria-label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}
+              onClick={() => setSidePanelOpen((open) => !open)}
+            >
+              {sidePanelOpen ? <PanelRightClose size={16} /> : <PanelRightOpen size={16} />}
+            </Button>
+          </BrowserTooltip>
         </div>
 
         <div className="flex min-h-0 flex-1">
@@ -385,6 +422,7 @@ const BrowserPage: React.FC = () => {
             )}
           </div>
 
+          {sidePanelOpen && (
           <aside className="flex w-80 shrink-0 flex-col border-l border-gray-800 bg-discord-sidebar">
             <div className="flex shrink-0 border-b border-gray-800">
               {([
@@ -396,6 +434,7 @@ const BrowserPage: React.FC = () => {
                   key={id}
                   type="button"
                   onClick={() => setSideTab(id)}
+                  aria-label={label}
                   className={`flex flex-1 items-center justify-center gap-1 px-2 py-2 text-xs ${
                     sideTab === id ? 'bg-discord-accent text-white' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text'
                   }`}
@@ -463,22 +502,25 @@ const BrowserPage: React.FC = () => {
                   </p>
                   <div className="space-y-1">
                     {scripts.map((script) => (
-                      <button
-                        key={script.id}
-                        type="button"
-                        onClick={() => setDraft(script)}
-                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
-                          draft.id === script.id ? 'bg-discord-accent text-white' : 'text-discord-text hover:bg-discord-hover'
-                        }`}
-                      >
-                        <span className="truncate">{script.name}</span>
-                        <span className="ml-2 shrink-0 opacity-70">{script.enabled ? '켜짐' : '꺼짐'}</span>
-                      </button>
+                      <BrowserTooltip key={script.id} label={`${script.name} (${script.enabled ? '켜짐' : '꺼짐'})`}>
+                        <button
+                          type="button"
+                          onClick={() => setDraft(script)}
+                          className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs ${
+                            draft.id === script.id ? 'bg-discord-accent text-white' : 'text-discord-text hover:bg-discord-hover'
+                          }`}
+                        >
+                          <span className="truncate">{script.name}</span>
+                          <span className="ml-2 shrink-0 opacity-70">{script.enabled ? '켜짐' : '꺼짐'}</span>
+                        </button>
+                      </BrowserTooltip>
                     ))}
                   </div>
-                  <Button variant="outline" className="h-8 w-full border-gray-600 text-xs" onClick={() => setDraft(emptyScript())}>
-                    새 스크립트
-                  </Button>
+                  <BrowserTooltip label="새 스크립트 만들기">
+                    <Button variant="outline" className="h-8 w-full border-gray-600 text-xs" onClick={() => setDraft(emptyScript())}>
+                      새 스크립트
+                    </Button>
+                  </BrowserTooltip>
                   <Input
                     value={draft.name}
                     onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))}
@@ -509,21 +551,25 @@ const BrowserPage: React.FC = () => {
                     placeholder="window.erp.findRecordsByUrl(url) 를 사용할 수 있습니다."
                   />
                   <div className="flex gap-2">
-                    <Button className="h-8 flex-1 bg-discord-accent hover:bg-blue-600 text-xs" disabled={saving} onClick={() => void saveDraft()}>
-                      저장
-                    </Button>
-                    {draft.id && (
-                      <Button
-                        variant="outline"
-                        className="h-8 border-gray-600 text-xs text-red-400"
-                        onClick={async () => {
-                          await window.electronAPI.deleteBrowserScript(draft.id);
-                          setDraft(emptyScript());
-                          await refreshLists();
-                        }}
-                      >
-                        삭제
+                    <BrowserTooltip label="스크립트 저장" wrapDisabled={saving}>
+                      <Button className="h-8 flex-1 bg-discord-accent hover:bg-blue-600 text-xs" disabled={saving} onClick={() => void saveDraft()}>
+                        저장
                       </Button>
+                    </BrowserTooltip>
+                    {draft.id && (
+                      <BrowserTooltip label="스크립트 삭제">
+                        <Button
+                          variant="outline"
+                          className="h-8 border-gray-600 text-xs text-red-400"
+                          onClick={async () => {
+                            await window.electronAPI.deleteBrowserScript(draft.id);
+                            setDraft(emptyScript());
+                            await refreshLists();
+                          }}
+                        >
+                          삭제
+                        </Button>
+                      </BrowserTooltip>
                     )}
                   </div>
                 </div>
@@ -546,17 +592,20 @@ const BrowserPage: React.FC = () => {
                     className="min-h-[70px] bg-discord-bg border-gray-600 font-mono text-[11px] text-discord-text"
                     placeholder="선택한 요소 HTML (선택)"
                   />
-                  <Button
-                    className="h-8 w-full bg-discord-accent hover:bg-blue-600 text-xs"
-                    disabled={generating || !intent.trim()}
-                    onClick={() => void generateScript()}
-                  >
-                    {generating ? '생성 중...' : '스크립트 초안 만들기'}
-                  </Button>
+                  <BrowserTooltip label="현재 페이지에 맞는 스크립트 초안 만들기" wrapDisabled={generating || !intent.trim()}>
+                    <Button
+                      className="h-8 w-full bg-discord-accent hover:bg-blue-600 text-xs"
+                      disabled={generating || !intent.trim()}
+                      onClick={() => void generateScript()}
+                    >
+                      {generating ? '생성 중...' : '스크립트 초안 만들기'}
+                    </Button>
+                  </BrowserTooltip>
                 </div>
               )}
             </div>
           </aside>
+          )}
         </div>
       </div>
     </div>

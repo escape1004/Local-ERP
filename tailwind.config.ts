@@ -35,6 +35,7 @@ export default {
 					success: '#3ba55c',
 					warning: '#faa61a',
 					danger: '#ed4245',
+					tooltip: '#23272a',
 				},
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
