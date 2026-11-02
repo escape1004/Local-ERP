@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { DragDropContext, Droppable, Draggable } from '@hello-pangea/dnd';
-import { Plus, Menu, ChevronLeft, LayoutDashboard, Settings, Check } from 'lucide-react';
+import { Plus, Menu, ChevronLeft, LayoutDashboard, Globe, Settings, Check } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useERPStore } from '../hooks/useERPStore';
 import { useLoadingStore } from '../hooks/useLoadingStore';
@@ -665,6 +665,21 @@ export const Sidebar: React.FC = () => {
         >
           <LayoutDashboard size={18} />
           <span className="text-sm font-medium">대시보드</span>
+        </button>
+        <button
+          onClick={() => {
+            navigate('/browser');
+            setShowDbViewer(false);
+            selectCategory(null);
+          }}
+          className={`mt-1 w-full flex items-center gap-3 px-3 py-2 rounded transition-colors ${
+            location.pathname === '/browser' || location.hash.startsWith('#/browser')
+              ? 'bg-discord-accent text-white'
+              : 'hover:bg-discord-hover text-discord-text'
+          }`}
+        >
+          <Globe size={18} />
+          <span className="text-sm font-medium">브라우저</span>
         </button>
       </div>
 

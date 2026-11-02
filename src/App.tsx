@@ -7,6 +7,7 @@ import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-d
 import { Eye, EyeOff, Lock, Plus, X } from 'lucide-react';
 import Index from './pages/Index';
 import Dashboard from './pages/Dashboard';
+import BrowserPage from './pages/Browser';
 import NotFound from './pages/NotFound';
 import { TitleBar } from './components/TitleBar';
 import { LoadingOverlay } from './components/ui/loading-overlay';
@@ -96,6 +97,7 @@ const RouterContent = () => {
     <Routes>
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={<Dashboard />} />
+      <Route path="/browser" element={<BrowserPage />} />
       <Route path="/category" element={<Index />} />
       <Route path="*" element={<NotFound />} />
     </Routes>

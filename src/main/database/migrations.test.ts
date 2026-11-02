@@ -121,6 +121,8 @@ function expectLatestSchema(database) {
   expect(tableExists(database, 'categories')).toBe(true);
   expect(tableExists(database, 'records')).toBe(true);
   expect(tableExists(database, 'record_view_counts')).toBe(true);
+  expect(tableExists(database, 'browser_bookmarks')).toBe(true);
+  expect(tableExists(database, 'browser_scripts')).toBe(true);
   expect(getTableColumns(database, 'profiles')).toEqual(expect.arrayContaining([
     'id', 'name', 'avatarColor', 'createdAt', 'updatedAt',
   ]));
@@ -133,6 +135,15 @@ function expectLatestSchema(database) {
   expect(getTableColumns(database, 'record_view_counts')).toEqual(expect.arrayContaining([
     'profileId', 'recordId', 'categoryId', 'viewCount', 'updatedAt',
   ]));
+  expect(getTableColumns(database, 'browser_bookmarks')).toEqual(expect.arrayContaining([
+    'id', 'title', 'url', 'record_id', 'created_at',
+  ]));
+  expect(getTableColumns(database, 'browser_scripts')).toEqual(expect.arrayContaining([
+    'id', 'name', 'enabled', 'matches_json', 'run_at', 'source', 'updated_at',
+  ]));
+  expect(database.prepare('SELECT name FROM browser_scripts WHERE id = ?').get('youtube-record-highlight')).toMatchObject({
+    name: '유튜브 레코드 영상 강조',
+  });
   expect(database.prepare('PRAGMA foreign_keys').get().foreign_keys).toBe(1);
   expect(String(database.prepare('PRAGMA journal_mode').get().journal_mode).toLowerCase()).toBe('wal');
 }

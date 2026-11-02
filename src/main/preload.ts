@@ -147,6 +147,17 @@ const api: ElectronAPI = {
     ipcRenderer.on('shortcut:random-record', listener);
     return () => ipcRenderer.removeListener('shortcut:random-record', listener);
   },
+  getBrowserPreloadPath: () => ipcRenderer.invoke('browser:getPreloadPath'),
+  getBrowserPartition: () => ipcRenderer.invoke('browser:getPartition'),
+  canonicalizeBrowserUrl: (url) => ipcRenderer.invoke('browser:canonicalizeUrl', url),
+  listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),
+  addBrowserBookmark: (payload) => ipcRenderer.invoke('browser:addBookmark', payload),
+  removeBrowserBookmark: (id) => ipcRenderer.invoke('browser:removeBookmark', id),
+  listBrowserScripts: () => ipcRenderer.invoke('browser:listScripts'),
+  saveBrowserScript: (payload) => ipcRenderer.invoke('browser:saveScript', payload),
+  deleteBrowserScript: (id) => ipcRenderer.invoke('browser:deleteScript', id),
+  findBrowserRecordsByUrl: (url) => ipcRenderer.invoke('browser:findRecordsByUrl', url),
+  generateBrowserScript: (payload) => ipcRenderer.invoke('browser:generateScript', payload),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api); 

@@ -2,6 +2,7 @@ import { registerUpdateIpc } from '../services/updater';
 import { registerArchiveHandlers } from './archives';
 import { registerBackupIpcHandlers } from './backup';
 import { registerBookmarkHandlers } from './bookmarks';
+import { registerBrowserHandlers } from './browser';
 import { registerCategoryHandlers } from './categories';
 import { registerFileHandlers } from './files';
 import { registerProfileHandlers } from './profiles';
@@ -13,6 +14,7 @@ import { registerVideoHandlers } from './video';
 
 export function registerAllIpcHandlers() {
   registerUpdateIpc();
+  registerBrowserHandlers();
   registerBookmarkHandlers();
   registerFileHandlers();
   registerCategoryHandlers();

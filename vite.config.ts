@@ -11,9 +11,12 @@ export default defineConfig(({ command, mode }) => {
       build: {
         outDir: 'dist-electron-app',
         lib: {
-          entry: path.resolve(__dirname, 'src/main/preload.ts'),
+          entry: {
+            preload: path.resolve(__dirname, 'src/main/preload.ts'),
+            'browser-preload': path.resolve(__dirname, 'src/main/browser-preload.ts'),
+          },
           formats: ['cjs'],
-          fileName: () => 'preload.js',
+          fileName: (_format, entryName) => `${entryName}.js`,
         },
         rollupOptions: {
           external: [

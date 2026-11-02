@@ -15,5 +15,5 @@
     "declaration": false
   },
   "include": ["src/main/**/*.ts"],
-  "exclude": ["src/main/preload.ts", "src/main/**/*.test.ts"]
+  "exclude": ["src/main/preload.ts", "src/main/browser-preload.ts", "src/main/**/*.test.ts"]
 }

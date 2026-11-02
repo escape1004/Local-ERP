@@ -3,6 +3,10 @@ import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
 import { buildContentSecurityPolicy } from './csp';
 import {
+  attachEmbeddedBrowserGuest,
+  isEmbeddedBrowserGuest,
+} from '../services/embedded-browser';
+import {
   appConfig,
   applyWindowZoom,
   isolatedRendererUrl,
@@ -85,6 +89,7 @@ export function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
+      webviewTag: true,
       webSecurity: true,
       allowRunningInsecureContent: false,
       navigateOnDragDrop: false
@@ -154,6 +159,10 @@ export function createWindow() {
   });
   attachNavigationGuards(mainWindow.webContents);
   mainWindow.webContents.on('did-attach-webview', (_event, guestContents) => {
+    if (isEmbeddedBrowserGuest(guestContents)) {
+      attachEmbeddedBrowserGuest(guestContents);
+      return;
+    }
     attachNavigationGuards(guestContents);
   });
 

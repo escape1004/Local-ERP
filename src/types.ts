@@ -206,6 +206,32 @@ export interface DashboardWarningsResult {
   items: DashboardWarningItem[];
 }
 
+export interface BrowserBookmark {
+  id: string;
+  title: string;
+  url: string;
+  recordId?: string | null;
+  createdAt: string;
+}
+
+export interface BrowserScript {
+  id: string;
+  name: string;
+  enabled: boolean;
+  matches: string[];
+  matchesJson?: string;
+  runAt: 'document-end' | 'document-idle';
+  source: string;
+  updatedAt: string;
+}
+
+export interface BrowserRecordMatch {
+  id: string;
+  categoryId: string;
+  label: string;
+  urls: string[];
+}
+
 export interface ElectronAPI {
   getAppUpdateState: () => Promise<AppUpdateState>;
   checkForAppUpdates: () => Promise<AppUpdateState>;
@@ -274,6 +300,17 @@ export interface ElectronAPI {
   checkDuplicate: (categoryId: string, fieldId: string, value: any, recordId?: string) => Promise<{ isDuplicate: boolean }>;
   send: (channel: string, ...args: any[]) => void;
   onRandomRecordShortcut: (callback: () => void) => () => void;
+  getBrowserPreloadPath: () => Promise<string>;
+  getBrowserPartition: () => Promise<string>;
+  canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
+  listBrowserBookmarks: () => Promise<BrowserBookmark[]>;
+  addBrowserBookmark: (payload: { url: string; title?: string }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
+  removeBrowserBookmark: (id: string) => Promise<{ success: boolean; error?: string }>;
+  listBrowserScripts: () => Promise<BrowserScript[]>;
+  saveBrowserScript: (payload: Partial<BrowserScript> & { name?: string; source?: string; matches?: string[] }) => Promise<{ success: boolean; script?: BrowserScript; error?: string }>;
+  deleteBrowserScript: (id: string) => Promise<{ success: boolean; error?: string }>;
+  findBrowserRecordsByUrl: (url: string) => Promise<BrowserRecordMatch[]>;
+  generateBrowserScript: (payload: { url: string; intent: string; selectedHtml?: string }) => Promise<{ success: boolean; name?: string; matches?: string[]; source?: string; error?: string }>;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

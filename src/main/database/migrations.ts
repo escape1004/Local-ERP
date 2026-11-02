@@ -9,6 +9,37 @@ import {
   recordSchemaMigration,
 } from './schema';
 
+const YOUTUBE_RECORD_HIGHLIGHT_SCRIPT = `(async function highlightErpYoutubeRecords() {
+  const ATTR = 'data-erp-record-match';
+  const STYLE_ID = 'erp-record-match-style';
+  if (!document.getElementById(STYLE_ID)) {
+    const style = document.createElement('style');
+    style.id = STYLE_ID;
+    style.textContent = '[' + ATTR + ']{outline:3px solid #5865F2!important;outline-offset:2px;border-radius:12px;}';
+    document.documentElement.appendChild(style);
+  }
+  const scan = async () => {
+    if (!window.erp || typeof window.erp.findRecordsByUrl !== 'function') return;
+    const anchors = Array.from(document.querySelectorAll('a[href*="/watch"], a[href*="/shorts/"]'));
+    for (const anchor of anchors) {
+      const target = anchor.closest('ytd-rich-item-renderer, ytd-video-renderer, ytd-grid-video-renderer, ytd-compact-video-renderer, ytd-playlist-video-renderer') || anchor;
+      if (target.getAttribute(ATTR)) continue;
+      try {
+        const matches = await window.erp.findRecordsByUrl(anchor.href);
+        if (matches && matches.length) target.setAttribute(ATTR, '1');
+      } catch (error) {
+        console.error('[ERP userscript]', error);
+      }
+    }
+  };
+  await scan();
+  if (!window.__erpYoutubeHighlightObserver) {
+    window.__erpYoutubeHighlightObserver = new MutationObserver(() => { void scan(); });
+    window.__erpYoutubeHighlightObserver.observe(document.documentElement, { childList: true, subtree: true });
+    if (typeof window.erp.onUrlChange === 'function') window.erp.onUrlChange(() => { void scan(); });
+  }
+})();`;
+
 export const SCHEMA_MIGRATIONS = [
   {
     version: 1,
@@ -85,6 +116,42 @@ export const SCHEMA_MIGRATIONS = [
           'CREATE INDEX IF NOT EXISTS idx_record_view_counts_profile_category ON record_view_counts(profileId, categoryId)'
         );
       }
+    },
+  },
+  {
+    version: 5,
+    name: 'embedded_browser_tables',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS browser_bookmarks (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          url TEXT NOT NULL UNIQUE,
+          record_id TEXT,
+          created_at TEXT NOT NULL
+        )
+      `);
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS browser_scripts (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          enabled INTEGER NOT NULL DEFAULT 1,
+          matches_json TEXT NOT NULL,
+          run_at TEXT NOT NULL,
+          source TEXT NOT NULL,
+          updated_at TEXT NOT NULL
+        )
+      `);
+      database.prepare(`
+        INSERT OR IGNORE INTO browser_scripts (id, name, enabled, matches_json, run_at, source, updated_at)
+        VALUES (?, ?, 1, ?, 'document-idle', ?, ?)
+      `).run(
+        'youtube-record-highlight',
+        '유튜브 레코드 영상 강조',
+        JSON.stringify(['*://www.youtube.com/*', '*://m.youtube.com/*', '*://music.youtube.com/*']),
+        YOUTUBE_RECORD_HIGHLIGHT_SCRIPT,
+        new Date().toISOString(),
+      );
     },
   },
 ];
