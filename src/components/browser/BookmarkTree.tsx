@@ -1,6 +1,12 @@
 import React from 'react';
 import { ChevronDown, ChevronRight, Folder, Link2, Plus, Star } from 'lucide-react';
 import { MANUAL_BOOKMARK_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder } from '../../types';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from '../ui/context-menu';
 import { cn } from '../../lib/utils';
 
 const FOLDER_ROW_HEIGHT = 36;
@@ -18,12 +24,24 @@ type BookmarkTreeProps = {
   onOpen: (bookmark: BrowserBookmark) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
   onCreateManualFolder: () => void | Promise<void>;
+  onRenameManualFolder: (folder: BrowserBookmarkFolder, name: string) => void | Promise<void>;
+  onRemoveManualFolder: (folder: BrowserBookmarkFolder) => void | Promise<void>;
   onMoveManualItem: (payload: {
     kind: 'bookmark' | 'folder';
     id: string;
     parentId: string | null;
     index: number;
   }) => void | Promise<void>;
+};
+
+type FolderEditProps = {
+  renamingId: string | null;
+  renameDraft: string;
+  onRenameDraftChange: (value: string) => void;
+  onStartRename: (folder: BrowserBookmarkFolder) => void;
+  onSubmitRename: () => void;
+  onCancelRename: () => void;
+  onRemoveFolder: (folder: BrowserBookmarkFolder) => void;
 };
 
 type DndContextValue = {
@@ -111,7 +129,7 @@ function BookmarkRow({
   const canDrag = !isRecord && Boolean(dnd);
   const draggedRef = React.useRef(false);
 
-  return (
+  const row = (
     <div
       className={cn(
         'group flex items-start gap-2 rounded-md py-1.5 pr-2',
@@ -160,16 +178,23 @@ function BookmarkRow({
           <div className="truncate pl-[18px] text-[11px] text-discord-muted">{secondary}</div>
         ) : null}
       </button>
-      {!isRecord && (
-        <button
-          type="button"
-          className="mt-1 hidden shrink-0 text-[11px] text-discord-muted hover:text-red-400 group-hover:inline"
-          onClick={() => onRemoveManual(bookmark)}
+    </div>
+  );
+
+  if (isRecord) return row;
+
+  return (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>{row}</ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuItem
+          className="text-red-400 focus:text-red-400"
+          onSelect={() => onRemoveManual(bookmark)}
         >
           삭제
-        </button>
-      )}
-    </div>
+        </ContextMenuItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -181,6 +206,7 @@ function FolderNode({
   onToggle,
   onOpen,
   onRemoveManual,
+  folderEdit,
 }: {
   folder: BrowserBookmarkFolder;
   depth: number;
@@ -189,6 +215,7 @@ function FolderNode({
   onToggle: (id: string) => void;
   onOpen: (bookmark: BrowserBookmark) => void;
   onRemoveManual: (bookmark: BrowserBookmark) => void;
+  folderEdit: FolderEditProps;
 }) {
   const dnd = React.useContext(ManualDndContext);
   const open = expanded.has(folder.id);
@@ -203,6 +230,8 @@ function FolderNode({
   const dragging = dnd?.dragging?.kind === 'folder' && dnd.dragging.id === folder.id;
   const dropInto = dnd?.dropTarget?.mode === 'into' && dnd.dropTarget.folderId === folder.id;
   const draggedRef = React.useRef(false);
+  const renaming = folderEdit.renamingId === folder.id;
+  const canEditFolder = isManual && folder.id !== MANUAL_BOOKMARK_FOLDER_ID;
 
   const setInsertTarget = (event: React.DragEvent, target: DropTarget) => {
     event.preventDefault();
@@ -216,14 +245,13 @@ function FolderNode({
     bookmark.source === 'record' || dnd?.dragging?.kind !== 'bookmark' || bookmark.id !== dnd.dragging.id
   ));
 
-  return (
-    <div>
+  const header = (
       <div
         className="sticky bg-discord-sidebar"
         style={{ top: depth * FOLDER_ROW_HEIGHT, zIndex: 30 - depth, height: FOLDER_ROW_HEIGHT }}
-        draggable={canDrag}
+        draggable={canDrag && !renaming}
         onDragStart={(event) => {
-          if (!canDrag || !dnd) return;
+          if (!canDrag || renaming || !dnd) return;
           draggedRef.current = true;
           event.dataTransfer.setData('text/plain', encodeDragItem({ kind: 'folder', id: folder.id }));
           event.dataTransfer.effectAllowed = 'move';
@@ -240,21 +268,30 @@ function FolderNode({
           if (canDropInto) dnd?.commitDrop({ mode: 'into', folderId: folder.id });
         }}
       >
-        <button
-          type="button"
+        <div
+          role="button"
+          tabIndex={0}
           className={cn(
             'flex h-full w-full items-center gap-1.5 overflow-hidden pr-2 text-left hover:bg-discord-hover',
-            canDrag && 'cursor-grab active:cursor-grabbing',
+            canDrag && !renaming && 'cursor-grab active:cursor-grabbing',
             dragging && 'opacity-50',
             dropInto && 'bg-discord-accent/20',
           )}
           style={{ paddingLeft: 12 + depth * 20 }}
           onClick={() => {
+            if (renaming) return;
             if (draggedRef.current) {
               draggedRef.current = false;
               return;
             }
             onToggle(folder.id);
+          }}
+          onKeyDown={(event) => {
+            if (renaming) return;
+            if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              onToggle(folder.id);
+            }
           }}
         >
           {depth > 0 && <span className="text-xs text-gray-400">└</span>}
@@ -271,10 +308,49 @@ function FolderNode({
               className={folder.kind === 'manual' ? 'shrink-0 text-yellow-400' : 'shrink-0 text-discord-accent'}
             />
           )}
-          <span className="min-w-0 flex-1 truncate text-sm font-medium text-discord-text">{folder.name}</span>
+          {renaming ? (
+            <input
+              autoFocus
+              value={folderEdit.renameDraft}
+              className="h-6 min-w-0 flex-1 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
+              onClick={(event) => event.stopPropagation()}
+              onChange={(event) => folderEdit.onRenameDraftChange(event.target.value)}
+              onBlur={() => folderEdit.onSubmitRename()}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  folderEdit.onSubmitRename();
+                }
+                if (event.key === 'Escape') {
+                  event.preventDefault();
+                  folderEdit.onCancelRename();
+                }
+              }}
+            />
+          ) : (
+            <span className="min-w-0 flex-1 truncate text-sm font-medium text-discord-text">{folder.name}</span>
+          )}
           <span className="shrink-0 text-[11px] tabular-nums text-discord-muted">{total}</span>
-        </button>
+        </div>
       </div>
+  );
+
+  return (
+    <div>
+      {canEditFolder ? (
+        <ContextMenu>
+          <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
+          <ContextMenuContent>
+            <ContextMenuItem onSelect={() => folderEdit.onStartRename(folder)}>이름 변경</ContextMenuItem>
+            <ContextMenuItem
+              className="text-red-400 focus:text-red-400"
+              onSelect={() => folderEdit.onRemoveFolder(folder)}
+            >
+              삭제
+            </ContextMenuItem>
+          </ContextMenuContent>
+        </ContextMenu>
+      ) : header}
       {open && (
         <>
           {isManual && dnd?.dragging?.kind === 'folder' && (
@@ -298,6 +374,7 @@ function FolderNode({
                 onToggle={onToggle}
                 onOpen={onOpen}
                 onRemoveManual={onRemoveManual}
+                folderEdit={folderEdit}
               />
               {isManual && dnd?.dragging?.kind === 'folder' && child.id !== dnd.dragging.id && (
                 <InsertLine
@@ -373,12 +450,17 @@ export function BookmarkTree({
   onOpen,
   onRemoveManual,
   onCreateManualFolder,
+  onRenameManualFolder,
+  onRemoveManualFolder,
   onMoveManualItem,
 }: BookmarkTreeProps) {
   const [expanded, setExpanded] = React.useState<Set<string>>(() => new Set());
   const [creating, setCreating] = React.useState(false);
   const [dragging, setDragging] = React.useState<DragItem | null>(null);
   const [dropTarget, setDropTarget] = React.useState<DropTarget | null>(null);
+  const [renamingId, setRenamingId] = React.useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = React.useState('');
+  const renamingIdRef = React.useRef<string | null>(null);
 
   const toggle = (id: string) => {
     setExpanded((current) => {
@@ -460,6 +542,36 @@ export function BookmarkTree({
     });
   }, [blockedFolderIds, dragging, onMoveManualItem, tree]);
 
+  const folderEdit = React.useMemo<FolderEditProps>(() => ({
+    renamingId,
+    renameDraft,
+    onRenameDraftChange: setRenameDraft,
+    onStartRename: (folder) => {
+      renamingIdRef.current = folder.id;
+      setRenamingId(folder.id);
+      setRenameDraft(folder.name);
+    },
+    onSubmitRename: () => {
+      const id = renamingIdRef.current;
+      if (!id) return;
+      const folder = findFolder(tree, id);
+      const name = renameDraft.trim();
+      renamingIdRef.current = null;
+      setRenamingId(null);
+      if (!folder || !name || name === folder.name) return;
+      void onRenameManualFolder(folder, name);
+    },
+    onCancelRename: () => {
+      renamingIdRef.current = null;
+      setRenamingId(null);
+    },
+    onRemoveFolder: (folder) => {
+      renamingIdRef.current = renamingIdRef.current === folder.id ? null : renamingIdRef.current;
+      setRenamingId((current) => (current === folder.id ? null : current));
+      void onRemoveManualFolder(folder);
+    },
+  }), [onRemoveManualFolder, onRenameManualFolder, renameDraft, renamingId, tree]);
+
   const dndValue = React.useMemo<DndContextValue>(() => ({
     dragging,
     dropTarget,
@@ -508,6 +620,7 @@ export function BookmarkTree({
                 onToggle={toggle}
                 onOpen={onOpen}
                 onRemoveManual={onRemoveManual}
+                folderEdit={folderEdit}
               />
             ))
           )}

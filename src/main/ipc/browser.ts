@@ -248,14 +248,30 @@ export function registerBrowserHandlers() {
       collectIds.all(current).forEach((row) => pending.push(row.id));
     }
 
-    const clearFolder = db.prepare('UPDATE browser_bookmarks SET folder_id = NULL WHERE folder_id = ?');
+    const removeBookmarks = db.prepare('DELETE FROM browser_bookmarks WHERE folder_id = ?');
     const removeFolder = db.prepare('DELETE FROM browser_bookmark_folders WHERE id = ?');
     const remove = db.transaction((folderIds) => {
-      folderIds.forEach((item) => clearFolder.run(item));
+      folderIds.forEach((item) => removeBookmarks.run(item));
       [...folderIds].reverse().forEach((item) => removeFolder.run(item));
     });
     remove(ids);
     return { success: true };
+  });
+
+  ipcMain.handle('browser:renameBookmarkFolder', (_event, payload = {}) => {
+    const id = String(payload.id || '').trim();
+    const name = String(payload.name || '').trim();
+    if (!id) return { success: false, error: '폴더를 찾을 수 없습니다.' };
+    if (!name) return { success: false, error: '폴더 이름을 입력해주세요.' };
+    const folder = db.prepare(
+      'SELECT id, parent_id AS parentId, sort_order AS sortOrder, created_at AS createdAt FROM browser_bookmark_folders WHERE id = ?'
+    ).get(id);
+    if (!folder) return { success: false, error: '폴더를 찾을 수 없습니다.' };
+    db.prepare('UPDATE browser_bookmark_folders SET name = ? WHERE id = ?').run(name, id);
+    return {
+      success: true,
+      folder: { id, name, parentId: folder.parentId || null, sortOrder: folder.sortOrder, createdAt: folder.createdAt },
+    };
   });
 
   ipcMain.handle('browser:moveManualBookmarkItem', (_event, payload = {}) => {

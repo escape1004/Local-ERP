@@ -57,6 +57,7 @@ const BrowserPage: React.FC = () => {
   const webviewRef = React.useRef<EmbeddedWebview | null>(null);
   const webviewHostRef = React.useRef<HTMLDivElement | null>(null);
   const addressFocusedRef = React.useRef(false);
+  const addressRef = React.useRef(requestedUrl);
   const pendingUrlRef = React.useRef(parseExternalHttpUrl(requestedUrl)?.toString() || '');
 
   const [preloadPath, setPreloadPath] = React.useState('');
@@ -127,7 +128,9 @@ const BrowserPage: React.FC = () => {
       const nextUrl = webview.getURL() || 'about:blank';
       setCurrentUrl(nextUrl);
       if (!addressFocusedRef.current) {
-        setAddress(nextUrl === 'about:blank' ? '' : nextUrl);
+        const display = nextUrl === 'about:blank' ? '' : nextUrl;
+        addressRef.current = display;
+        setAddress(display);
       }
       setPageTitle(webview.getTitle() || '브라우저');
       setCanGoBack(webview.canGoBack());
@@ -145,6 +148,7 @@ const BrowserPage: React.FC = () => {
     }
     const nextUrl = parsed.toString();
     pendingUrlRef.current = nextUrl;
+    addressRef.current = nextUrl;
     setAddress(nextUrl);
     const webview = webviewRef.current;
     if (webview?.loadURL) {
@@ -322,18 +326,27 @@ const BrowserPage: React.FC = () => {
             className="flex min-w-0 flex-1 items-center gap-2"
             onSubmit={(event) => {
               event.preventDefault();
-              navigateTo(address);
+              navigateTo(addressRef.current);
             }}
           >
             <Input
               value={address}
-              onChange={(event) => setAddress(event.target.value)}
+              onChange={(event) => {
+                addressRef.current = event.target.value;
+                setAddress(event.target.value);
+              }}
               onFocus={() => {
                 addressFocusedRef.current = true;
               }}
-              onBlur={() => {
+              onBlur={(event) => {
                 addressFocusedRef.current = false;
-                syncNavigation();
+                const form = event.currentTarget.form;
+                window.setTimeout(() => {
+                  if (addressFocusedRef.current) return;
+                  const active = document.activeElement;
+                  if (form && active instanceof HTMLElement && form.contains(active)) return;
+                  syncNavigation();
+                }, 0);
               }}
               placeholder="https:// 주소 입력"
               className="h-8 bg-discord-sidebar border-gray-600 text-sm text-discord-text"
@@ -410,6 +423,22 @@ const BrowserPage: React.FC = () => {
                     const result = await window.electronAPI.addBrowserBookmarkFolder();
                     if (!result.success) {
                       toast({ title: result.error || '폴더를 만들지 못했습니다.', variant: 'destructive' });
+                      return;
+                    }
+                    await refreshLists();
+                  }}
+                  onRenameManualFolder={async (folder, name) => {
+                    const result = await window.electronAPI.renameBrowserBookmarkFolder({ id: folder.id, name });
+                    if (!result.success) {
+                      toast({ title: result.error || '폴더 이름을 바꾸지 못했습니다.', variant: 'destructive' });
+                      return;
+                    }
+                    await refreshLists();
+                  }}
+                  onRemoveManualFolder={async (folder) => {
+                    const result = await window.electronAPI.removeBrowserBookmarkFolder(folder.id);
+                    if (!result.success) {
+                      toast({ title: result.error || '폴더를 삭제하지 못했습니다.', variant: 'destructive' });
                       return;
                     }
                     await refreshLists();

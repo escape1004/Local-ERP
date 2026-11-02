@@ -347,6 +347,7 @@ export interface ElectronAPI {
   addBrowserBookmark: (payload: { url: string; title?: string; folderId?: string | null }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
   removeBrowserBookmark: (id: string) => Promise<{ success: boolean; error?: string }>;
   addBrowserBookmarkFolder: (payload?: { name?: string; parentId?: string | null }) => Promise<{ success: boolean; folder?: BrowserManualFolder; error?: string }>;
+  renameBrowserBookmarkFolder: (payload: { id: string; name: string }) => Promise<{ success: boolean; folder?: BrowserManualFolder; error?: string }>;
   removeBrowserBookmarkFolder: (id: string) => Promise<{ success: boolean; error?: string }>;
   moveManualBookmarkItem: (payload: BrowserManualMovePayload) => Promise<{ success: boolean; items?: BrowserBookmark[]; tree?: BrowserBookmarkFolder[]; error?: string }>;
   listBrowserScripts: () => Promise<BrowserScript[]>;
