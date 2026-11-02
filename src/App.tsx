@@ -665,7 +665,6 @@ const App = () => {
       <QueryClientProvider client={queryClient}>
         <TooltipProvider>
           <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
-            <TitleBar title="브라우저" showUtilityButtons={false} />
             <div className="flex-1 min-h-0">
               <HashRouter>
                 <Routes>
