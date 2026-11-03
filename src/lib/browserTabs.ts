@@ -117,7 +117,7 @@ export function restoreBrowserSession(urls: string[], activeIndex = 0, requested
   const source = cleaned.length > 0 ? cleaned : [NEW_TAB_URL];
   const tabs = source.map((url) => createBrowserTab(url));
   const safeIndex = Math.min(Math.max(0, Math.trunc(Number(activeIndex) || 0)), tabs.length - 1);
-  let activeId = tabs[safeIndex].id;
+  const activeId = tabs[safeIndex].id;
 
   const requested = String(requestedUrl || '').trim();
   if (!requested || requested === NEW_TAB_URL) {
