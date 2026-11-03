@@ -101,6 +101,7 @@ const shortcutSections = [
       { keys: 'Ctrl++ / Ctrl+- / Ctrl+휠', description: '페이지를 확대하거나 축소합니다.' },
       { keys: 'Ctrl+0', description: '페이지 확대 비율을 원래대로 되돌립니다.' },
       { keys: 'Esc', description: '페이지가 로드 중이면 불러오기를 중지합니다.' },
+      { keys: 'F12 / Ctrl+Shift+I', description: '현재 탭 페이지의 개발자 도구를 엽니다.' },
     ],
   },
 ] as const;

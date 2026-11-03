@@ -1,4 +1,4 @@
-import { BrowserWindow, session, webContents } from 'electron';
+import { BrowserWindow, Menu, clipboard, session, webContents } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
   isUserBlockedBrowserUrl,
@@ -14,7 +14,7 @@ import {
   popupBoundsFromFeatures,
   shouldOpenEmbeddedBrowserPopup,
 } from '../lib/embedded-browser-policy';
-import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
+import { attachEmbeddedBrowserShortcutGuard, toggleEmbeddedBrowserDevTools } from '../lib/browser-shortcuts';
 import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
 import { getConfiguredBrowserBlockedDomains, getConfiguredBrowserTrackerBlocking, log } from '../app/state';
@@ -69,6 +69,54 @@ function attachPopupDestinationGuard(contents, openerUrl) {
   const site = siteKeyFromBrowserUrl(openerUrl);
   if (!site || !contents) return;
   contents.__erpBounceGuard = { site, expiresAt: Date.now() + 15000 };
+}
+
+function attachGuestContextMenu(contents) {
+  if (!contents || contents.__erpBrowserContextMenu) return;
+  contents.__erpBrowserContextMenu = true;
+  contents.on('context-menu', (_event, params) => {
+    if (!contents || contents.isDestroyed()) return;
+    const template = [];
+    try {
+      if (contents.navigationHistory?.canGoBack?.() || contents.canGoBack?.()) {
+        template.push({ label: '뒤로', click: () => contents.goBack() });
+      }
+      if (contents.navigationHistory?.canGoForward?.() || contents.canGoForward?.()) {
+        template.push({ label: '앞으로', click: () => contents.goForward() });
+      }
+    } catch {
+      // navigation APIs can throw before the guest is ready
+    }
+    template.push({ label: '새로고침', click: () => contents.reload() });
+    template.push({ type: 'separator' });
+    if (params?.isEditable) {
+      template.push({ role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' });
+    } else if (params?.selectionText) {
+      template.push({ role: 'copy' });
+    }
+    if (params?.linkURL) {
+      template.push({
+        label: '링크 주소 복사',
+        click: () => clipboard.writeText(String(params.linkURL)),
+      });
+    }
+    if (template.length > 0 && template[template.length - 1].type !== 'separator') {
+      template.push({ type: 'separator' });
+    }
+    template.push({
+      label: '요소 검사',
+      click: () => contents.inspectElement(Number(params?.x) || 0, Number(params?.y) || 0),
+    });
+    template.push({
+      label: '개발자 도구',
+      accelerator: 'F12',
+      click: () => toggleEmbeddedBrowserDevTools(contents),
+    });
+    const menu = Menu.buildFromTemplate(template);
+    const host = contents.hostWebContents || contents;
+    const win = BrowserWindow.fromWebContents(host);
+    menu.popup({ window: win && !win.isDestroyed() ? win : undefined });
+  });
 }
 
 function closeOwnedPopupWindow(contents) {
@@ -313,5 +361,6 @@ export function attachEmbeddedBrowserGuest(contents) {
     }
   });
 
+  attachGuestContextMenu(contents);
   attachEmbeddedBrowserShortcutGuard(contents);
 }

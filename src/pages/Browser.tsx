@@ -34,7 +34,7 @@ import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolde
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 import { scriptMatchesUrl } from '../main/lib/browser-url';
-import { wrapUserscript } from '../main/lib/browser-userscript';
+import { wrapUserscript, wrapUserscriptForRunAt } from '../main/lib/browser-userscript';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
 import {
   resolveWebviewStartNavigation,
@@ -69,6 +69,9 @@ type EmbeddedWebview = HTMLElement & {
   getZoomFactor?: () => number;
   setZoomFactor?: (factor: number) => void;
   executeJavaScript?: (code: string) => Promise<unknown>;
+  openDevTools?: () => void;
+  closeDevTools?: () => void;
+  isDevToolsOpened?: () => boolean;
 };
 
 type WebviewIpcMessageEvent = Event & {
@@ -146,6 +149,7 @@ const BrowserPage: React.FC = () => {
   const [chatMessages, setChatMessages] = React.useState<BrowserAiChatMessage[]>([]);
   const [chatContextUrl, setChatContextUrl] = React.useState('');
   const chatSeqRef = React.useRef(0);
+  const pendingReloadScriptRef = React.useRef<{ tabId: string; source: string } | null>(null);
   const [generating, setGenerating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = React.useState(false);
@@ -267,6 +271,17 @@ const BrowserPage: React.FC = () => {
   const activeWebview = React.useCallback(() => (
     webviewByTabRef.current.get(activeTabIdRef.current) || null
   ), []);
+
+  const toggleActiveWebviewDevTools = React.useCallback(() => {
+    const webview = activeWebview();
+    if (!webview?.openDevTools) return;
+    try {
+      if (webview.isDevToolsOpened?.()) webview.closeDevTools?.();
+      else webview.openDevTools();
+    } catch {
+      // DevTools APIs can throw before attachment
+    }
+  }, [activeWebview]);
 
   const navigateFromMouseButton = React.useCallback((button: number) => {
     const action = resolveBrowserMouseButton(button);
@@ -457,6 +472,10 @@ const BrowserPage: React.FC = () => {
         if (nextId) setActiveTabId(nextId);
         return;
       }
+      if (action === 'devtools') {
+        toggleActiveWebviewDevTools();
+        return;
+      }
       if (!webview) return;
       if (action === 'reload') webview.reload();
       if (action === 'hard-reload') {
@@ -470,7 +489,20 @@ const BrowserPage: React.FC = () => {
       if (action === 'zoom-out') applyPageZoom('out');
       if (action === 'zoom-reset') applyPageZoom('reset');
     });
-  }, [activeWebview, applyPageZoom, closeTab, openTab]);
+  }, [activeWebview, applyPageZoom, closeTab, openTab, toggleActiveWebviewDevTools]);
+
+  React.useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      const isF12 = event.key === 'F12' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
+      const isInspect = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'i';
+      if (!isF12 && !isInspect) return;
+      event.preventDefault();
+      event.stopPropagation();
+      toggleActiveWebviewDevTools();
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [toggleActiveWebviewDevTools]);
 
   React.useEffect(() => {
     const onMouseUp = (event: MouseEvent) => {
@@ -666,6 +698,30 @@ const BrowserPage: React.FC = () => {
     return true;
   };
 
+  const reloadActivePage = (source?: string) => {
+    const webview = activeWebview();
+    const tabId = activeTabIdRef.current;
+    if (!webview) return false;
+    pendingReloadScriptRef.current = source ? { tabId, source } : null;
+    const onFinishLoad = () => {
+      webview.removeEventListener('did-finish-load', onFinishLoad);
+      const pending = pendingReloadScriptRef.current;
+      if (!pending || pending.tabId !== tabId) return;
+      pendingReloadScriptRef.current = null;
+      if (!pending.source || !webview.executeJavaScript) return;
+      void webview.executeJavaScript(wrapUserscriptForRunAt(pending.source, 'document-idle')).catch(() => undefined);
+    };
+    if (source) webview.addEventListener('did-finish-load', onFinishLoad);
+    try {
+      webview.reload();
+      return true;
+    } catch {
+      if (source) webview.removeEventListener('did-finish-load', onFinishLoad);
+      pendingReloadScriptRef.current = null;
+      return false;
+    }
+  };
+
   const saveDraft = async () => {
     setSaving(true);
     try {
@@ -687,10 +743,10 @@ const BrowserPage: React.FC = () => {
       const matchesPage = pageMatchesScript(
         result.script.matches?.length ? result.script.matches : draft.matches,
       );
-      const applied = Boolean(result.script.enabled) && matchesPage && applyScriptToActivePage(result.script.source);
+      const refreshed = matchesPage && reloadActivePage();
       toast({
-        title: applied
-          ? '스크립트를 저장하고 현재 페이지에 적용했습니다.'
+        title: refreshed
+          ? '스크립트를 저장하고 현재 페이지를 새로고침했습니다.'
           : matchesPage
             ? '스크립트를 저장했습니다.'
             : '스크립트를 저장했습니다. 현재 페이지는 대상이 아니라 적용하지 않았습니다.',
@@ -746,6 +802,14 @@ const BrowserPage: React.FC = () => {
       matches: script.matches,
       source: script.source,
     });
+    if (isBlankBrowserTab({ url: currentUrl }) || !pageMatchesScript(script.matches)) {
+      toast({ title: '스크립트 초안에 넣었습니다. 확인 후 저장하세요.' });
+      return;
+    }
+    if (reloadActivePage(script.source)) {
+      toast({ title: '스크립트 초안에 넣고 현재 페이지를 새로고침했습니다.' });
+      return;
+    }
     toast({ title: '스크립트 초안에 넣었습니다. 확인 후 저장하세요.' });
   };
 
@@ -761,13 +825,7 @@ const BrowserPage: React.FC = () => {
     setDraft(emptyScript());
     setScriptModalOpen(false);
     setScripts((current) => current.filter((script) => script.id !== deletedId));
-    if (matchesPage) {
-      try {
-        activeWebview()?.reload();
-      } catch {
-        // webview methods can throw before attachment
-      }
-    }
+    if (matchesPage) reloadActivePage();
     toast({
       title: matchesPage
         ? '스크립트를 삭제하고 현재 페이지에 반영했습니다.'
@@ -784,11 +842,11 @@ const BrowserPage: React.FC = () => {
       toast({ title: '현재 페이지는 이 스크립트의 대상이 아닙니다.', variant: 'destructive' });
       return;
     }
-    if (!applyScriptToActivePage(script.source)) {
-      toast({ title: '테스트를 적용할 페이지가 없습니다.', variant: 'destructive' });
+    if (reloadActivePage(script.source) || applyScriptToActivePage(script.source)) {
+      toast({ title: '테스트 스크립트를 적용하기 위해 페이지를 새로고침했습니다.' });
       return;
     }
-    toast({ title: '테스트 스크립트를 현재 페이지에 적용했습니다.' });
+    toast({ title: '테스트를 적용할 페이지가 없습니다.', variant: 'destructive' });
   };
 
   const sendChat = async () => {

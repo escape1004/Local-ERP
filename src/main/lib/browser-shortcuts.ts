@@ -4,6 +4,7 @@ export type EmbeddedBrowserShortcutAction =
   | 'back'
   | 'forward'
   | 'stop'
+  | 'devtools'
   | 'focus-address'
   | 'zoom-in'
   | 'zoom-out'
@@ -128,6 +129,9 @@ export function resolveEmbeddedBrowserShortcut(input: ShortcutInput = {}): Embed
 
   if (isKey(input, ['Escape', 'Esc']) && !control && !alt && !shift) return 'stop';
 
+  if (isKey(input, ['F12']) && !control && !alt && !shift) return 'devtools';
+  if (control && shift && !alt && (letter === 'i' || isKey(input, ['i', 'I'], ['KeyI']))) return 'devtools';
+
   return null;
 }
 
@@ -150,6 +154,17 @@ function canGoBack(contents) {
 function canGoForward(contents) {
   try {
     return contents.navigationHistory?.canGoForward?.() ?? contents.canGoForward?.() ?? false;
+  } catch {
+    return false;
+  }
+}
+
+export function toggleEmbeddedBrowserDevTools(contents) {
+  if (!contents || contents.isDestroyed()) return false;
+  try {
+    if (contents.isDevToolsOpened()) contents.closeDevTools();
+    else contents.openDevTools({ mode: 'detach' });
+    return true;
   } catch {
     return false;
   }
@@ -182,6 +197,10 @@ export function applyEmbeddedBrowserShortcut(contents, action: EmbeddedBrowserSh
   }
   if (action === 'stop') {
     contents.stop();
+    return;
+  }
+  if (action === 'devtools') {
+    toggleEmbeddedBrowserDevTools(contents);
     return;
   }
 

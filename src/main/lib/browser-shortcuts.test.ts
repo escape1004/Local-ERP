@@ -26,6 +26,13 @@ test('opens and cycles tabs with Ctrl+T, Ctrl+W, and Ctrl+Tab', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: '9', control: true })).toBe('tab-9');
 });
 
+test('opens guest developer tools with F12 and Ctrl+Shift+I', () => {
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F12' })).toBe('devtools');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'i', control: true, shift: true })).toBe('devtools');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'I', meta: true, shift: true })).toBe('devtools');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F12', control: true })).toBeNull();
+});
+
 test('focuses the address bar with Ctrl+L', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'l', control: true })).toBe('focus-address');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'd', alt: true })).toBe('focus-address');
