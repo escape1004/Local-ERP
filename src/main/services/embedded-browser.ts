@@ -1,5 +1,6 @@
-import { BrowserWindow, session } from 'electron';
+import { BrowserWindow, session, webContents } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
+import { shouldBlockBrowserRequest } from '../lib/browser-tracker-block';
 import { scriptMatchesUrl } from '../lib/browser-url';
 import {
   chromeLikeUserAgent,
@@ -10,7 +11,7 @@ import {
 import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
 import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
-import { log } from '../app/state';
+import { getConfiguredBrowserTrackerBlocking, log } from '../app/state';
 
 export const BROWSER_PARTITION = 'persist:erp-browser';
 
@@ -38,6 +39,30 @@ export function configureEmbeddedBrowserSession() {
     callback(GUEST_PERMISSIONS.has(permission));
   });
   ses.setPermissionCheckHandler((_contents, permission) => GUEST_PERMISSIONS.has(permission));
+  ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    if (!getConfiguredBrowserTrackerBlocking()) {
+      callback({});
+      return;
+    }
+
+    let pageUrl = details.referrer || '';
+    try {
+      const contents = details.webContentsId != null ? webContents.fromId(details.webContentsId) : null;
+      if (contents && !contents.isDestroyed()) {
+        pageUrl = contents.getURL() || pageUrl;
+      }
+    } catch {
+      // Keep the referrer when the guest contents are already gone.
+    }
+
+    callback({
+      cancel: shouldBlockBrowserRequest({
+        pageUrl,
+        requestUrl: details.url,
+        resourceType: details.resourceType,
+      }),
+    });
+  });
 }
 
 export function isEmbeddedBrowserGuest(contents) {

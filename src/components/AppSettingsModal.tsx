@@ -364,6 +364,21 @@ export function AppSettingsModal({
     }
   };
 
+  const handleBrowserTrackerBlockingChange = async (checked: boolean) => {
+    const previous = config?.browserTrackerBlocking !== false;
+    setConfig((prev) => (prev ? { ...prev, browserTrackerBlocking: checked } : prev));
+    setBrowserMessage('');
+    setIsSaving(true);
+    try {
+      const result = await window.electronAPI.setBrowserTrackerBlocking(checked);
+      if (result.success) return;
+      setConfig((prev) => (prev ? { ...prev, browserTrackerBlocking: previous } : prev));
+      setBrowserMessage(result.error || '트래커 차단 설정을 저장하지 못했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleBrowserStartupModeChange = async (mode: 'newtab' | 'continue') => {
     const previousMode = config?.browserStartupMode === 'continue' ? 'continue' : 'newtab';
     setConfig((prev) => (prev ? { ...prev, browserStartupMode: mode } : prev));
@@ -937,6 +952,23 @@ export function AppSettingsModal({
 
   const renderBrowserSection = () => (
     <div className="space-y-4">
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">광고·트래커 차단</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              잘 알려진 외부 광고·트래커만 막습니다. 구글 로그인, 유튜브 재생, 페이스북 로그인처럼 사이트 자체 기능은 그대로 둡니다.
+            </p>
+          </div>
+          <Switch
+            checked={config?.browserTrackerBlocking !== false}
+            onCheckedChange={handleBrowserTrackerBlockingChange}
+            disabled={!config || isSaving}
+            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
+          />
+        </div>
+      </div>
+
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="flex items-start justify-between gap-4">
           <div>

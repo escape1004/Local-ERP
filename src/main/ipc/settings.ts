@@ -52,6 +52,7 @@ import {
   getConfiguredIdleLockMinutes,
   normalizeBrowserStartupMode,
   getConfiguredBrowserStartupMode,
+  getConfiguredBrowserTrackerBlocking,
   getPasswordLockUntil,
   resetPasswordLockState,
   getTranslationLanguageLabel,
@@ -211,6 +212,7 @@ export function registerSettingsHandlers() {
       rememberWindowBounds: appConfig.rememberWindowBounds,
       rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
       browserStartupMode: getConfiguredBrowserStartupMode(),
+      browserTrackerBlocking: getConfiguredBrowserTrackerBlocking(),
       browserLastTabs: browserSession.urls,
       browserLastTabIndex: browserSession.activeIndex,
       muteAudioWhenBackgrounded: appConfig.muteAudioWhenBackgrounded === true,
@@ -404,6 +406,12 @@ export function registerSettingsHandlers() {
     appConfig.browserStartupMode = normalized;
     saveAppConfig();
     return { success: true, browserStartupMode: normalized };
+  });
+
+  ipcMain.handle('setBrowserTrackerBlocking', (_event, enabled) => {
+    appConfig.browserTrackerBlocking = enabled === true;
+    saveAppConfig();
+    return { success: true, browserTrackerBlocking: appConfig.browserTrackerBlocking };
   });
 
   ipcMain.handle('setListThumbnailFit', (_event, fit) => {

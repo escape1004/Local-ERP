@@ -101,6 +101,7 @@ const api: ElectronAPI = {
   setRememberWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberWindowBounds', enabled),
   setRememberBrowserWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberBrowserWindowBounds', enabled),
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => ipcRenderer.invoke('setBrowserStartupMode', mode),
+  setBrowserTrackerBlocking: (enabled: boolean) => ipcRenderer.invoke('setBrowserTrackerBlocking', enabled),
   setMuteAudioWhenBackgrounded: (enabled: boolean) => ipcRenderer.invoke('setMuteAudioWhenBackgrounded', enabled),
   setPictureInPictureActive: (active: boolean) => ipcRenderer.invoke('setPictureInPictureActive', active),
   setViewerFullscreen: (enabled: boolean) => ipcRenderer.invoke('viewer:setFullscreen', enabled),

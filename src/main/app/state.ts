@@ -116,6 +116,7 @@ export const defaultConfig = {
   rememberBrowserWindowBounds: false,
   browserWindowBounds: null,
   browserStartupMode: 'newtab',
+  browserTrackerBlocking: true,
   browserLastUrl: '',
   browserLastTabs: [],
   browserLastTabIndex: 0,
@@ -248,6 +249,10 @@ export function getConfiguredIdleLockMinutes() {
 
 export function getConfiguredBrowserStartupMode() {
   return normalizeBrowserStartupMode(appConfig.browserStartupMode);
+}
+
+export function getConfiguredBrowserTrackerBlocking() {
+  return appConfig.browserTrackerBlocking !== false;
 }
 
 export function getPasswordLockUntil() {
