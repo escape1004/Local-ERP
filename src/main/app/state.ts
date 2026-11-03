@@ -33,6 +33,7 @@ import {
   migrateOpenAiSecrets,
   omitOpenAiSecretsFromConfig
 } from '../services/openai-secret';
+import { normalizeBrowserBlockedDomains } from '../lib/browser-tracker-block';
 
 export { electronDistDir };
 export {
@@ -117,6 +118,7 @@ export const defaultConfig = {
   browserWindowBounds: null,
   browserStartupMode: 'newtab',
   browserTrackerBlocking: true,
+  browserBlockedDomains: [],
   browserLastUrl: '',
   browserLastTabs: [],
   browserLastTabIndex: 0,
@@ -253,6 +255,10 @@ export function getConfiguredBrowserStartupMode() {
 
 export function getConfiguredBrowserTrackerBlocking() {
   return appConfig.browserTrackerBlocking !== false;
+}
+
+export function getConfiguredBrowserBlockedDomains() {
+  return normalizeBrowserBlockedDomains(appConfig.browserBlockedDomains);
 }
 
 export function getPasswordLockUntil() {

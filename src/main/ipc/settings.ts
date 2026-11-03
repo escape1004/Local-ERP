@@ -53,6 +53,7 @@ import {
   normalizeBrowserStartupMode,
   getConfiguredBrowserStartupMode,
   getConfiguredBrowserTrackerBlocking,
+  getConfiguredBrowserBlockedDomains,
   getPasswordLockUntil,
   resetPasswordLockState,
   getTranslationLanguageLabel,
@@ -87,6 +88,7 @@ import {
   db
 } from '../store';
 import { initializeDatabase } from '../database';
+import { normalizeBrowserBlockedDomains } from '../lib/browser-tracker-block';
 import { getFileTypeFromPath, getThumbnailHash } from '../lib/files';
 import { electronDistDir, getFfmpegToolPaths, getUnpackedFfprobePath } from '../ffmpeg-paths';
 import {
@@ -213,6 +215,7 @@ export function registerSettingsHandlers() {
       rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
       browserStartupMode: getConfiguredBrowserStartupMode(),
       browserTrackerBlocking: getConfiguredBrowserTrackerBlocking(),
+      browserBlockedDomains: getConfiguredBrowserBlockedDomains(),
       browserLastTabs: browserSession.urls,
       browserLastTabIndex: browserSession.activeIndex,
       muteAudioWhenBackgrounded: appConfig.muteAudioWhenBackgrounded === true,
@@ -412,6 +415,13 @@ export function registerSettingsHandlers() {
     appConfig.browserTrackerBlocking = enabled === true;
     saveAppConfig();
     return { success: true, browserTrackerBlocking: appConfig.browserTrackerBlocking };
+  });
+
+  ipcMain.handle('setBrowserBlockedDomains', (_event, domains) => {
+    const normalized = normalizeBrowserBlockedDomains(domains);
+    appConfig.browserBlockedDomains = normalized;
+    saveAppConfig();
+    return { success: true, browserBlockedDomains: normalized };
   });
 
   ipcMain.handle('setListThumbnailFit', (_event, fit) => {

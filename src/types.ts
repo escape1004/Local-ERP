@@ -151,6 +151,7 @@ export interface Config {
   rememberBrowserWindowBounds?: boolean;
   browserStartupMode?: 'newtab' | 'continue';
   browserTrackerBlocking?: boolean;
+  browserBlockedDomains?: string[];
   browserLastTabs?: string[];
   browserLastTabIndex?: number;
   muteAudioWhenBackgrounded?: boolean;
@@ -328,6 +329,7 @@ export interface ElectronAPI {
   setRememberBrowserWindowBounds: (enabled: boolean) => Promise<{ success: boolean; rememberBrowserWindowBounds?: boolean }>;
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => Promise<{ success: boolean; browserStartupMode?: 'newtab' | 'continue'; error?: string }>;
   setBrowserTrackerBlocking: (enabled: boolean) => Promise<{ success: boolean; browserTrackerBlocking?: boolean; error?: string }>;
+  setBrowserBlockedDomains: (domains: string[]) => Promise<{ success: boolean; browserBlockedDomains?: string[]; error?: string }>;
   setMuteAudioWhenBackgrounded: (enabled: boolean) => Promise<{ success: boolean }>;
   setPictureInPictureActive: (active: boolean) => Promise<{ success: boolean }>;
   setViewerFullscreen: (enabled: boolean) => Promise<{ success: boolean; isFullscreen: boolean; error?: string }>;

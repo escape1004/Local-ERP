@@ -1,6 +1,12 @@
 import { BrowserWindow, session, webContents } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
-import { shouldBlockBrowserRequest } from '../lib/browser-tracker-block';
+import {
+  isUserBlockedBrowserUrl,
+  shouldBlockBounceNavigation,
+  shouldBlockBrowserRequest,
+  shouldBlockForcedWindowOpen,
+  siteKeyFromBrowserUrl,
+} from '../lib/browser-tracker-block';
 import { scriptMatchesUrl } from '../lib/browser-url';
 import {
   chromeLikeUserAgent,
@@ -11,7 +17,7 @@ import {
 import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
 import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
-import { getConfiguredBrowserTrackerBlocking, log } from '../app/state';
+import { getConfiguredBrowserBlockedDomains, getConfiguredBrowserTrackerBlocking, log } from '../app/state';
 
 export const BROWSER_PARTITION = 'persist:erp-browser';
 
@@ -28,6 +34,49 @@ const GUEST_PERMISSIONS = new Set([
   'window-management',
 ]);
 
+const BOUNCE_GUARD_MS = 5000;
+const bounceGuards = [];
+
+function queueForcedOpenBounceGuard(url) {
+  const site = siteKeyFromBrowserUrl(url);
+  if (!site) return;
+  const now = Date.now();
+  for (let index = bounceGuards.length - 1; index >= 0; index -= 1) {
+    if (bounceGuards[index].expiresAt <= now) bounceGuards.splice(index, 1);
+  }
+  bounceGuards.push({ site, expiresAt: now + BOUNCE_GUARD_MS });
+}
+
+function takeForcedOpenBounceGuard(url) {
+  const site = siteKeyFromBrowserUrl(url);
+  if (!site) return null;
+  const now = Date.now();
+  for (let index = bounceGuards.length - 1; index >= 0; index -= 1) {
+    const guard = bounceGuards[index];
+    if (guard.expiresAt <= now) {
+      bounceGuards.splice(index, 1);
+      continue;
+    }
+    if (guard.site === site) {
+      bounceGuards.splice(index, 1);
+      return { site, expiresAt: now + BOUNCE_GUARD_MS };
+    }
+  }
+  return null;
+}
+
+function attachPopupDestinationGuard(contents, openerUrl) {
+  const site = siteKeyFromBrowserUrl(openerUrl);
+  if (!site || !contents) return;
+  contents.__erpBounceGuard = { site, expiresAt: Date.now() + 15000 };
+}
+
+function closeOwnedPopupWindow(contents) {
+  const win = BrowserWindow.fromWebContents(contents);
+  if (!win || win.isDestroyed() || win.webContents !== contents) return;
+  win.close();
+}
+
 let browserSessionConfigured = false;
 
 export function configureEmbeddedBrowserSession() {
@@ -40,7 +89,9 @@ export function configureEmbeddedBrowserSession() {
   });
   ses.setPermissionCheckHandler((_contents, permission) => GUEST_PERMISSIONS.has(permission));
   ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
-    if (!getConfiguredBrowserTrackerBlocking()) {
+    const blockedDomains = getConfiguredBrowserBlockedDomains();
+    const trackerBlocking = getConfiguredBrowserTrackerBlocking();
+    if (!trackerBlocking && blockedDomains.length === 0) {
       callback({});
       return;
     }
@@ -60,6 +111,8 @@ export function configureEmbeddedBrowserSession() {
         pageUrl,
         requestUrl: details.url,
         resourceType: details.resourceType,
+        blockedDomains,
+        trackerBlocking,
       }),
     });
   });
@@ -139,10 +192,25 @@ export function attachEmbeddedBrowserGuest(contents) {
   contents.__erpBrowserAttached = true;
 
   contents.setWindowOpenHandler((details) => {
+    const openerUrl = contents.getURL();
+    const parsed = details.url && details.url !== 'about:blank'
+      ? parseExternalHttpUrl(details.url)
+      : null;
+
+    if (
+      parsed
+      && shouldBlockForcedWindowOpen({
+        openerUrl,
+        targetUrl: parsed.toString(),
+        disposition: details.disposition,
+        blockedDomains: getConfiguredBrowserBlockedDomains(),
+        trackerBlocking: getConfiguredBrowserTrackerBlocking(),
+      })
+    ) {
+      return { action: 'deny' };
+    }
+
     if (shouldOpenEmbeddedBrowserPopup(details)) {
-      const parsed = details.url && details.url !== 'about:blank'
-        ? parseExternalHttpUrl(details.url)
-        : null;
       if (details.url && details.url !== 'about:blank' && !parsed) {
         return { action: 'deny' };
       }
@@ -160,9 +228,11 @@ export function attachEmbeddedBrowserGuest(contents) {
       };
     }
 
-    const parsed = parseExternalHttpUrl(details.url);
     if (parsed) {
       const nextUrl = parsed.toString();
+      if (getConfiguredBrowserTrackerBlocking()) {
+        queueForcedOpenBounceGuard(nextUrl);
+      }
       const host = contents.hostWebContents;
       if (host && !host.isDestroyed()) {
         host.send('browser:open-url', nextUrl, {
@@ -180,6 +250,9 @@ export function attachEmbeddedBrowserGuest(contents) {
   contents.on('did-create-window', (childWindow) => {
     if (!childWindow || childWindow.isDestroyed()) return;
     attachEmbeddedBrowserGuest(childWindow.webContents);
+    if (getConfiguredBrowserTrackerBlocking()) {
+      attachPopupDestinationGuard(childWindow.webContents, contents.getURL());
+    }
     childWindow.setMenuBarVisibility(false);
     childWindow.show();
   });
@@ -187,12 +260,40 @@ export function attachEmbeddedBrowserGuest(contents) {
   contents.on('will-navigate', (event, targetUrl) => {
     if (!isAllowedEmbeddedBrowserUrl(targetUrl)) {
       event.preventDefault();
+      return;
+    }
+    const blockedDomains = getConfiguredBrowserBlockedDomains();
+    if (isUserBlockedBrowserUrl(targetUrl, blockedDomains)) {
+      event.preventDefault();
+      closeOwnedPopupWindow(contents);
+      return;
+    }
+    if (!contents.__erpBounceGuard && getConfiguredBrowserTrackerBlocking()) {
+      const matched = takeForcedOpenBounceGuard(targetUrl);
+      if (matched) contents.__erpBounceGuard = matched;
     }
   });
 
   contents.on('will-redirect', (event, targetUrl) => {
     if (!isAllowedEmbeddedBrowserUrl(targetUrl)) {
       event.preventDefault();
+      return;
+    }
+    const blockedDomains = getConfiguredBrowserBlockedDomains();
+    if (isUserBlockedBrowserUrl(targetUrl, blockedDomains)) {
+      event.preventDefault();
+      closeOwnedPopupWindow(contents);
+      return;
+    }
+    const guard = contents.__erpBounceGuard;
+    if (
+      getConfiguredBrowserTrackerBlocking()
+      && guard
+      && Date.now() <= guard.expiresAt
+      && shouldBlockBounceNavigation(guard.site, targetUrl, blockedDomains)
+    ) {
+      event.preventDefault();
+      closeOwnedPopupWindow(contents);
     }
   });
 

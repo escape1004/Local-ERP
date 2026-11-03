@@ -140,6 +140,7 @@ export function AppSettingsModal({
   const [viewerMessage, setViewerMessage] = useState('');
   const [viewerAutoPlayMessage, setViewerAutoPlayMessage] = useState('');
   const [browserMessage, setBrowserMessage] = useState('');
+  const [blockedDomainInput, setBlockedDomainInput] = useState('');
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
@@ -377,6 +378,51 @@ export function AppSettingsModal({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const persistBrowserBlockedDomains = async (domains: string[]) => {
+    const previous = config?.browserBlockedDomains ?? [];
+    setConfig((prev) => (prev ? { ...prev, browserBlockedDomains: domains } : prev));
+    setBrowserMessage('');
+    setIsSaving(true);
+    try {
+      const result = await window.electronAPI.setBrowserBlockedDomains(domains);
+      if (result.success) {
+        const saved = result.browserBlockedDomains ?? domains;
+        setConfig((prev) => (prev ? { ...prev, browserBlockedDomains: saved } : prev));
+        return saved;
+      }
+      setConfig((prev) => (prev ? { ...prev, browserBlockedDomains: previous } : prev));
+      setBrowserMessage(result.error || '차단 도메인을 저장하지 못했습니다.');
+      return null;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleAddBlockedDomain = async () => {
+    const nextDomain = blockedDomainInput.trim();
+    if (!nextDomain) return;
+    const previous = config?.browserBlockedDomains ?? [];
+    if (previous.length >= 100) {
+      setBrowserMessage('차단 도메인은 100개까지 추가할 수 있습니다.');
+      return;
+    }
+    const saved = await persistBrowserBlockedDomains([...previous, nextDomain]);
+    if (!saved) return;
+    if (saved.length === previous.length) {
+      setBrowserMessage('이미 추가된 주소이거나 도메인 형식이 올바르지 않습니다.');
+      return;
+    }
+    setBlockedDomainInput('');
+    setBrowserMessage('차단 도메인을 추가했습니다.');
+  };
+
+  const handleRemoveBlockedDomain = async (domain: string) => {
+    const previous = config?.browserBlockedDomains ?? [];
+    const saved = await persistBrowserBlockedDomains(previous.filter((item) => item !== domain));
+    if (!saved || saved.includes(domain)) return;
+    setBrowserMessage('차단 도메인을 삭제했습니다.');
   };
 
   const handleBrowserStartupModeChange = async (mode: 'newtab' | 'continue') => {
@@ -957,7 +1003,7 @@ export function AppSettingsModal({
           <div>
             <div className="text-sm font-medium text-white">광고·트래커 차단</div>
             <p className="text-sm text-discord-muted mt-2 leading-6">
-              잘 알려진 외부 광고·트래커만 막습니다. 구글 로그인, 유튜브 재생, 페이스북 로그인처럼 사이트 자체 기능은 그대로 둡니다.
+              잘 알려진 외부 광고·트래커와, 다른 사이트를 강제로 띄우는 광고 탭·팝업을 막습니다. 구글 로그인, 유튜브 재생, Ctrl 클릭으로 직접 연 링크는 그대로 둡니다.
             </p>
           </div>
           <Switch
@@ -967,6 +1013,68 @@ export function AppSettingsModal({
             className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
           />
         </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">특정 도메인 차단</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          주소창에 뜬 광고·피싱 주소를 넣으면 그 주소와 하위 도메인으로의 이동을 막습니다. 보고 있는 사이트 자체는 넣지 마세요.
+        </p>
+
+        <div className="mt-5">
+          <div className="flex max-w-xl gap-2">
+            <Input
+              value={blockedDomainInput}
+              onChange={(e) => {
+                setBlockedDomainInput(e.target.value);
+                setBrowserMessage('');
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  void handleAddBlockedDomain();
+                }
+              }}
+              placeholder="example.com 또는 https://ads.example.com/path"
+              disabled={!config || isSaving}
+              className="bg-discord-bg border-gray-600 text-discord-text"
+            />
+            <Button
+              type="button"
+              onClick={() => void handleAddBlockedDomain()}
+              disabled={!config || isSaving || !blockedDomainInput.trim()}
+              className="bg-discord-accent hover:bg-blue-600 text-white"
+            >
+              <Plus size={16} />
+            </Button>
+          </div>
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            {(config?.browserBlockedDomains ?? []).length === 0 ? (
+              <span className="text-xs text-discord-muted">등록된 차단 도메인이 없습니다.</span>
+            ) : (
+              (config?.browserBlockedDomains ?? []).map((domain) => (
+                <span
+                  key={domain}
+                  className="inline-flex items-center gap-2 rounded border border-gray-700 bg-discord-bg px-2 py-1 text-xs text-discord-text"
+                >
+                  {domain}
+                  <button
+                    type="button"
+                    onClick={() => void handleRemoveBlockedDomain(domain)}
+                    disabled={isSaving}
+                    className="text-discord-muted hover:text-red-400 disabled:opacity-50"
+                    aria-label={`${domain} 삭제`}
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </span>
+              ))
+            )}
+          </div>
+        </div>
+
+        {browserMessage ? <p className="text-sm text-discord-muted mt-3">{browserMessage}</p> : null}
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">

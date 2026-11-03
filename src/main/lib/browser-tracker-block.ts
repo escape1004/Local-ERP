@@ -58,6 +58,23 @@ const NEVER_BLOCK_SUFFIXES = [
   'googlevideo.com',
 ];
 
+const LOGIN_POPUP_SUFFIXES = [
+  'amazon.co.kr',
+  'amazon.com',
+  'discord.com',
+  'dropbox.com',
+  'github.com',
+  'gitlab.com',
+  'kakao.co.kr',
+  'kakao.com',
+  'line.me',
+  'naver.com',
+  'paypal.com',
+  'slack.com',
+  'steamcommunity.com',
+  'twitch.tv',
+];
+
 const BLOCKED_HOST_SUFFIXES = [
   '2mdn.net',
   '3lift.com',
@@ -87,8 +104,12 @@ const BLOCKED_HOST_SUFFIXES = [
   'mgid.com',
   'moatads.com',
   'openx.net',
+  'onclickads.net',
   'outbrain.com',
   'outbrainimg.com',
+  'popads.net',
+  'popcash.net',
+  'propellerads.com',
   'pubmatic.com',
   'quantserve.com',
   'realclick.co.kr',
@@ -126,6 +147,53 @@ function hostMatchesAnySuffix(hostname, suffixes) {
   return suffixes.some((suffix) => hostMatchesSuffix(hostname, suffix));
 }
 
+export const MAX_BROWSER_BLOCKED_DOMAINS = 100;
+
+export function parseBrowserBlockedDomain(raw) {
+  const trimmed = String(raw || '').trim().toLowerCase();
+  if (!trimmed || trimmed.length > 253) return null;
+
+  let host = trimmed;
+  if (host.startsWith('*.')) host = host.slice(2);
+  if (host.includes('://') || host.includes('/') || host.includes(':')) {
+    try {
+      const parsed = new URL(host.includes('://') ? host : `https://${host}`);
+      host = String(parsed.hostname || '').toLowerCase();
+    } catch {
+      return null;
+    }
+  }
+
+  host = host.replace(/^\./, '').replace(/\.$/, '');
+  if (!/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+$/.test(host)) {
+    return null;
+  }
+  return host;
+}
+
+export function normalizeBrowserBlockedDomains(value) {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set();
+  const domains = [];
+  value.forEach((item) => {
+    const host = parseBrowserBlockedDomain(item);
+    if (!host || seen.has(host) || domains.length >= MAX_BROWSER_BLOCKED_DOMAINS) return;
+    seen.add(host);
+    domains.push(host);
+  });
+  return domains;
+}
+
+export function isUserBlockedBrowserHost(hostname, blockedDomains) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host || !Array.isArray(blockedDomains) || blockedDomains.length === 0) return false;
+  return blockedDomains.some((domain) => hostMatchesSuffix(host, domain));
+}
+
+export function isUserBlockedBrowserUrl(url, blockedDomains) {
+  return isUserBlockedBrowserHost(hostnameFromUrl(url), blockedDomains);
+}
+
 export function getRegistrableDomain(hostname) {
   const host = String(hostname || '').toLowerCase().replace(/\.$/, '');
   if (!host) return '';
@@ -138,14 +206,59 @@ export function getRegistrableDomain(hostname) {
   return lastTwo;
 }
 
+export function hostnameFromBrowserUrl(value) {
+  return hostnameFromUrl(value);
+}
+
+export function siteKeyFromBrowserUrl(value) {
+  return getRegistrableDomain(hostnameFromUrl(value));
+}
+
+export function isTrustedBrowserHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  if (!host) return false;
+  return NEVER_BLOCK_EXACT.has(host)
+    || hostMatchesAnySuffix(host, NEVER_BLOCK_SUFFIXES)
+    || hostMatchesAnySuffix(host, LOGIN_POPUP_SUFFIXES);
+}
+
+export function isBlockedTrackerHost(hostname) {
+  const host = String(hostname || '').toLowerCase();
+  return Boolean(host) && hostMatchesAnySuffix(host, BLOCKED_HOST_SUFFIXES);
+}
+
+export function shouldBlockForcedWindowOpen(options) {
+  const targetHost = hostnameFromUrl(options?.targetUrl);
+  if (!targetHost) return false;
+  if (isUserBlockedBrowserHost(targetHost, options?.blockedDomains)) return true;
+  if (options?.trackerBlocking === false) return false;
+  if (String(options?.disposition || '') === 'background-tab') return false;
+  if (isTrustedBrowserHost(targetHost)) return false;
+  if (isBlockedTrackerHost(targetHost)) return true;
+
+  const openerHost = hostnameFromUrl(options?.openerUrl);
+  if (!openerHost) return false;
+  return getRegistrableDomain(openerHost) !== getRegistrableDomain(targetHost);
+}
+
+export function shouldBlockBounceNavigation(openerSite, targetUrl, blockedDomains) {
+  const targetHost = hostnameFromUrl(targetUrl);
+  if (!targetHost) return false;
+  if (isUserBlockedBrowserHost(targetHost, blockedDomains)) return true;
+  if (!openerSite) return false;
+  if (isTrustedBrowserHost(targetHost)) return false;
+  return getRegistrableDomain(targetHost) !== openerSite;
+}
+
 export function shouldBlockBrowserRequest(options) {
   const pageUrl = options?.pageUrl;
   const requestUrl = options?.requestUrl;
   const resourceType = options?.resourceType;
-  if (resourceType === 'mainFrame') return false;
-
   const requestHost = hostnameFromUrl(requestUrl);
   if (!requestHost) return false;
+  if (isUserBlockedBrowserHost(requestHost, options?.blockedDomains)) return true;
+  if (options?.trackerBlocking === false) return false;
+  if (resourceType === 'mainFrame') return false;
   if (NEVER_BLOCK_EXACT.has(requestHost) || hostMatchesAnySuffix(requestHost, NEVER_BLOCK_SUFFIXES)) {
     return false;
   }
