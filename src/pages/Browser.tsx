@@ -5,7 +5,6 @@ import {
   ArrowRight,
   Bookmark,
   Code2,
-  Globe,
   PanelRightClose,
   PanelRightOpen,
   RotateCw,
@@ -13,6 +12,7 @@ import {
   Star,
 } from 'lucide-react';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
+import { BrowserNewTab } from '../components/browser/BrowserNewTab';
 import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
 import { BrowserScriptModal } from '../components/browser/BrowserScriptModal';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
@@ -1188,15 +1188,15 @@ const BrowserPage: React.FC = () => {
               />
             ))}
             {(!preloadPath || !sessionReady) && (
-              <div className="absolute inset-0 flex items-center justify-center text-sm text-discord-muted">브라우저 준비 중...</div>
+              <div className="absolute inset-0 z-20 flex items-center justify-center bg-discord-bg text-sm text-discord-muted">브라우저 준비 중...</div>
             )}
-            {isBlankBrowserTab({ url: currentUrl }) && !loading && (
-              <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-discord-bg/80">
-                <div className="text-center text-sm text-discord-muted">
-                  <Globe className="mx-auto mb-2" size={28} />
-                  주소를 입력하거나 북마크를 선택하세요
-                </div>
-              </div>
+            {sessionReady && isBlankBrowserTab({ url: currentUrl }) && !loading && (
+              <BrowserNewTab
+                shortcuts={barBookmarks}
+                bookmarks={bookmarks}
+                onOpen={openBookmark}
+                onNavigate={navigateTo}
+              />
             )}
           </div>
 
