@@ -39,6 +39,8 @@ test('builds a prompt from the active tab snapshot and records', () => {
   expect(prompt).toContain('<h1>Example video</h1>');
   expect(prompt).not.toContain('alert(1)');
   expect(prompt).toContain('await window.erp.findRecordsByUrl');
+  expect(prompt).toContain('```json');
+  expect(prompt).toContain('Never give script only as ```javascript');
 });
 
 test('notes when the current tab html was not captured', () => {
@@ -68,6 +70,25 @@ test('extracts a script from a conversational json reply', () => {
     source: 'document.body.style.outline = "3px solid blue";',
   });
   expect(visibleBrowserAiReply(reply, extractBrowserScriptFromReply(reply))).toBe('파란 테두리를 그리는 스크립트입니다.');
+});
+
+test('extracts a script from a javascript fence when json is missing', () => {
+  const reply = [
+    '파란 테두리를 그리는 코드입니다.',
+    '```javascript',
+    'document.body.style.outline = "3px solid blue";',
+    '```',
+  ].join('\n');
+  expect(extractBrowserScriptFromReply(reply)).toEqual({
+    name: '새 스크립트',
+    matches: ['*'],
+    source: 'document.body.style.outline = "3px solid blue";',
+  });
+  expect(visibleBrowserAiReply(reply, extractBrowserScriptFromReply(reply))).toBe('파란 테두리를 그리는 코드입니다.');
+});
+
+test('does not treat a clarifying question as a script', () => {
+  expect(extractBrowserScriptFromReply('어떤 색으로 테두리를 그릴까요?')).toBeNull();
 });
 
 test('keeps recent chat turns and only attaches tab context when asked', () => {
