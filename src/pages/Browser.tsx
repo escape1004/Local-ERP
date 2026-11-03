@@ -1153,13 +1153,22 @@ const BrowserPage: React.FC = () => {
                         저장된 스크립트가 없습니다.
                       </p>
                     )}
-                    {scripts.map((script) => (
-                      <BrowserTooltip key={script.id} label={`${script.name} (${script.enabled ? '켜짐' : '꺼짐'})`}>
+                    {scripts.map((script) => {
+                      const runningHere = Boolean(script.enabled) && pageMatchesScript(script.matches);
+                      return (
+                      <BrowserTooltip
+                        key={script.id}
+                        label={`${script.name} (${runningHere ? '이 페이지에서 작동 중' : script.enabled ? '이 페이지 대상 아님' : '꺼짐'})`}
+                      >
                         <button
                           type="button"
                           onClick={() => openScriptModal(script)}
-                          className="flex w-full items-start justify-between rounded-md px-2 py-1.5 text-left text-discord-text hover:bg-discord-hover"
+                          className="flex w-full items-start rounded-md px-2 py-1.5 text-left text-discord-text hover:bg-discord-hover"
                         >
+                          <span
+                            className={`mt-1.5 mr-2 h-2 w-2 shrink-0 rounded-full ${runningHere ? 'bg-green-500' : 'bg-gray-500'}`}
+                            aria-hidden
+                          />
                           <span className="min-w-0 flex-1">
                             <span className="block truncate text-sm">{script.name}</span>
                             {script.matches.length > 0 && (
@@ -1173,7 +1182,8 @@ const BrowserPage: React.FC = () => {
                           </span>
                         </button>
                       </BrowserTooltip>
-                    ))}
+                      );
+                    })}
                   </div>
                   <div className="shrink-0 border-t border-gray-800 p-3">
                     <BrowserTooltip label="새 스크립트 만들기">
