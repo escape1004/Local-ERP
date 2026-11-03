@@ -293,6 +293,13 @@ export interface BrowserRecordMatch {
   urls: string[];
 }
 
+export interface BrowserPasswordSummary {
+  id: string;
+  origin: string;
+  username: string;
+  updatedAt: string;
+}
+
 export interface ElectronAPI {
   getAppUpdateState: () => Promise<AppUpdateState>;
   checkForAppUpdates: () => Promise<AppUpdateState>;
@@ -405,6 +412,11 @@ export interface ElectronAPI {
     source?: string;
     error?: string;
   }>;
+  listBrowserPasswords: () => Promise<BrowserPasswordSummary[]>;
+  commitBrowserPassword: (pendingId: string) => Promise<{ success: boolean; updated?: boolean; skipped?: string; error?: string }>;
+  dismissBrowserPassword: (pendingId: string) => Promise<{ success: boolean; error?: string }>;
+  deleteBrowserPassword: (id: string) => Promise<{ success: boolean; error?: string }>;
+  neverSaveBrowserOrigin: (origin: string) => Promise<{ success: boolean; origin?: string; error?: string }>;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

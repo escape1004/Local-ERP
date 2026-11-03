@@ -195,6 +195,11 @@ const api: ElectronAPI = {
   deleteBrowserScript: (id) => ipcRenderer.invoke('browser:deleteScript', id),
   findBrowserRecordsByUrl: (url) => ipcRenderer.invoke('browser:findRecordsByUrl', url),
   generateBrowserScript: (payload) => ipcRenderer.invoke('browser:generateScript', payload),
+  listBrowserPasswords: () => ipcRenderer.invoke('browser:listPasswords'),
+  commitBrowserPassword: (pendingId) => ipcRenderer.invoke('browser:commitPassword', pendingId),
+  dismissBrowserPassword: (pendingId) => ipcRenderer.invoke('browser:dismissPassword', pendingId),
+  deleteBrowserPassword: (id) => ipcRenderer.invoke('browser:deletePassword', id),
+  neverSaveBrowserOrigin: (origin) => ipcRenderer.invoke('browser:neverSaveOrigin', origin),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api); 

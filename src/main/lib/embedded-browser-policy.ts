@@ -53,11 +53,80 @@ export function popupBoundsFromFeatures(features?: string, defaults: { width: nu
   };
 }
 
-export function chromeLikeUserAgent(userAgent) {
-  return String(userAgent || '')
+export function chromeMajorFromVersion(version) {
+  const major = String(version || '').split('.')[0];
+  return /^\d+$/.test(major) ? major : '';
+}
+
+export function chromeLikeUserAgent(userAgent, chromeVersion) {
+  let next = String(userAgent || '')
     .replace(/\sElectron\/\S+/gi, '')
     .replace(/\sLocal ERP\/\S+/g, '')
     .replace(/\slocal-erp\/\S+/gi, '')
     .replace(/\s+/g, ' ')
     .trim();
+  const major = chromeMajorFromVersion(chromeVersion);
+  if (major) {
+    next = next.replace(/Chrome\/[\d.]+/i, `Chrome/${major}.0.0.0`);
+  }
+  return next;
+}
+
+function withoutHeader(headers, name) {
+  const target = String(name || '').toLowerCase();
+  const next = { ...(headers || {}) };
+  Object.keys(next).forEach((key) => {
+    if (key.toLowerCase() === target) delete next[key];
+  });
+  return next;
+}
+
+function headerValue(headers, name) {
+  const target = String(name || '').toLowerCase();
+  const key = Object.keys(headers || {}).find((item) => item.toLowerCase() === target);
+  return key ? String(headers[key] ?? '') : '';
+}
+
+export function applyChromeLikeClientHints(headers, chromeVersion, platform = 'win32') {
+  const major = chromeMajorFromVersion(chromeVersion);
+  let next = { ...(headers || {}) };
+  const userAgent = chromeLikeUserAgent(headerValue(next, 'user-agent'), chromeVersion);
+  if (userAgent) {
+    next = withoutHeader(next, 'user-agent');
+    next['User-Agent'] = userAgent;
+  }
+  if (!major) return next;
+
+  next = withoutHeader(next, 'sec-ch-ua');
+  next['sec-ch-ua'] = `"Google Chrome";v="${major}", "Chromium";v="${major}", "Not.A/Brand";v="99"`;
+  next = withoutHeader(next, 'sec-ch-ua-full-version-list');
+  next['sec-ch-ua-full-version-list'] = `"Google Chrome";v="${major}.0.0.0", "Chromium";v="${major}.0.0.0", "Not.A/Brand";v="10.0.0.0"`;
+  next = withoutHeader(next, 'sec-ch-ua-mobile');
+  next['sec-ch-ua-mobile'] = '?0';
+  next = withoutHeader(next, 'sec-ch-ua-platform');
+  next['sec-ch-ua-platform'] = platform === 'darwin' ? '"macOS"' : platform === 'linux' ? '"Linux"' : '"Windows"';
+  return next;
+}
+
+export function isBotChallengeUrl(url) {
+  try {
+    const parsed = new URL(String(url || ''));
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+    if (
+      host === 'challenges.cloudflare.com'
+      || host.endsWith('.challenges.cloudflare.com')
+      || host === 'hcaptcha.com'
+      || host.endsWith('.hcaptcha.com')
+      || host === 'recaptcha.net'
+      || host.endsWith('.recaptcha.net')
+      || (host === 'www.google.com' && path.startsWith('/recaptcha'))
+    ) {
+      return true;
+    }
+    return path.includes('/cdn-cgi/challenge-platform') || path.includes('/cdn-cgi/turnstile');
+  } catch {
+    return false;
+  }
 }

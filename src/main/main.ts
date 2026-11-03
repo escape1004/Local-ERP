@@ -4,6 +4,11 @@ if (process.platform === 'win32') {
   app.setAppUserModelId('com.escape.local-erp');
 }
 
+app.commandLine.appendSwitch(
+  'disable-features',
+  'TrackingProtection3pcd,ThirdPartyStoragePartitioning',
+);
+
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {

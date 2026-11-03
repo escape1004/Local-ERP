@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import type { AppUpdateState, Config } from '../types';
+import type { AppUpdateState, BrowserPasswordSummary, Config } from '../types';
 import { DEFAULT_DATE_PARSE_FORMATS } from './ui/date-picker';
 import { useLoadingStore } from '../hooks/useLoadingStore';
 import { DEFAULT_TRANSLATION_DISPLAY_MODE, OPENAI_TRANSLATION_MODEL, OPENAI_TRANSLATION_MODELS, type TranslationDisplayMode } from '../lib/translation';
@@ -142,6 +142,8 @@ export function AppSettingsModal({
   const [viewerAutoPlayMessage, setViewerAutoPlayMessage] = useState('');
   const [browserMessage, setBrowserMessage] = useState('');
   const [blockedDomainInput, setBlockedDomainInput] = useState('');
+  const [browserPasswords, setBrowserPasswords] = useState<BrowserPasswordSummary[]>([]);
+  const [browserPasswordMessage, setBrowserPasswordMessage] = useState('');
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
@@ -221,6 +223,15 @@ export function AppSettingsModal({
 
     let cancelled = false;
 
+    window.electronAPI.listBrowserPasswords()
+      .then((items) => {
+        if (cancelled) return;
+        setBrowserPasswords(Array.isArray(items) ? items : []);
+      })
+      .catch(() => {
+        if (!cancelled) setBrowserPasswords([]);
+      });
+
     window.electronAPI
       .getConfig()
       .then((nextConfig: Config) => {
@@ -244,6 +255,7 @@ export function AppSettingsModal({
         setViewerMessage('');
         setViewerAutoPlayMessage('');
         setBrowserMessage('');
+        setBrowserPasswordMessage('');
         setListMessage('');
         setDateFormatInput('');
         setDateFormatMessage('');
@@ -350,6 +362,21 @@ export function AppSettingsModal({
     setIsSaving(true);
     try {
       await window.electronAPI.setRememberWindowBounds(checked);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleDeleteBrowserPassword = async (id: string) => {
+    setBrowserPasswordMessage('');
+    setIsSaving(true);
+    try {
+      const result = await window.electronAPI.deleteBrowserPassword(id);
+      if (!result.success) {
+        setBrowserPasswordMessage(result.error || '저장된 로그인을 삭제하지 못했습니다.');
+        return;
+      }
+      setBrowserPasswords((current) => current.filter((item) => item.id !== id));
     } finally {
       setIsSaving(false);
     }
@@ -999,6 +1026,40 @@ export function AppSettingsModal({
 
   const renderBrowserSection = () => (
     <div className="space-y-4">
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">저장된 로그인</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          이 컴퓨터의 OS 암호화로만 보관합니다. 비밀번호 자체는 목록에 보이지 않으며, 저장·입력 전에 브라우저에서 한 번 더 확인합니다.
+        </p>
+        <div className="mt-5 space-y-2">
+          {browserPasswords.length === 0 ? (
+            <span className="text-xs text-discord-muted">저장된 로그인이 없습니다.</span>
+          ) : (
+            browserPasswords.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded border border-gray-700 bg-discord-bg px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-discord-text">{item.origin}</div>
+                  <div className="truncate text-xs text-discord-muted">{item.username}</div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleDeleteBrowserPassword(item.id)}
+                  disabled={isSaving}
+                  className="text-discord-muted hover:text-red-400 disabled:opacity-50"
+                  aria-label={`${item.origin} ${item.username} 삭제`}
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+        {browserPasswordMessage ? <p className="text-sm text-discord-muted mt-3">{browserPasswordMessage}</p> : null}
+      </div>
+
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="flex items-start justify-between gap-4">
           <div>

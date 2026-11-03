@@ -68,6 +68,16 @@ test('never blocks login, google, or youtube hosts', () => {
     resourceType: 'script',
   }), false);
   assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/login',
+    requestUrl: 'https://challenges.cloudflare.com/cdn-cgi/challenge-platform/h/b/turnstile/g',
+    resourceType: 'script',
+  }), false);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/login',
+    requestUrl: 'https://newassets.hcaptcha.com/captcha/v1/setup.js',
+    resourceType: 'script',
+  }), false);
+  assert.equal(shouldBlockBrowserRequest({
     pageUrl: 'https://example.com/',
     requestUrl: 'https://www.googletagmanager.com/gtm.js?id=GTM-TEST',
     resourceType: 'script',

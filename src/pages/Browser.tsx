@@ -31,6 +31,11 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/toolti
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
 import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
+import {
+  parsePasswordFillPrompt,
+  parsePasswordSavePrompt,
+  type BrowserPasswordPrompt,
+} from '../lib/browserPasswordPrompt';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 import { scriptMatchesUrl } from '../main/lib/browser-url';
@@ -69,6 +74,7 @@ type EmbeddedWebview = HTMLElement & {
   getZoomFactor?: () => number;
   setZoomFactor?: (factor: number) => void;
   executeJavaScript?: (code: string) => Promise<unknown>;
+  send?: (channel: string, ...args: unknown[]) => void;
   openDevTools?: () => void;
   closeDevTools?: () => void;
   isDevToolsOpened?: () => boolean;
@@ -153,6 +159,7 @@ const BrowserPage: React.FC = () => {
   const [generating, setGenerating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = React.useState(false);
+  const [passwordPrompts, setPasswordPrompts] = React.useState<Record<string, BrowserPasswordPrompt>>({});
 
   tabsRef.current = tabs;
   activeTabIdRef.current = activeTabId;
@@ -293,6 +300,15 @@ const BrowserPage: React.FC = () => {
     if (action === 'back') webview.goBack();
     else webview.goForward();
   }, [activeWebview]);
+
+  const clearPasswordPrompt = React.useCallback((tabId: string) => {
+    setPasswordPrompts((current) => {
+      if (!current[tabId]) return current;
+      const next = { ...current };
+      delete next[tabId];
+      return next;
+    });
+  }, []);
 
   const applyPageZoom = React.useCallback((direction: 'in' | 'out' | 'reset') => {
     const webview = activeWebview();
@@ -526,6 +542,40 @@ const BrowserPage: React.FC = () => {
     };
   }, [applyPageZoom, navigateFromMouseButton]);
 
+  const handleWebviewIpcRef = React.useRef<(tabId: string, message: WebviewIpcMessageEvent) => void>(() => undefined);
+  handleWebviewIpcRef.current = (tabId, message) => {
+    if (message.channel === 'browser:mouse-button') {
+      navigateFromMouseButton(Number(message.args?.[0]));
+      return;
+    }
+    if (message.channel === 'browser:zoom-wheel') {
+      applyPageZoom(Number(message.args?.[0]) < 0 ? 'in' : 'out');
+      return;
+    }
+    if (message.channel === 'browser:open-tab') {
+      const first = message.args?.[0];
+      const url = typeof first === 'string' ? first : (first as { url?: string } | undefined)?.url;
+      const background = typeof first === 'object' && first
+        ? (first as { background?: boolean }).background !== false
+        : message.args?.[1] !== false;
+      if (url) openTab(url, { background, newTab: true });
+      return;
+    }
+    if (message.channel === 'browser:password-prompt') {
+      const prompt = parsePasswordSavePrompt(message.args?.[0]);
+      if (prompt) setPasswordPrompts((current) => ({ ...current, [tabId]: prompt }));
+      return;
+    }
+    if (message.channel === 'browser:password-fill') {
+      const prompt = parsePasswordFillPrompt(message.args?.[0]);
+      if (!prompt) return;
+      setPasswordPrompts((current) => {
+        if (current[tabId]?.kind === 'save') return current;
+        return { ...current, [tabId]: prompt };
+      });
+    }
+  };
+
   const attachTabHost = React.useCallback((tabId: string, host: HTMLDivElement | null) => {
     if (!host || !preloadPath) return;
     let webview = webviewByTabRef.current.get(tabId);
@@ -568,7 +618,15 @@ const BrowserPage: React.FC = () => {
         if (title) patchTab(tabId, { title: titleForBrowserTab(webview.getURL?.() || NEW_TAB_URL, title) });
       };
 
-      webview.addEventListener('did-start-loading', () => patchTab(tabId, { loading: true }));
+      webview.addEventListener('did-start-loading', () => {
+        patchTab(tabId, { loading: true });
+        setPasswordPrompts((current) => {
+          if (current[tabId]?.kind !== 'fill') return current;
+          const next = { ...current };
+          delete next[tabId];
+          return next;
+        });
+      });
       webview.addEventListener('did-stop-loading', onNav);
       webview.addEventListener('did-navigate', onNav);
       webview.addEventListener('did-navigate-in-page', onNav);
@@ -581,29 +639,13 @@ const BrowserPage: React.FC = () => {
         backgroundLoadTimersRef.current.set(tabId, timer);
       }
       webview.addEventListener('ipc-message', (event: Event) => {
-        const message = event as WebviewIpcMessageEvent;
-        if (message.channel === 'browser:mouse-button') {
-          navigateFromMouseButton(Number(message.args?.[0]));
-          return;
-        }
-        if (message.channel === 'browser:zoom-wheel') {
-          applyPageZoom(Number(message.args?.[0]) < 0 ? 'in' : 'out');
-          return;
-        }
-        if (message.channel === 'browser:open-tab') {
-          const first = message.args?.[0];
-          const url = typeof first === 'string' ? first : (first as { url?: string } | undefined)?.url;
-          const background = typeof first === 'object' && first
-            ? (first as { background?: boolean }).background !== false
-            : message.args?.[1] !== false;
-          if (url) openTab(url, { background, newTab: true });
-        }
+        handleWebviewIpcRef.current(tabId, event as WebviewIpcMessageEvent);
       });
       webviewByTabRef.current.set(tabId, webview);
     }
     if (webview.parentElement !== host) host.replaceChildren(webview);
     if (tabId === activeTabIdRef.current) webviewRef.current = webview;
-  }, [applyPageZoom, flushDeferredTabLoad, navigateFromMouseButton, openTab, partition, patchTab, preloadPath, syncTabFromWebview]);
+  }, [flushDeferredTabLoad, partition, patchTab, preloadPath, syncTabFromWebview]);
 
   React.useEffect(() => {
     flushDeferredTabLoad(activeTabId);
@@ -616,6 +658,16 @@ const BrowserPage: React.FC = () => {
       clearDeferredTabLoad(tabId);
       webviewByTabRef.current.delete(tabId);
       webview.remove();
+    });
+    setPasswordPrompts((current) => {
+      let changed = false;
+      const next = { ...current };
+      Object.keys(next).forEach((tabId) => {
+        if (ids.has(tabId)) return;
+        delete next[tabId];
+        changed = true;
+      });
+      return changed ? next : current;
     });
   }, [clearDeferredTabLoad, tabs]);
 
@@ -895,6 +947,40 @@ const BrowserPage: React.FC = () => {
     }
   };
 
+  const activePasswordPrompt = passwordPrompts[activeTabId];
+
+  const saveActivePassword = async () => {
+    if (activePasswordPrompt?.kind !== 'save') return;
+    const result = await window.electronAPI.commitBrowserPassword(activePasswordPrompt.pendingId);
+    if (!result.success) {
+      toast({ title: result.error || '로그인 정보를 저장하지 못했습니다.', variant: 'destructive' });
+      return;
+    }
+    clearPasswordPrompt(activeTabId);
+  };
+
+  const dismissActivePassword = async () => {
+    if (activePasswordPrompt?.kind === 'save') {
+      await window.electronAPI.dismissBrowserPassword(activePasswordPrompt.pendingId);
+    }
+    clearPasswordPrompt(activeTabId);
+  };
+
+  const neverSaveActivePassword = async () => {
+    if (activePasswordPrompt?.kind !== 'save') return;
+    const result = await window.electronAPI.neverSaveBrowserOrigin(activePasswordPrompt.origin);
+    if (!result.success) {
+      toast({ title: result.error || '이 사이트를 제외하지 못했습니다.', variant: 'destructive' });
+      return;
+    }
+    clearPasswordPrompt(activeTabId);
+  };
+
+  const fillActivePassword = (id: string) => {
+    webviewByTabRef.current.get(activeTabId)?.send?.('browser:fill-login', { id });
+    clearPasswordPrompt(activeTabId);
+  };
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
@@ -1050,6 +1136,47 @@ const BrowserPage: React.FC = () => {
             });
           }}
         />
+
+        {activePasswordPrompt?.kind === 'save' && (
+          <div className="flex items-center gap-2 border-b border-gray-800 bg-discord-sidebar px-3 py-2 text-sm text-discord-text">
+            <span className="min-w-0 flex-1 truncate">
+              {activePasswordPrompt.updated
+                ? `${activePasswordPrompt.origin} 비밀번호가 바뀌었습니다. 업데이트할까요?`
+                : `${activePasswordPrompt.origin} 로그인 정보를 저장할까요?`}
+              <span className="ml-2 text-discord-muted">{activePasswordPrompt.username}</span>
+            </span>
+            <Button className="h-7 bg-discord-accent px-3 text-white hover:bg-blue-600" onClick={() => void saveActivePassword()}>
+              {activePasswordPrompt.updated ? '업데이트' : '저장'}
+            </Button>
+            <Button variant="ghost" className="h-7 px-3" onClick={() => void dismissActivePassword()}>
+              나중에
+            </Button>
+            <Button variant="ghost" className="h-7 px-3" onClick={() => void neverSaveActivePassword()}>
+              이 사이트는 안 함
+            </Button>
+          </div>
+        )}
+
+        {activePasswordPrompt?.kind === 'fill' && (
+          <div className="flex items-center gap-2 border-b border-gray-800 bg-discord-sidebar px-3 py-2 text-sm text-discord-text">
+            <span className="shrink-0 text-discord-muted">저장된 계정으로 입력할까요?</span>
+            <div className="flex min-w-0 flex-1 flex-wrap gap-2">
+              {activePasswordPrompt.accounts.map((account) => (
+                <Button
+                  key={account.id}
+                  variant="ghost"
+                  className="h-7 max-w-full truncate px-3"
+                  onClick={() => fillActivePassword(account.id)}
+                >
+                  {account.username}
+                </Button>
+              ))}
+            </div>
+            <Button variant="ghost" className="h-7 shrink-0 px-3" onClick={() => void dismissActivePassword()}>
+              나중에
+            </Button>
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           <div className="relative min-w-0 flex-1 bg-black">

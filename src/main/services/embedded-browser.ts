@@ -9,8 +9,10 @@ import {
 } from '../lib/browser-tracker-block';
 import { scriptMatchesUrl } from '../lib/browser-url';
 import {
+  applyChromeLikeClientHints,
   chromeLikeUserAgent,
   isBackgroundBrowserTabDisposition,
+  isBotChallengeUrl,
   popupBoundsFromFeatures,
   shouldOpenEmbeddedBrowserPopup,
 } from '../lib/embedded-browser-policy';
@@ -131,11 +133,20 @@ export function configureEmbeddedBrowserSession() {
   if (browserSessionConfigured) return;
   browserSessionConfigured = true;
   const ses = session.fromPartition(BROWSER_PARTITION);
-  ses.setUserAgent(chromeLikeUserAgent(ses.getUserAgent()));
+  ses.setUserAgent(chromeLikeUserAgent(ses.getUserAgent(), process.versions.chrome));
   ses.setPermissionRequestHandler((_contents, permission, callback) => {
     callback(GUEST_PERMISSIONS.has(permission));
   });
   ses.setPermissionCheckHandler((_contents, permission) => GUEST_PERMISSIONS.has(permission));
+  ses.webRequest.onBeforeSendHeaders({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
+    callback({
+      requestHeaders: applyChromeLikeClientHints(
+        details.requestHeaders,
+        process.versions.chrome,
+        process.platform,
+      ),
+    });
+  });
   ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*'] }, (details, callback) => {
     const blockedDomains = getConfiguredBrowserBlockedDomains();
     const trackerBlocking = getConfiguredBrowserTrackerBlocking();
@@ -207,6 +218,7 @@ export function injectMatchingScripts(contents) {
   if (!contents || contents.isDestroyed()) return;
   const currentUrl = contents.getURL();
   if (!isAllowedEmbeddedBrowserUrl(currentUrl) || currentUrl === 'about:blank') return;
+  if (isBotChallengeUrl(currentUrl)) return;
 
   const scripts = listEnabledScripts().filter((script) => (
     scriptMatchesUrl(parseMatches(script.matches_json), currentUrl)

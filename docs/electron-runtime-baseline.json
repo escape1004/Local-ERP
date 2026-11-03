@@ -2,8 +2,8 @@
   "main": {
     "source": "src/main/main.ts",
     "entry": "dist-electron-app/main.js",
-    "handlerCount": 127,
-    "handlersSha256": "92b394b857b73af5a236b550537784fb1f0d8c6a104d70b74fe431db6167959b",
+    "handlerCount": 135,
+    "handlersSha256": "508a7c59460b4d3da70a1df22165e498d27e16abd69293c2524a6aca4ead23fa",
     "onChannels": [
       "window-control"
     ],
@@ -13,21 +13,24 @@
     "source": "src/main/preload.ts",
     "output": "dist-electron-app/preload.js",
     "browserWindowPath": "path.join(electronDistDir, 'preload.js')",
-    "apiCount": 131,
-    "apiAndChannelsSha256": "b85f3d9ef00f04f52b820e617a1d3600f3cfaaf370bce387c12bf6968ed29092"
+    "apiCount": 136,
+    "apiAndChannelsSha256": "39ef3e31e081a5562a75529443f13464c0a5fd292784c30c8fa82dbc30e62f61"
   },
   "ipcAudit": {
     "preloadWithoutMainHandler": [
       "getVideoStream"
     ],
     "mainHandlerWithoutPreload": [
+      "browser:listPasswordsForOrigin",
+      "browser:stagePassword",
+      "browser:unlockPassword",
       "openDbFile",
       "openExternal",
       "updateRecord"
     ]
   },
-  "rendererApiUsageCount": 118,
-  "rendererApiUsageSha256": "5f973ae7e2686abf522d792f2251fc0a194c2b4f664e0153d963d2f236aeb278",
+  "rendererApiUsageCount": 123,
+  "rendererApiUsageSha256": "ac032fc0d6c3addf79b5b7529a1c25e049d8fc3f861fc4f70968f2a443509698",
   "rendererSendChannels": [
     "window-control"
   ]

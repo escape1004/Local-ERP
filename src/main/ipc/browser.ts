@@ -28,6 +28,16 @@ import {
   setRememberEmbeddedBrowserWindowBounds,
 } from '../app/browser-window';
 import { generateBrowserScriptWithOpenAi } from '../services/browser-ai';
+import {
+  commitBrowserPassword,
+  deleteBrowserPassword,
+  dismissBrowserPassword,
+  listBrowserPasswordSummaries,
+  listBrowserPasswordsForOrigin,
+  neverSaveBrowserOrigin,
+  stageBrowserPassword,
+  unlockBrowserPassword,
+} from '../services/browser-password';
 import { BROWSER_PARTITION } from '../services/embedded-browser';
 
 function nowIso() {
@@ -429,4 +439,13 @@ export function registerBrowserHandlers() {
       };
     }
   });
+
+  ipcMain.handle('browser:stagePassword', (event, payload) => stageBrowserPassword(event, payload));
+  ipcMain.handle('browser:commitPassword', (event, pendingId) => commitBrowserPassword(event, pendingId));
+  ipcMain.handle('browser:dismissPassword', (event, pendingId) => dismissBrowserPassword(event, pendingId));
+  ipcMain.handle('browser:listPasswords', (event) => listBrowserPasswordSummaries(event));
+  ipcMain.handle('browser:listPasswordsForOrigin', (event) => listBrowserPasswordsForOrigin(event));
+  ipcMain.handle('browser:unlockPassword', (event, id) => unlockBrowserPassword(event, id));
+  ipcMain.handle('browser:deletePassword', (event, id) => deleteBrowserPassword(event, id));
+  ipcMain.handle('browser:neverSaveOrigin', (event, origin) => neverSaveBrowserOrigin(event, origin));
 }
