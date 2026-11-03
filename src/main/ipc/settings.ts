@@ -212,6 +212,7 @@ export function registerSettingsHandlers() {
       backupInterval: getConfiguredBackupInterval(),
       backupEnabled: appConfig.backupEnabled !== false,
       rememberWindowBounds: appConfig.rememberWindowBounds,
+      categoryOrderLocked: appConfig.categoryOrderLocked === true,
       rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
       browserStartupMode: getConfiguredBrowserStartupMode(),
       browserTrackerBlocking: getConfiguredBrowserTrackerBlocking(),
@@ -396,6 +397,12 @@ export function registerSettingsHandlers() {
     appConfig.thumbnailPreviewScale = normalized;
     saveAppConfig();
     return { success: true, thumbnailPreviewScale: normalized };
+  });
+
+  ipcMain.handle('setCategoryOrderLocked', (_event, locked) => {
+    appConfig.categoryOrderLocked = locked === true;
+    saveAppConfig();
+    return { success: true, categoryOrderLocked: appConfig.categoryOrderLocked };
   });
 
   ipcMain.handle('setVideoAutoPlay', (_event, enabled) => {

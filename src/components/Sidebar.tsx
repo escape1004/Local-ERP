@@ -58,6 +58,7 @@ export const Sidebar: React.FC = () => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<Category | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [categoryOrderLocked, setCategoryOrderLocked] = useState(false);
 
   const getProfileSwatchStyle = (color?: string): React.CSSProperties => {
     if (color === 'rainbow') {
@@ -70,6 +71,29 @@ export const Sidebar: React.FC = () => {
       backgroundColor: color || '#5865F2',
     };
   };
+
+  useEffect(() => {
+    let cancelled = false;
+    const applyLocked = (locked: boolean) => {
+      if (!cancelled) setCategoryOrderLocked(Boolean(locked));
+    };
+    const loadLocked = () => {
+      void window.electronAPI.getConfig()
+        .then((config) => applyLocked(Boolean(config?.categoryOrderLocked)))
+        .catch(() => {});
+    };
+    loadLocked();
+    const onLockedChange = (event: Event) => {
+      applyLocked(Boolean((event as CustomEvent).detail));
+    };
+    window.addEventListener('erp:category-order-locked', onLockedChange);
+    window.addEventListener('focus', loadLocked);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('erp:category-order-locked', onLockedChange);
+      window.removeEventListener('focus', loadLocked);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -149,7 +173,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleDragEnd = (result: any) => {
-    if (!result.destination) return;
+    if (categoryOrderLocked || !result.destination) return;
     const { source, destination } = result;
     if (source.droppableId !== 'root-categories' || destination.droppableId !== 'root-categories') return;
 
@@ -336,7 +360,7 @@ export const Sidebar: React.FC = () => {
       <ContextMenu>
         <ContextMenuTrigger asChild>
           <div
-            className="flex items-center px-3 py-2 mb-1 rounded cursor-grab"
+            className={`flex items-center px-3 py-2 mb-1 rounded ${categoryOrderLocked ? 'cursor-default' : 'cursor-grab'}`}
             style={{ paddingLeft: `${12 + level * 12}px` }}
             onClick={(event) => event.preventDefault()}
             {...dragHandleProps}
@@ -710,7 +734,7 @@ export const Sidebar: React.FC = () => {
           </div>
 
           <DragDropContext onDragEnd={handleDragEnd}>
-            <Droppable droppableId="root-categories">
+            <Droppable droppableId="root-categories" isDropDisabled={categoryOrderLocked}>
               {(provided) => (
                 <div {...provided.droppableProps} ref={provided.innerRef}>
                   {rootCategories.map((category, index) => (
@@ -718,13 +742,18 @@ export const Sidebar: React.FC = () => {
                       key={category.id}
                       draggableId={category.id}
                       index={index}
+                      isDragDisabled={categoryOrderLocked}
                     >
                       {(provided) => (
                         <div
                           ref={provided.innerRef}
                           {...provided.draggableProps}
                         >
-                          {renderDraggableCategory(category, 0, provided.dragHandleProps)}
+                          {renderDraggableCategory(
+                            category,
+                            0,
+                            categoryOrderLocked ? undefined : provided.dragHandleProps,
+                          )}
                         </div>
                       )}
                     </Draggable>

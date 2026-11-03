@@ -99,6 +99,7 @@ const api: ElectronAPI = {
   setBackupInterval: (minutes: number) => ipcRenderer.invoke('setBackupInterval', minutes),
   setBackupEnabled: (enabled: boolean) => ipcRenderer.invoke('setBackupEnabled', enabled),
   setRememberWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberWindowBounds', enabled),
+  setCategoryOrderLocked: (locked: boolean) => ipcRenderer.invoke('setCategoryOrderLocked', locked),
   setRememberBrowserWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberBrowserWindowBounds', enabled),
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => ipcRenderer.invoke('setBrowserStartupMode', mode),
   setBrowserTrackerBlocking: (enabled: boolean) => ipcRenderer.invoke('setBrowserTrackerBlocking', enabled),

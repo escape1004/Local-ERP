@@ -371,6 +371,17 @@ export function AppSettingsModal({
     }
   };
 
+  const handleCategoryOrderLockedChange = async (checked: boolean) => {
+    setConfig((prev) => (prev ? { ...prev, categoryOrderLocked: checked } : prev));
+    window.dispatchEvent(new CustomEvent('erp:category-order-locked', { detail: checked }));
+    setIsSaving(true);
+    try {
+      await window.electronAPI.setCategoryOrderLocked(checked);
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const refreshBrowserPasswords = async () => {
     try {
       const items = await window.electronAPI.listBrowserPasswords();
@@ -1220,6 +1231,23 @@ export function AppSettingsModal({
           <Switch
             checked={Boolean(config?.rememberWindowBounds)}
             onCheckedChange={handleRememberWindowBoundsChange}
+            disabled={!config || isSaving}
+            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
+          />
+        </div>
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">카테고리 순서 잠금</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              사이드 메뉴에서 드래그로 카테고리 순서를 바꾸지 못하게 합니다. 잠금을 끄면 다시 드래그할 수 있습니다.
+            </p>
+          </div>
+          <Switch
+            checked={Boolean(config?.categoryOrderLocked)}
+            onCheckedChange={handleCategoryOrderLockedChange}
             disabled={!config || isSaving}
             className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
           />

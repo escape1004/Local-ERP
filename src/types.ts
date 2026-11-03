@@ -148,6 +148,7 @@ export interface Config {
   backupInterval: number;
   backupEnabled?: boolean;
   rememberWindowBounds?: boolean;
+  categoryOrderLocked?: boolean;
   rememberBrowserWindowBounds?: boolean;
   browserStartupMode?: 'newtab' | 'continue';
   browserTrackerBlocking?: boolean;
@@ -333,6 +334,7 @@ export interface ElectronAPI {
   setBackupInterval: (minutes: number) => Promise<{ success: boolean; error?: string }>;
   setBackupEnabled: (enabled: boolean) => Promise<{ success: boolean; backupEnabled?: boolean; error?: string }>;
   setRememberWindowBounds: (enabled: boolean) => Promise<{ success: boolean }>;
+  setCategoryOrderLocked: (locked: boolean) => Promise<{ success: boolean; categoryOrderLocked?: boolean }>;
   setRememberBrowserWindowBounds: (enabled: boolean) => Promise<{ success: boolean; rememberBrowserWindowBounds?: boolean }>;
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => Promise<{ success: boolean; browserStartupMode?: 'newtab' | 'continue'; error?: string }>;
   setBrowserTrackerBlocking: (enabled: boolean) => Promise<{ success: boolean; browserTrackerBlocking?: boolean; error?: string }>;

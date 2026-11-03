@@ -112,6 +112,7 @@ export const defaultConfig = {
   backupInterval: 60,
   backupEnabled: true,
   rememberWindowBounds: false,
+  categoryOrderLocked: false,
   muteAudioWhenBackgrounded: false,
   windowBounds: null,
   rememberBrowserWindowBounds: false,
