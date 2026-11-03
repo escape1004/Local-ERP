@@ -2,6 +2,22 @@ import { shortcutLabelForBookmark } from './browserFavicon';
 
 export const MAX_NEW_TAB_RANDOM = 5;
 
+type NewTabPageInput = {
+  id?: string;
+  url?: string;
+  title?: string;
+};
+
+type UniqueNewTabPagesOptions = {
+  excludeUrls?: Array<string | null | undefined>;
+  limit?: number;
+};
+
+type PickRandomBookmarksOptions = {
+  limit?: number;
+  random?: () => number;
+};
+
 export function hostLabelForUrl(url) {
   try {
     return new URL(String(url || '')).hostname.replace(/^www\./, '') || String(url || '');
@@ -10,11 +26,11 @@ export function hostLabelForUrl(url) {
   }
 }
 
-export function uniqueNewTabPages(pages, options = {}) {
+export function uniqueNewTabPages(pages, options: UniqueNewTabPagesOptions = {}) {
   const excludeUrls = new Set((options.excludeUrls || []).map((item) => String(item || '')).filter(Boolean));
   const limit = Number.isFinite(options.limit) ? Math.max(0, Number(options.limit)) : (Array.isArray(pages) ? pages.length : 0);
   const result = [];
-  (Array.isArray(pages) ? pages : []).forEach((page) => {
+  (Array.isArray(pages) ? pages : []).forEach((page: NewTabPageInput) => {
     if (result.length >= limit) return;
     const url = String(page?.url || '');
     if (!url || url === 'about:blank' || excludeUrls.has(url)) return;
@@ -28,7 +44,7 @@ export function uniqueNewTabPages(pages, options = {}) {
   return result;
 }
 
-export function pickRandomBookmarks(bookmarks, options = {}) {
+export function pickRandomBookmarks(bookmarks, options: PickRandomBookmarksOptions = {}) {
   const limit = Number.isFinite(options.limit) ? Math.max(0, Number(options.limit)) : MAX_NEW_TAB_RANDOM;
   const random = typeof options.random === 'function' ? options.random : Math.random;
   const pool = uniqueNewTabPages(bookmarks);
