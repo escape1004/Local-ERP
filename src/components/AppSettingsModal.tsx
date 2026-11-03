@@ -144,6 +144,7 @@ export function AppSettingsModal({
   const [blockedDomainInput, setBlockedDomainInput] = useState('');
   const [browserPasswords, setBrowserPasswords] = useState<BrowserPasswordSummary[]>([]);
   const [browserPasswordMessage, setBrowserPasswordMessage] = useState('');
+  const [browserPasswordModalOpen, setBrowserPasswordModalOpen] = useState(false);
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
@@ -219,7 +220,10 @@ export function AppSettingsModal({
   }, [open]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      setBrowserPasswordModalOpen(false);
+      return;
+    }
 
     let cancelled = false;
 
@@ -365,6 +369,21 @@ export function AppSettingsModal({
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const refreshBrowserPasswords = async () => {
+    try {
+      const items = await window.electronAPI.listBrowserPasswords();
+      setBrowserPasswords(Array.isArray(items) ? items : []);
+    } catch {
+      setBrowserPasswords([]);
+    }
+  };
+
+  const handleOpenBrowserPasswordModal = () => {
+    setBrowserPasswordMessage('');
+    setBrowserPasswordModalOpen(true);
+    void refreshBrowserPasswords();
   };
 
   const handleDeleteBrowserPassword = async (id: string) => {
@@ -1027,37 +1046,84 @@ export function AppSettingsModal({
   const renderBrowserSection = () => (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
-        <div className="text-sm font-medium text-white">저장된 로그인</div>
-        <p className="text-sm text-discord-muted mt-2 leading-6">
-          이 컴퓨터의 OS 암호화로만 보관합니다. 비밀번호 자체는 목록에 보이지 않으며, 저장·입력 전에 브라우저에서 한 번 더 확인합니다.
-        </p>
-        <div className="mt-5 space-y-2">
-          {browserPasswords.length === 0 ? (
-            <span className="text-xs text-discord-muted">저장된 로그인이 없습니다.</span>
-          ) : (
-            browserPasswords.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-center justify-between gap-3 rounded border border-gray-700 bg-discord-bg px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <div className="truncate text-sm text-discord-text">{item.origin}</div>
-                  <div className="truncate text-xs text-discord-muted">{item.username}</div>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleDeleteBrowserPassword(item.id)}
-                  disabled={isSaving}
-                  className="text-discord-muted hover:text-red-400 disabled:opacity-50"
-                  aria-label={`${item.origin} ${item.username} 삭제`}
-                >
-                  <Trash2 size={14} />
-                </button>
-              </div>
-            ))
-          )}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">브라우저 위치 기억</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              내장 브라우저를 다시 열었을 때 마지막으로 사용한 창의 위치와 크기를 그대로 복원합니다.
+            </p>
+          </div>
+          <Switch
+            checked={Boolean(config?.rememberBrowserWindowBounds)}
+            onCheckedChange={handleRememberBrowserWindowBoundsChange}
+            disabled={!config || isSaving}
+            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
+          />
         </div>
-        {browserPasswordMessage ? <p className="text-sm text-discord-muted mt-3">{browserPasswordMessage}</p> : null}
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">시작 시 설정</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          브라우저 창을 새로 열 때 빈 시작 화면을 보여줄지, 마지막으로 열려 있던 탭들을 다시 열지 선택합니다.
+        </p>
+
+        <RadioGroup
+          className="mt-5 space-y-3"
+          value={config?.browserStartupMode === 'continue' ? 'continue' : 'newtab'}
+          onValueChange={(value) => {
+            if (value === 'continue' || value === 'newtab') {
+              void handleBrowserStartupModeChange(value);
+            }
+          }}
+          disabled={!config || isSaving}
+        >
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
+            <RadioGroupItem
+              value="newtab"
+              className="mt-0.5 border-gray-500 text-discord-accent"
+              disabled={!config || isSaving}
+            />
+            <span>
+              <span className="block text-sm font-medium text-white">새 탭 페이지 열기</span>
+              <span className="mt-1 block text-sm text-discord-muted">브라우저를 열면 빈 시작 화면을 보여줍니다.</span>
+            </span>
+          </label>
+          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
+            <RadioGroupItem
+              value="continue"
+              className="mt-0.5 border-gray-500 text-discord-accent"
+              disabled={!config || isSaving}
+            />
+            <span>
+              <span className="block text-sm font-medium text-white">중단한 위치에서 계속하기</span>
+              <span className="mt-1 block text-sm text-discord-muted">마지막으로 열려 있던 탭과 활성 탭을 그대로 다시 엽니다.</span>
+            </span>
+          </label>
+        </RadioGroup>
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">저장된 로그인</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              이 컴퓨터의 OS 암호화로만 보관합니다. 비밀번호는 목록에 보이지 않으며, 저장·입력 전에 브라우저에서 한 번 더 확인합니다.
+            </p>
+            <p className="mt-2 text-xs text-discord-muted">
+              {browserPasswords.length > 0 ? `${browserPasswords.length}개 저장됨` : '저장된 로그인이 없습니다.'}
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleOpenBrowserPasswordModal}
+            disabled={!config}
+            className="shrink-0 border-gray-600 text-discord-text hover:bg-discord-hover"
+          >
+            관리
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
@@ -1137,66 +1203,6 @@ export function AppSettingsModal({
         </div>
 
         {browserMessage ? <p className="text-sm text-discord-muted mt-3">{browserMessage}</p> : null}
-      </div>
-
-      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="text-sm font-medium text-white">브라우저 위치 기억</div>
-            <p className="text-sm text-discord-muted mt-2 leading-6">
-              내장 브라우저를 다시 열었을 때 마지막으로 사용한 창의 위치와 크기를 그대로 복원합니다.
-            </p>
-          </div>
-          <Switch
-            checked={Boolean(config?.rememberBrowserWindowBounds)}
-            onCheckedChange={handleRememberBrowserWindowBoundsChange}
-            disabled={!config || isSaving}
-            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
-          />
-        </div>
-      </div>
-
-      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
-        <div className="text-sm font-medium text-white">시작 시 설정</div>
-        <p className="text-sm text-discord-muted mt-2 leading-6">
-          브라우저 창을 새로 열 때 빈 시작 화면을 보여줄지, 마지막으로 열려 있던 탭들을 다시 열지 선택합니다.
-        </p>
-
-        <RadioGroup
-          className="mt-5 space-y-3"
-          value={config?.browserStartupMode === 'continue' ? 'continue' : 'newtab'}
-          onValueChange={(value) => {
-            if (value === 'continue' || value === 'newtab') {
-              void handleBrowserStartupModeChange(value);
-            }
-          }}
-          disabled={!config || isSaving}
-        >
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
-            <RadioGroupItem
-              value="newtab"
-              className="mt-0.5 border-gray-500 text-discord-accent"
-              disabled={!config || isSaving}
-            />
-            <span>
-              <span className="block text-sm font-medium text-white">새 탭 페이지 열기</span>
-              <span className="mt-1 block text-sm text-discord-muted">브라우저를 열면 빈 시작 화면을 보여줍니다.</span>
-            </span>
-          </label>
-          <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-gray-700 bg-discord-bg px-4 py-3">
-            <RadioGroupItem
-              value="continue"
-              className="mt-0.5 border-gray-500 text-discord-accent"
-              disabled={!config || isSaving}
-            />
-            <span>
-              <span className="block text-sm font-medium text-white">중단한 위치에서 계속하기</span>
-              <span className="mt-1 block text-sm text-discord-muted">마지막으로 열려 있던 탭과 활성 탭을 그대로 다시 엽니다.</span>
-            </span>
-          </label>
-        </RadioGroup>
-
-        {browserMessage ? <p className="mt-3 text-sm text-discord-muted">{browserMessage}</p> : null}
       </div>
     </div>
   );
@@ -2110,7 +2116,14 @@ export function AppSettingsModal({
   );
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+    <Dialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) setBrowserPasswordModalOpen(false);
+        onOpenChange(nextOpen);
+      }}
+    >
       <DialogContent
         className="max-w-[min(1400px,96vw)] h-[88vh] p-0 gap-0 bg-discord-bg border-gray-700 text-discord-text overflow-hidden [&>button]:hidden"
         onInteractOutside={(e) => e.preventDefault()}
@@ -2158,7 +2171,10 @@ export function AppSettingsModal({
               </div>
               <button
                 type="button"
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  setBrowserPasswordModalOpen(false);
+                  onOpenChange(false);
+                }}
                 className="text-discord-muted hover:text-discord-text"
                 aria-label="환경설정 닫기"
               >
@@ -2187,5 +2203,45 @@ export function AppSettingsModal({
         </div>
       </DialogContent>
     </Dialog>
+
+    <Dialog open={browserPasswordModalOpen} onOpenChange={setBrowserPasswordModalOpen}>
+      <DialogContent className="max-w-lg border-gray-700 bg-discord-bg text-discord-text">
+        <DialogTitle className="pr-8 text-white">저장된 로그인</DialogTitle>
+        <p className="text-sm leading-6 text-discord-muted">
+          사이트 주소와 아이디만 표시합니다. 비밀번호는 이 목록에 보이지 않습니다.
+        </p>
+        <div className="max-h-[50vh] space-y-2 overflow-y-auto">
+          {browserPasswords.length === 0 ? (
+            <div className="rounded-lg border border-gray-700 bg-discord-sidebar px-3 py-6 text-center text-sm text-discord-muted">
+              저장된 로그인이 없습니다.
+            </div>
+          ) : (
+            browserPasswords.map((item) => (
+              <div
+                key={item.id}
+                className="flex items-center justify-between gap-3 rounded-lg border border-gray-700 bg-discord-sidebar px-3 py-2"
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-sm text-discord-text">{item.origin}</div>
+                  <div className="truncate text-xs text-discord-muted">{item.username}</div>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => void handleDeleteBrowserPassword(item.id)}
+                  disabled={isSaving}
+                  className="h-8 shrink-0 px-2 text-discord-muted hover:bg-discord-hover hover:text-red-400"
+                  aria-label={`${item.origin} ${item.username} 삭제`}
+                >
+                  <Trash2 size={14} />
+                </Button>
+              </div>
+            ))
+          )}
+        </div>
+        {browserPasswordMessage ? <p className="text-sm text-discord-muted">{browserPasswordMessage}</p> : null}
+      </DialogContent>
+    </Dialog>
+    </>
   );
 }
