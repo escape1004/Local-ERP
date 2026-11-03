@@ -1,26 +1,16 @@
 export const TRANSLATED_FIELD_SUFFIX = '__translated';
 export const TRANSLATION_META_FIELD_SUFFIX = '__translationMeta';
-export const OPENAI_TRANSLATION_MODEL = 'gpt-5.6-luna';
+export const OPENAI_TRANSLATION_MODEL = 'gpt-6-luna';
 export const OPENAI_TRANSLATION_MODELS = [
   {
     value: OPENAI_TRANSLATION_MODEL,
-    label: 'GPT-5.6 Luna (권장)',
-    description: '번역 품질과 문맥 이해를 우선하는 기본 모델',
+    label: 'GPT-6 Luna (권장)',
+    description: '번역 품질과 처리 비용의 균형이 좋은 기본 모델',
   },
   {
-    value: 'gpt-5-mini',
-    label: 'GPT-5 mini',
-    description: '품질과 처리 비용의 균형이 좋은 모델',
-  },
-  {
-    value: 'gpt-5-nano',
-    label: 'GPT-5 nano',
-    description: '짧고 단순한 문장을 빠르고 저렴하게 처리하는 모델',
-  },
-  {
-    value: 'gpt-4.1-mini',
-    label: 'GPT-4.1 mini',
-    description: '안정적인 범용 번역을 위한 이전 세대 경량 모델',
+    value: 'gpt-5.6-luna',
+    label: 'GPT-5.6 Luna',
+    description: '이전에 권장하던 모델입니다. 이미 사용 중이라면 그대로 둘 수 있습니다.',
   },
 ] as const;
 

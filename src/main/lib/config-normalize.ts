@@ -1,9 +1,7 @@
-export const DEFAULT_TRANSLATION_MODEL = 'gpt-5.6-luna';
+export const DEFAULT_TRANSLATION_MODEL = 'gpt-6-luna';
 export const SUPPORTED_TRANSLATION_MODELS = new Set([
   DEFAULT_TRANSLATION_MODEL,
-  'gpt-5-mini',
-  'gpt-5-nano',
-  'gpt-4.1-mini'
+  'gpt-5.6-luna',
 ]);
 
 export const DEFAULT_PROFILE_COLOR = '#5865F2';

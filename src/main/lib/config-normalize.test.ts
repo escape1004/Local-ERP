@@ -38,7 +38,9 @@ test('normalizeDefaultGalleryZoom snaps to tens', () => {
 test('normalizeTranslation helpers keep supported values', () => {
   assert.equal(normalizeTranslationTargetLanguage('ja'), 'ja');
   assert.equal(normalizeTranslationTargetLanguage('fr'), 'ko');
-  assert.equal(normalizeTranslationModel('gpt-5-mini'), 'gpt-5-mini');
+  assert.equal(normalizeTranslationModel('gpt-6-luna'), 'gpt-6-luna');
+  assert.equal(normalizeTranslationModel('gpt-5.6-luna'), 'gpt-5.6-luna');
+  assert.equal(normalizeTranslationModel('gpt-5-mini'), DEFAULT_TRANSLATION_MODEL);
   assert.equal(normalizeTranslationModel('unknown'), DEFAULT_TRANSLATION_MODEL);
   assert.equal(normalizeTranslationDisplayMode('inline-hover'), 'inline-hover');
   assert.equal(normalizeTranslationDisplayMode('tooltip'), 'tooltip');
