@@ -201,6 +201,9 @@ const api: ElectronAPI = {
   dismissBrowserPassword: (pendingId) => ipcRenderer.invoke('browser:dismissPassword', pendingId),
   deleteBrowserPassword: (id) => ipcRenderer.invoke('browser:deletePassword', id),
   neverSaveBrowserOrigin: (origin) => ipcRenderer.invoke('browser:neverSaveOrigin', origin),
+  listBrowserPageVideos: (payload) => ipcRenderer.invoke('browser:listPageVideos', payload),
+  downloadBrowserPageVideo: (payload) => ipcRenderer.invoke('browser:downloadPageVideo', payload),
+  previewBrowserPageVideo: (payload) => ipcRenderer.invoke('browser:previewPageVideo', payload),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api); 

@@ -39,6 +39,12 @@ import {
   unlockBrowserPassword,
 } from '../services/browser-password';
 import { BROWSER_PARTITION } from '../services/embedded-browser';
+import {
+  browserWindowFromEvent,
+  downloadRememberedBrowserVideo,
+  listAndEnrichPageVideos,
+  previewRememberedBrowserVideo,
+} from '../services/browser-video-download';
 
 function nowIso() {
   return new Date().toISOString();
@@ -448,4 +454,9 @@ export function registerBrowserHandlers() {
   ipcMain.handle('browser:unlockPassword', (event, id) => unlockBrowserPassword(event, id));
   ipcMain.handle('browser:deletePassword', (event, id) => deleteBrowserPassword(event, id));
   ipcMain.handle('browser:neverSaveOrigin', (event, origin) => neverSaveBrowserOrigin(event, origin));
+  ipcMain.handle('browser:listPageVideos', (_event, payload = {}) => listAndEnrichPageVideos(payload));
+  ipcMain.handle('browser:downloadPageVideo', async (event, payload = {}) => (
+    downloadRememberedBrowserVideo(payload, browserWindowFromEvent(event))
+  ));
+  ipcMain.handle('browser:previewPageVideo', (_event, payload = {}) => previewRememberedBrowserVideo(payload));
 }

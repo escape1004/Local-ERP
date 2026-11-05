@@ -301,6 +301,46 @@ export interface BrowserPasswordSummary {
   updatedAt: string;
 }
 
+export type BrowserMediaTrack = 'av' | 'video' | 'audio';
+
+export interface BrowserVideoQuality {
+  url: string;
+  label: string;
+  width: number | null;
+  height: number | null;
+  bandwidth: number | null;
+  track: BrowserMediaTrack;
+}
+
+export interface BrowserDetectedVideo {
+  id: string;
+  url: string;
+  pageUrl: string;
+  kind: 'file' | 'hls' | 'dash';
+  mime: string;
+  bytes: number | null;
+  title: string;
+  host: string;
+  duration: number | null;
+  preview: string;
+  poster: string;
+  width?: number | null;
+  height?: number | null;
+  qualities: BrowserVideoQuality[];
+  audioQualities: BrowserVideoQuality[];
+  videoQualities: BrowserVideoQuality[];
+}
+
+export interface BrowserPageVideoCapture {
+  url: string;
+  urls: string[];
+  duration: number | null;
+  width: number | null;
+  height: number | null;
+  poster: string;
+  preview: string;
+}
+
 export interface ElectronAPI {
   getAppUpdateState: () => Promise<AppUpdateState>;
   checkForAppUpdates: () => Promise<AppUpdateState>;
@@ -419,6 +459,26 @@ export interface ElectronAPI {
   dismissBrowserPassword: (pendingId: string) => Promise<{ success: boolean; error?: string }>;
   deleteBrowserPassword: (id: string) => Promise<{ success: boolean; error?: string }>;
   neverSaveBrowserOrigin: (origin: string) => Promise<{ success: boolean; origin?: string; error?: string }>;
+  listBrowserPageVideos: (payload: {
+    pageUrl: string;
+    pageTitle?: string;
+    urls?: string[];
+    captures?: BrowserPageVideoCapture[];
+    enrich?: boolean;
+  }) => Promise<BrowserDetectedVideo[]>;
+  downloadBrowserPageVideo: (payload: {
+    pageUrl: string;
+    id?: string;
+    url?: string;
+    qualityUrl?: string;
+    track?: BrowserMediaTrack;
+  }) => Promise<{ success: boolean; path?: string; error?: string }>;
+  previewBrowserPageVideo: (payload: {
+    pageUrl: string;
+    id?: string;
+    url?: string;
+    qualityUrl?: string;
+  }) => Promise<{ success: boolean; path?: string; error?: string }>;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

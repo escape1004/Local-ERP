@@ -11,6 +11,7 @@ import {
   Sparkles,
   Star,
 } from 'lucide-react';
+import { BrowserVideoMenu } from '../components/browser/BrowserVideoMenu';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
 import { BrowserNewTab } from '../components/browser/BrowserNewTab';
 import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
@@ -41,6 +42,10 @@ import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browser
 import { scriptMatchesUrl } from '../main/lib/browser-url';
 import { wrapUserscript, wrapUserscriptForRunAt } from '../main/lib/browser-userscript';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
+import {
+  getCollectBrowserPageVideosScript,
+  parseCollectedBrowserPageVideos,
+} from '../lib/browserPageVideos';
 import {
   resolveWebviewStartNavigation,
   shouldLoadPendingWebviewUrl,
@@ -279,6 +284,18 @@ const BrowserPage: React.FC = () => {
   const activeWebview = React.useCallback(() => (
     webviewByTabRef.current.get(activeTabIdRef.current) || null
   ), []);
+
+  const collectPageVideoCaptures = React.useCallback(async () => {
+    const webview = activeWebview();
+    if (!webview?.executeJavaScript) return [];
+    try {
+      return parseCollectedBrowserPageVideos(
+        await webview.executeJavaScript(getCollectBrowserPageVideosScript()),
+      );
+    } catch {
+      return [];
+    }
+  }, [activeWebview]);
 
   const toggleActiveWebviewDevTools = React.useCallback(() => {
     const webview = activeWebview();
@@ -1054,6 +1071,12 @@ const BrowserPage: React.FC = () => {
               <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
             </BrowserTooltip>
           </form>
+          <BrowserVideoMenu
+            disabled={isBlankBrowserTab({ url: currentUrl })}
+            pageUrl={currentUrl}
+            pageTitle={pageTitle}
+            collectCaptures={collectPageVideoCaptures}
+          />
           <BrowserTooltip
             label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
             wrapDisabled

@@ -20,6 +20,7 @@ import { attachEmbeddedBrowserShortcutGuard, toggleEmbeddedBrowserDevTools } fro
 import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
 import { getConfiguredBrowserBlockedDomains, getConfiguredBrowserTrackerBlocking, log } from '../app/state';
+import { attachBrowserVideoSniffer, saveGuestMediaUrl } from './browser-video-download';
 
 export const BROWSER_PARTITION = 'persist:erp-browser';
 
@@ -121,6 +122,17 @@ function attachGuestContextMenu(contents) {
         click: () => clipboard.writeText(String(params.linkURL)),
       });
     }
+    const mediaUrl = String(params?.srcURL || '');
+    if (params?.mediaType === 'video' && /^https?:\/\//i.test(mediaUrl)) {
+      template.push({
+        label: '영상 저장',
+        click: () => {
+          const host = contents.hostWebContents || contents;
+          const win = BrowserWindow.fromWebContents(host);
+          void saveGuestMediaUrl(contents, mediaUrl, win && !win.isDestroyed() ? win : null);
+        },
+      });
+    }
     if (template.length > 0 && template[template.length - 1].type !== 'separator') {
       template.push({ type: 'separator' });
     }
@@ -194,6 +206,7 @@ export function configureEmbeddedBrowserSession() {
       }),
     });
   });
+  attachBrowserVideoSniffer(ses);
 }
 
 export function isEmbeddedBrowserGuest(contents) {
