@@ -3,6 +3,7 @@ import { Star } from 'lucide-react';
 import { BOOKMARK_BAR_FOLDER_ID, MANUAL_BOOKMARK_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder } from '../../types';
 import { faviconUrlFor } from '../../lib/browserFavicon';
 import { MANUAL_DRAG_THRESHOLD_PX, type ManualDragItem } from './bookmark-dnd';
+import { focusRenameInput, startRenameAfterMenuClose } from './bookmark-rename';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -92,6 +93,7 @@ export function BookmarkBar({
   const suppressClickRef = React.useRef(false);
   const startedFromBarRef = React.useRef(false);
   const dragIdRef = React.useRef<string | null>(null);
+  const pendingRenameRef = React.useRef(false);
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameDraft, setRenameDraft] = React.useState('');
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
@@ -192,7 +194,7 @@ export function BookmarkBar({
       ref={barRef}
       data-bookmark-bar="true"
       className={cn(
-        'flex h-8 shrink-0 items-center gap-1 overflow-x-auto border-b border-gray-800 bg-discord-sidebar px-2 discord-scrollbar',
+        'flex h-8 shrink-0 cursor-default items-center gap-1 overflow-x-auto border-b border-gray-800 bg-discord-sidebar px-2 discord-scrollbar [&_button]:cursor-default',
         acceptDrop && dropIndex !== null && 'bg-discord-accent/10',
       )}
     >
@@ -221,7 +223,7 @@ export function BookmarkBar({
                 >
                   {renaming ? (
                     <input
-                      autoFocus
+                      ref={focusRenameInput}
                       value={renameDraft}
                       className="h-6 w-32 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
                       onChange={(event) => setRenameDraft(event.target.value)}
@@ -246,7 +248,7 @@ export function BookmarkBar({
                           className={cn(
                             'inline-flex items-center gap-1 rounded-md text-sm text-discord-text hover:bg-discord-hover',
                             iconOnly ? 'h-7 w-7 justify-center' : 'max-w-[180px] px-2 py-1',
-                            'cursor-grab active:cursor-grabbing',
+                            'cursor-default',
                             active && 'bg-discord-accent/20',
                           )}
                           onPointerDown={(event) => {
@@ -286,8 +288,18 @@ export function BookmarkBar({
                   )}
                 </span>
               </ContextMenuTrigger>
-              <ContextMenuContent>
-                <ContextMenuItem onSelect={() => startRename(bookmark)}>이름 변경</ContextMenuItem>
+              <ContextMenuContent
+                onCloseAutoFocus={(event) => {
+                  startRenameAfterMenuClose(event, pendingRenameRef, () => startRename(bookmark));
+                }}
+              >
+                <ContextMenuItem
+                  onSelect={() => {
+                    pendingRenameRef.current = true;
+                  }}
+                >
+                  이름 변경
+                </ContextMenuItem>
                 <ContextMenuItem
                   className="text-red-400 focus:text-red-400"
                   onSelect={() => onRemove(bookmark)}

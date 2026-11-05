@@ -2,6 +2,7 @@ import React from 'react';
 import { ChevronDown, ChevronRight, Folder, Link2, Plus, Star } from 'lucide-react';
 import { MANUAL_BOOKMARK_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder } from '../../types';
 import { MANUAL_DRAG_THRESHOLD_PX, type ManualDragItem } from './bookmark-dnd';
+import { focusRenameInput, startRenameAfterMenuClose } from './bookmark-rename';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -145,6 +146,7 @@ function BookmarkRow({
   bookmarkEdit: BookmarkEditProps;
 }) {
   const dnd = React.useContext(ManualDndContext);
+  const pendingRenameRef = React.useRef(false);
   const isRecord = bookmark.source === 'record';
   const secondary = isRecord ? bookmark.subtitle : bookmarkHost(bookmark.url);
   const dragging = dnd?.dragging?.kind === 'bookmark' && dnd.dragging.id === bookmark.id;
@@ -156,7 +158,7 @@ function BookmarkRow({
       className={cn(
         'group flex items-start gap-2 rounded-md py-1.5 pr-2 select-none',
         active ? 'bg-discord-accent/20' : 'hover:bg-discord-hover',
-        canDrag && 'cursor-grab active:cursor-grabbing',
+        'cursor-default',
         dragging && 'opacity-50',
       )}
       style={{ paddingLeft: 32 + depth * 20 }}
@@ -216,7 +218,7 @@ function BookmarkRow({
           )}
           {renaming ? (
             <input
-              autoFocus
+              ref={focusRenameInput}
               value={bookmarkEdit.renameDraft}
               className="h-6 min-w-0 flex-1 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
               onClick={(event) => event.stopPropagation()}
@@ -251,8 +253,18 @@ function BookmarkRow({
       <ContextMenuTrigger asChild>
         <div>{row}</div>
       </ContextMenuTrigger>
-      <ContextMenuContent>
-        <ContextMenuItem onSelect={() => bookmarkEdit.onStartRename(bookmark)}>이름 변경</ContextMenuItem>
+      <ContextMenuContent
+        onCloseAutoFocus={(event) => {
+          startRenameAfterMenuClose(event, pendingRenameRef, () => bookmarkEdit.onStartRename(bookmark));
+        }}
+      >
+        <ContextMenuItem
+          onSelect={() => {
+            pendingRenameRef.current = true;
+          }}
+        >
+          이름 변경
+        </ContextMenuItem>
         <ContextMenuItem
           className="text-red-400 focus:text-red-400"
           onSelect={() => onRemoveManual(bookmark)}
@@ -286,6 +298,7 @@ function FolderNode({
   bookmarkEdit: BookmarkEditProps;
 }) {
   const dnd = React.useContext(ManualDndContext);
+  const pendingRenameRef = React.useRef(false);
   const open = expanded.has(folder.id);
   const total = countBookmarks(folder);
   const isManual = folder.kind === 'manual';
@@ -315,8 +328,7 @@ function FolderNode({
           role="button"
           tabIndex={0}
           className={cn(
-            'flex h-full w-full select-none items-center gap-1.5 overflow-hidden pr-2 text-left hover:bg-discord-hover',
-            canDrag && !renaming && 'cursor-grab active:cursor-grabbing',
+            'flex h-full w-full cursor-default select-none items-center gap-1.5 overflow-hidden pr-2 text-left hover:bg-discord-hover',
             dragging && 'opacity-50',
             dropInto && 'bg-discord-accent/20',
           )}
@@ -350,7 +362,7 @@ function FolderNode({
           )}
           {renaming ? (
             <input
-              autoFocus
+              ref={focusRenameInput}
               value={folderEdit.renameDraft}
               className="h-6 min-w-0 flex-1 rounded-sm border border-gray-600 bg-discord-bg px-1 text-sm text-discord-text outline-none"
               onClick={(event) => event.stopPropagation()}
@@ -380,8 +392,18 @@ function FolderNode({
       {canEditFolder ? (
         <ContextMenu>
           <ContextMenuTrigger asChild>{header}</ContextMenuTrigger>
-          <ContextMenuContent>
-            <ContextMenuItem onSelect={() => folderEdit.onStartRename(folder)}>이름 변경</ContextMenuItem>
+          <ContextMenuContent
+            onCloseAutoFocus={(event) => {
+              startRenameAfterMenuClose(event, pendingRenameRef, () => folderEdit.onStartRename(folder));
+            }}
+          >
+            <ContextMenuItem
+              onSelect={() => {
+                pendingRenameRef.current = true;
+              }}
+            >
+              이름 변경
+            </ContextMenuItem>
             <ContextMenuItem
               className="text-red-400 focus:text-red-400"
               onSelect={() => folderEdit.onRemoveFolder(folder)}
@@ -780,7 +802,7 @@ export function BookmarkTree({
 
   return (
     <ManualDndContext.Provider value={dndValue}>
-      <div className="flex h-full min-h-0 flex-col">
+      <div className="flex h-full min-h-0 cursor-default flex-col [&_button]:cursor-default [&_[role=button]]:cursor-default">
         <div className="flex shrink-0 items-center gap-4 px-3 pb-2 pt-3 text-sm text-discord-muted">
           <span className="inline-flex items-center gap-1.5">
             <Star size={12} className="fill-yellow-400 text-yellow-400" />

@@ -132,6 +132,7 @@ const BrowserPage: React.FC = () => {
   const webviewByTabRef = React.useRef(new Map<string, EmbeddedWebview>());
   const addressInputRef = React.useRef<HTMLInputElement | null>(null);
   const addressFocusedRef = React.useRef(false);
+  const addressSelectAllOnClickRef = React.useRef(false);
   const addressRef = React.useRef(requestedUrl);
   const tabsRef = React.useRef<BrowserTabState[]>([]);
   const activeTabIdRef = React.useRef('');
@@ -991,7 +992,7 @@ const BrowserPage: React.FC = () => {
           onClose={closeTab}
           onNewTab={() => openTab(NEW_TAB_URL, { newTab: true })}
         />
-        <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
+        <div className="flex shrink-0 cursor-default items-center gap-2 border-b border-gray-800 px-3 py-2 [&_button]:cursor-default">
           <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>
             <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
               <ArrowLeft size={16} />
@@ -1021,11 +1022,22 @@ const BrowserPage: React.FC = () => {
                 addressRef.current = event.target.value;
                 setAddress(event.target.value);
               }}
-              onFocus={() => {
+              onMouseDown={() => {
+                addressSelectAllOnClickRef.current = document.activeElement !== addressInputRef.current;
+              }}
+              onFocus={(event) => {
                 addressFocusedRef.current = true;
+                if (addressSelectAllOnClickRef.current) return;
+                event.currentTarget.select();
+              }}
+              onClick={(event) => {
+                if (!addressSelectAllOnClickRef.current) return;
+                addressSelectAllOnClickRef.current = false;
+                event.currentTarget.select();
               }}
               onBlur={(event) => {
                 addressFocusedRef.current = false;
+                addressSelectAllOnClickRef.current = false;
                 const form = event.currentTarget.form;
                 window.setTimeout(() => {
                   if (addressFocusedRef.current) return;

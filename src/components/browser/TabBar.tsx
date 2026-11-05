@@ -46,7 +46,7 @@ type TabBarProps = {
 export function TabBar({ tabs, activeId, onSelect, onClose, onNewTab }: TabBarProps) {
   return (
     <div
-      className="flex h-9 shrink-0 items-stretch bg-[#2B2D31] text-[#949BA4]"
+      className="flex h-9 shrink-0 cursor-default items-stretch bg-[#2B2D31] text-[#949BA4] [&_button]:cursor-default"
       style={dragStyle}
     >
       <div className="flex min-w-0 flex-1 pl-1">
@@ -62,7 +62,7 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNewTab }: TabBarPr
                 onClick={() => onSelect(tab.id)}
                 style={noDragStyle}
                 className={cn(
-                  'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-pointer items-center gap-1.5 rounded-t-md px-2 text-sm',
+                  'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-default items-center gap-1.5 rounded-t-md px-2 text-sm',
                   active ? 'bg-discord-bg text-discord-text' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text',
                 )}
               >
