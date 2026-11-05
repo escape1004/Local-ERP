@@ -33,7 +33,7 @@ test('blocks well-known third-party ad hosts', () => {
   }), true);
 });
 
-test('does not block first-party requests or document navigations', () => {
+test('does not block first-party requests or trusted document navigations', () => {
   assert.equal(shouldBlockBrowserRequest({
     pageUrl: 'https://www.doubleclick.net/',
     requestUrl: 'https://stats.doubleclick.net/pixel',
@@ -41,9 +41,52 @@ test('does not block first-party requests or document navigations', () => {
   }), false);
   assert.equal(shouldBlockBrowserRequest({
     pageUrl: 'https://example.com/',
-    requestUrl: 'https://pagead2.googlesyndication.com/pagead/ads',
+    requestUrl: 'https://www.example.com/next',
     resourceType: 'mainFrame',
   }), false);
+});
+
+test('blocks banner networks, ad-like hosts, and leftover ad paths', () => {
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/article',
+    requestUrl: 'https://ads.juicyads.com/adshow.php',
+    resourceType: 'script',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://securepubads.g.doubleclick.net/gampad/ads',
+    resourceType: 'subFrame',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://www.googletagservices.com/tag/js/gpt.js',
+    resourceType: 'script',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://ads.cdn.prize-now.example/unit.js',
+    resourceType: 'script',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://cdn.prize-now.example/ads/banner.js',
+    resourceType: 'script',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://cdn.prize-now.example/advice/app.js',
+    resourceType: 'script',
+  }), false);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://syndication.exdynsrv.com/splash.php',
+    resourceType: 'subFrame',
+  }), true);
+  assert.equal(shouldBlockBrowserRequest({
+    pageUrl: 'https://example.com/',
+    requestUrl: 'https://www.juicyads.com/click',
+    resourceType: 'mainFrame',
+  }), true);
 });
 
 test('never blocks login, google, or youtube hosts', () => {
@@ -110,6 +153,11 @@ test('blocks forced third-party window.open but keeps login and user-opened tabs
     targetUrl: 'https://example.com/result',
     disposition: 'background-tab',
   }), false);
+  assert.equal(shouldBlockForcedWindowOpen({
+    openerUrl: 'https://hitomi.la/galleries/1.html',
+    targetUrl: 'https://www.juicyads.com/click',
+    disposition: 'background-tab',
+  }), true);
 });
 
 test('parses and matches user-blocked domains including subdomains', () => {

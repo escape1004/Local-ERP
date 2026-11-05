@@ -36,7 +36,26 @@ const GUEST_PERMISSIONS = new Set([
   'window-management',
 ]);
 
-const BOUNCE_GUARD_MS = 5000;
+const BOUNCE_GUARD_MS = 12000;
+const AD_COSMETIC_STYLE = `
+iframe[src*="googlesyndication"],
+iframe[src*="doubleclick.net"],
+iframe[src*="googletagservices"],
+iframe[id^="google_ads_iframe"],
+ins.adsbygoogle,
+div[id^="google_ads_"],
+div[id^="div-gpt-ad"],
+iframe[src*="exoclick"],
+iframe[src*="exosrv"],
+iframe[src*="exdynsrv"],
+iframe[src*="juicyads"],
+iframe[src*="tsyndicate"],
+iframe[src*="adtng.com"],
+iframe[src*="popads.net"],
+iframe[src*="propellerads"] {
+  display: none !important;
+}
+`;
 const bounceGuards = [];
 
 function queueForcedOpenBounceGuard(url) {
@@ -214,11 +233,21 @@ function parseMatches(raw) {
   }
 }
 
+function injectAdCosmeticHiding(contents) {
+  if (!contents || contents.isDestroyed()) return;
+  if (!getConfiguredBrowserTrackerBlocking()) return;
+  const currentUrl = contents.getURL();
+  if (!isAllowedEmbeddedBrowserUrl(currentUrl) || currentUrl === 'about:blank') return;
+  if (isBotChallengeUrl(currentUrl)) return;
+  contents.insertCSS(AD_COSMETIC_STYLE, { cssOrigin: 'user' }).catch(() => {});
+}
+
 export function injectMatchingScripts(contents) {
   if (!contents || contents.isDestroyed()) return;
   const currentUrl = contents.getURL();
   if (!isAllowedEmbeddedBrowserUrl(currentUrl) || currentUrl === 'about:blank') return;
   if (isBotChallengeUrl(currentUrl)) return;
+  injectAdCosmeticHiding(contents);
 
   const scripts = listEnabledScripts().filter((script) => (
     scriptMatchesUrl(parseMatches(script.matches_json), currentUrl)
@@ -328,9 +357,19 @@ export function attachEmbeddedBrowserGuest(contents) {
       closeOwnedPopupWindow(contents);
       return;
     }
-    if (!contents.__erpBounceGuard && getConfiguredBrowserTrackerBlocking()) {
+    if (!getConfiguredBrowserTrackerBlocking()) return;
+    if (!contents.__erpBounceGuard) {
       const matched = takeForcedOpenBounceGuard(targetUrl);
       if (matched) contents.__erpBounceGuard = matched;
+    }
+    const guard = contents.__erpBounceGuard;
+    if (
+      guard
+      && Date.now() <= guard.expiresAt
+      && shouldBlockBounceNavigation(guard.site, targetUrl, blockedDomains)
+    ) {
+      event.preventDefault();
+      closeOwnedPopupWindow(contents);
     }
   });
 

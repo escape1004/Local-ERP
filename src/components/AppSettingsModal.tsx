@@ -1142,7 +1142,7 @@ export function AppSettingsModal({
           <div>
             <div className="text-sm font-medium text-white">광고·트래커 차단</div>
             <p className="text-sm text-discord-muted mt-2 leading-6">
-              잘 알려진 외부 광고·트래커와, 다른 사이트를 강제로 띄우는 광고 탭·팝업을 막습니다. 구글 로그인, 유튜브 재생, Ctrl 클릭으로 직접 연 링크는 그대로 둡니다.
+              배너·팝업·강제 탭을 포함해 외부 광고·트래커를 막습니다. 구글 로그인, 유튜브 재생, Ctrl 클릭으로 직접 연 링크는 그대로 둡니다.
             </p>
           </div>
           <Switch
