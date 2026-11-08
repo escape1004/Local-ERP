@@ -96,7 +96,7 @@ export const RelatedRecordsEditor: React.FC<{
         ) : (
           <ChevronRight size={16} className="shrink-0 text-discord-muted" />
         )}
-        <span className="text-sm font-medium text-discord-text">관련 항목</span>
+        <span className="text-sm font-medium text-discord-text">관련 레코드</span>
         {value.length > 0 && (
           <span className="text-xs text-discord-muted">{value.length}</span>
         )}
@@ -105,7 +105,7 @@ export const RelatedRecordsEditor: React.FC<{
       {expanded && (
         <div className="space-y-2 border-t border-gray-700 px-4 pb-4 pt-3">
           <p className="text-xs text-discord-muted">
-            관계 필드와 별개로, 카테고리에 상관없이 항목을 연결합니다. 양쪽 항목에서 같은 연결을 관리하며, 어느 쪽에서든 끊을 수 있습니다.
+            관계 필드와 별개로, 카테고리에 상관없이 레코드를 연결합니다. 양쪽 레코드에서 같은 연결을 관리하며, 어느 쪽에서든 끊을 수 있습니다.
           </p>
 
           {selected.length > 0 ? (
@@ -126,7 +126,7 @@ export const RelatedRecordsEditor: React.FC<{
               ))}
             </div>
           ) : (
-            <p className="text-xs text-discord-muted">선택된 항목이 없습니다.</p>
+            <p className="text-xs text-discord-muted">선택된 레코드가 없습니다.</p>
           )}
 
           <div className="relative">
@@ -136,7 +136,7 @@ export const RelatedRecordsEditor: React.FC<{
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="제목 또는 카테고리 검색"
-              aria-label="관련 항목 검색"
+              aria-label="관련 레코드 검색"
               className="h-9 bg-discord-bg border-gray-600 pl-8 text-sm text-discord-text"
             />
           </div>
@@ -164,7 +164,7 @@ export const RelatedRecordsEditor: React.FC<{
               );
             }) : (
               <p className="px-3 py-4 text-xs text-discord-muted">
-                {query.trim() ? '검색 결과가 없습니다.' : '검색 가능한 항목이 없습니다.'}
+                {query.trim() ? '검색 결과가 없습니다.' : '검색 가능한 레코드가 없습니다.'}
               </p>
             )}
           </div>

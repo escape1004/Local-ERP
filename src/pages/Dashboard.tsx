@@ -521,7 +521,7 @@ export default function Dashboard() {
 
     cards.push({
       key: 'records',
-      title: selectedRootCategory ? '카테고리 전체 항목' : '전체 항목',
+      title: selectedRootCategory ? '카테고리 전체 레코드' : '전체 레코드',
       value: totalStats.totalRecords,
       icon: <FileText size={24} className="text-white" />,
       color: 'bg-green-500',
@@ -939,8 +939,8 @@ export default function Dashboard() {
                       <AlertTriangle size={18} />
                     </div>
                     <div>
-                      <h2 className="text-lg font-semibold text-discord-text">주의 항목</h2>
-                      <p className="text-sm text-discord-muted">{`확인이 필요한 항목 ${formatNumber(selectedWarningTotalCount)}개`}</p>
+                      <h2 className="text-lg font-semibold text-discord-text">주의 레코드</h2>
+                      <p className="text-sm text-discord-muted">{`확인이 필요한 레코드 ${formatNumber(selectedWarningTotalCount)}개`}</p>
                     </div>
                   </div>
                   <div className="flex gap-2 text-xs text-discord-muted">
@@ -999,7 +999,7 @@ export default function Dashboard() {
               >
                 {!selectedRootCategory && categoryRecordData.length > 0 && (
                   <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700">
-                    <h2 className="text-lg font-semibold text-discord-text mb-4">카테고리별 항목 수 (상위 10개)</h2>
+                    <h2 className="text-lg font-semibold text-discord-text mb-4">카테고리별 레코드 수 (상위 10개)</h2>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart
                         data={categoryRecordData}
@@ -1059,7 +1059,7 @@ export default function Dashboard() {
 
                 {selectedRootCategory && childCategoryRecordData.length > 0 && (
                   <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700">
-                    <h2 className="text-lg font-semibold text-discord-text mb-4">하위 카테고리별 항목 수</h2>
+                    <h2 className="text-lg font-semibold text-discord-text mb-4">하위 카테고리별 레코드 수</h2>
                     <ResponsiveContainer width="100%" height={300}>
                       <BarChart
                         data={childCategoryRecordData}
@@ -1116,7 +1116,7 @@ export default function Dashboard() {
             {!selectedRootCategory && hasAnyRecords && hasTrendData && (
               <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700 mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-semibold text-discord-text">최근 항목 추가 추이</h2>
+                  <h2 className="text-lg font-semibold text-discord-text">최근 레코드 추가 추이</h2>
                   <Select value={dateUnit} onValueChange={(value: 'day' | 'month' | 'year') => setDateUnit(value)}>
                     <SelectTrigger className="w-32 bg-discord-bg border-gray-600 text-discord-text">
                       <SelectValue />
@@ -1368,7 +1368,7 @@ export default function Dashboard() {
                       <div className="order-4 rounded-xl border border-gray-700 bg-discord-bg/80 p-4">
                         <div className="flex items-center gap-2 mb-4">
                           <Calendar size={17} className="text-discord-accent" />
-                          <h3 className="font-semibold text-discord-text">최근 추가 항목</h3>
+                          <h3 className="font-semibold text-discord-text">최근 추가 레코드</h3>
                         </div>
                         {section.recentRecords.length > 0 ? (
                           <div className="space-y-2">
@@ -1394,7 +1394,7 @@ export default function Dashboard() {
                             ))}
                           </div>
                         ) : (
-                          <p className="text-sm text-discord-muted">최근 추가된 항목이 없습니다.</p>
+                          <p className="text-sm text-discord-muted">최근 추가된 레코드가 없습니다.</p>
                         )}
                       </div>
                       )}
@@ -1433,7 +1433,7 @@ export default function Dashboard() {
                           >
                             {stat.category.name}
                           </h3>
-                          <span className="text-sm text-discord-muted">총 {formatNumber(stat.recordCount)}개 항목</span>
+                          <span className="text-sm text-discord-muted">총 {formatNumber(stat.recordCount)}개 레코드</span>
                         </div>
 
                         {attachmentItems.length > 0 && (
@@ -1449,7 +1449,7 @@ export default function Dashboard() {
 
                         {stat.recentRecords.length > 0 && (
                           <div className="mt-3 pt-3 border-t border-gray-700">
-                            <p className="text-xs text-discord-muted mb-2">최근 추가된 항목:</p>
+                            <p className="text-xs text-discord-muted mb-2">최근 추가된 레코드:</p>
                             <div className="space-y-1">
                               {stat.recentRecords.map(({ record, category }) => {
                                 const displayValue = getRecordDisplayValue(category, record);

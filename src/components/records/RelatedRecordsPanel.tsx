@@ -55,13 +55,13 @@ export const RelatedRecordsPanel: React.FC<{
   return (
     <aside className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-xl border border-gray-700 bg-discord-bg">
       <div className="flex-shrink-0 border-b border-gray-700 p-4">
-        <div className="text-sm font-semibold text-discord-text">관련 항목</div>
+        <div className="text-sm font-semibold text-discord-text">관련 레코드</div>
         <div className="relative mt-3">
           <Search size={14} className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-discord-muted" />
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder="항목 검색"
+            placeholder="레코드 검색"
             className="h-8 bg-discord-sidebar border-gray-600 pl-8 text-xs text-discord-text"
           />
         </div>
@@ -70,7 +70,7 @@ export const RelatedRecordsPanel: React.FC<{
       <div className="min-h-0 flex-1 overflow-y-auto discord-scrollbar p-2">
         {paged.total === 0 ? (
           <div className="px-2 py-8 text-center text-xs text-discord-muted">
-            {query.trim() ? '검색 결과가 없습니다.' : '관련 항목이 없습니다.'}
+            {query.trim() ? '검색 결과가 없습니다.' : '관련 레코드가 없습니다.'}
           </div>
         ) : (
           <div className="space-y-1">

@@ -57,21 +57,21 @@ test('normalizeRelatedRecordIds rejects invalid selections', () => {
 
   expect(normalizeRelatedRecordIds('r-leo', 'r-inception', existing)).toEqual({
     ok: false,
-    error: '관련 항목 선택값이 올바르지 않습니다.',
+    error: '관련 레코드 선택값이 올바르지 않습니다.',
   });
   expect(normalizeRelatedRecordIds(['r-inception'], 'r-inception', existing)).toEqual({
     ok: false,
-    error: '항목은 자기 자신과 연결할 수 없습니다.',
+    error: '레코드는 자기 자신과 연결할 수 없습니다.',
   });
   expect(normalizeRelatedRecordIds(['missing'], 'r-inception', existing)).toEqual({
     ok: false,
-    error: '관련 항목 대상을 찾을 수 없습니다.',
+    error: '관련 레코드 대상을 찾을 수 없습니다.',
   });
   expect(normalizeRelatedRecordIds(Array.from({ length: MAX_RELATED_RECORDS + 1 }, (_, index) => `r-${index}`), 'source', new Set(
     Array.from({ length: MAX_RELATED_RECORDS + 1 }, (_, index) => `r-${index}`)
   ))).toEqual({
     ok: false,
-    error: '관련 항목은 최대 100개까지 지정할 수 있습니다.',
+    error: '관련 레코드는 최대 100개까지 지정할 수 있습니다.',
   });
   expect(normalizeRelatedRecordIds(['r-leo', 'r-leo', ' r-interstellar '], 'r-inception', existing)).toEqual({
     ok: true,

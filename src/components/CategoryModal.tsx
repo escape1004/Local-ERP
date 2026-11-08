@@ -874,7 +874,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                                                           className="h-9 bg-[#2b2d31] text-gray-200 border-b border-gray-600"
                                                         />
                                                         <CommandList className="max-h-[200px] overflow-y-auto text-gray-200">
-                                                          <CommandEmpty className="py-2 pl-3 text-sm text-gray-500">항목을 찾을 수 없습니다.</CommandEmpty>
+                                                          <CommandEmpty className="py-2 pl-3 text-sm text-gray-500">필드를 찾을 수 없습니다.</CommandEmpty>
                                                           <CommandGroup>
                                                             <CommandItem
                                                               value="연결 안 함 none"
@@ -1072,7 +1072,7 @@ export const CategoryModal: React.FC<CategoryModalProps> = ({
                                                     <CommandEmpty className="py-2 pl-3 text-sm text-gray-500">
                                                       {selectableCategories.length === 0
                                                         ? '선택할 카테고리가 없습니다.'
-                                                        : '항목을 찾을 수 없습니다.'}
+                                                        : '카테고리를 찾을 수 없습니다.'}
                                                     </CommandEmpty>
                                                     <CommandGroup>
                                                       {selectableCategories.map((cat) => {

@@ -1139,7 +1139,7 @@ export const MainContent: React.FC = () => {
                       className="bg-discord-accent hover:bg-blue-600"
                     >
                       <Plus size={16} className="mr-2" />
-                      새 항목 추가
+                      새 레코드 추가
                     </Button>
                   </ContextMenuTrigger>
                   <ContextMenuContent>
@@ -1149,7 +1149,7 @@ export const MainContent: React.FC = () => {
                         setIsBulkAddModalOpen(true);
                       }}
                     >
-                      항목 다중 추가
+                      레코드 다중 추가
                     </ContextMenuItem>
                     <ContextMenuItem
                       onClick={(e) => {
@@ -1236,7 +1236,7 @@ export const MainContent: React.FC = () => {
                           />
                           <CommandList className="max-h-[200px] overflow-y-auto">
                             <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">
-                              항목을 찾을 수 없습니다.
+                              옵션을 찾을 수 없습니다.
                             </CommandEmpty>
                             <CommandGroup>
                               <CommandItem
@@ -1298,7 +1298,7 @@ export const MainContent: React.FC = () => {
                           />
                           <CommandList className="max-h-[200px] overflow-y-auto">
                             <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">
-                              항목을 찾을 수 없습니다.
+                              레코드를 찾을 수 없습니다.
                             </CommandEmpty>
                             <CommandGroup>
                               <CommandItem
@@ -1360,7 +1360,7 @@ export const MainContent: React.FC = () => {
                           />
                           <CommandList className="max-h-[200px] overflow-y-auto">
                             <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">
-                              항목을 찾을 수 없습니다.
+                              레코드를 찾을 수 없습니다.
                             </CommandEmpty>
                             <CommandGroup>
                               <CommandItem
@@ -1571,10 +1571,10 @@ export const MainContent: React.FC = () => {
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
                   <h3 className="text-lg font-semibold text-discord-text mb-2">
-                    {hasActiveSearch ? '검색 결과가 없습니다' : '등록된 항목이 없습니다'}
+                    {hasActiveSearch ? '검색 결과가 없습니다' : '등록된 레코드가 없습니다'}
                   </h3>
                   <p className="text-discord-muted mb-4">
-                    {hasActiveSearch ? '다른 검색어로 시도해보세요' : '첫 번째 항목을 추가해보세요'}
+                    {hasActiveSearch ? '다른 검색어로 시도해보세요' : '첫 번째 레코드를 추가해보세요'}
                   </p>
                   {!hasActiveSearch && (
                     <Button
@@ -1585,7 +1585,7 @@ export const MainContent: React.FC = () => {
                       className="bg-discord-accent hover:bg-blue-600"
                     >
                       <Plus size={16} className="mr-2" />
-                      항목 추가하기
+                      레코드 추가하기
                     </Button>
                   )}
                 </div>
@@ -1846,7 +1846,7 @@ export const MainContent: React.FC = () => {
             }}
             onConfirm={confirmDelete}
             title="레코드 삭제"
-            message="이 항목을 삭제하시겠습니까?"
+            message="이 레코드를 삭제하시겠습니까?"
             confirmText="삭제"
             cancelText="취소"
             variant="danger"

@@ -97,10 +97,10 @@ export function CreateMissingRelationRecordsDialog({
 
     if (partition.creatable.length === 0) {
       toast({
-        title: '추가할 항목 없음',
+        title: '추가할 레코드 없음',
         description: selectedField.unique
           ? '선택한 필드는 중복 불가입니다. 이미 있는 값은 추가하지 않습니다.'
-          : '추가할 항목이 없습니다.',
+          : '추가할 레코드가 없습니다.',
         variant: 'destructive',
       });
       return;
@@ -134,10 +134,10 @@ export function CreateMissingRelationRecordsDialog({
 
       if (createdIds.length === 0) {
         toast({
-          title: '항목을 추가하지 못했습니다.',
+          title: '레코드를 추가하지 못했습니다.',
           description: failedValues.length > 0
             ? `"${failedValues.join(', ')}" 값을 추가하지 못했습니다.`
-            : '추가할 항목이 없습니다.',
+            : '추가할 레코드가 없습니다.',
           variant: 'destructive',
         });
         return;
@@ -147,7 +147,7 @@ export function CreateMissingRelationRecordsDialog({
       toast({
         title: '추가 완료',
         description: [
-          `${createdIds.length}개의 항목이 추가되었습니다.`,
+          `${createdIds.length}개의 레코드가 추가되었습니다.`,
           partition.skippedDuplicates.length > 0 ? `(${partition.skippedDuplicates.length}개 건너뜀)` : '',
           failedValues.length > 0 ? `${failedValues.length}개는 추가하지 못했습니다.` : '',
         ].filter(Boolean).join(' '),
@@ -169,10 +169,10 @@ export function CreateMissingRelationRecordsDialog({
       <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-700">
         <div>
           <h2 className="text-xl font-bold text-discord-text">
-            없는 항목 추가
+            없는 레코드 추가
           </h2>
           <p className="text-discord-muted text-sm mt-1">
-            붙여넣은 값 중 {category.name}에 없는 항목이 있습니다. 해당 카테고리에 추가할까요?
+            붙여넣은 값 중 {category.name}에 없는 레코드가 있습니다. 해당 카테고리에 추가할까요?
           </p>
         </div>
         <button

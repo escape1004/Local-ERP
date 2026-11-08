@@ -62,7 +62,7 @@ const AddRecordModal: React.FC<AddRecordModalProps> = ({ category, onClose }) =>
       <div className="bg-discord-bg rounded-xl w-full max-w-2xl overflow-hidden">
         <div className="p-6 border-b border-gray-700">
           <h2 className="text-xl font-bold text-discord-text">
-            새 항목 추가
+            새 레코드 추가
           </h2>
           <p className="text-discord-muted text-sm mt-1">
             {category.name}

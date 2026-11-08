@@ -157,10 +157,10 @@ export const BulkAddModal: React.FC<BulkAddModalProps> = ({
 
       if (newValues.length === 0) {
         toast({
-          title: '추가할 항목 없음',
+          title: '추가할 레코드 없음',
           description: skippedCount > 0 
             ? `모든 값이 이미 카테고리에 존재합니다. (${skippedCount}개 건너뜀)`
-            : '추가할 항목이 없습니다.',
+            : '추가할 레코드가 없습니다.',
           variant: 'destructive',
         });
         setIsSubmitting(false);
@@ -218,15 +218,15 @@ export const BulkAddModal: React.FC<BulkAddModalProps> = ({
 
       toast({
         title: '추가 완료',
-        description: `${newValues.length}개의 항목이 추가되었습니다.${skippedCount > 0 ? ` (${skippedCount}개 건너뜀)` : ''}`,
+        description: `${newValues.length}개의 레코드가 추가되었습니다.${skippedCount > 0 ? ` (${skippedCount}개 건너뜀)` : ''}`,
       });
 
       onClose();
     } catch (error) {
-      console.error('항목 다중 추가 중 오류 발생:', error);
+      console.error('레코드 다중 추가 중 오류 발생:', error);
       toast({
         title: '오류',
-        description: '항목 추가 중 오류가 발생했습니다.',
+        description: '레코드 추가 중 오류가 발생했습니다.',
         variant: 'destructive',
       });
     } finally {
@@ -238,7 +238,7 @@ export const BulkAddModal: React.FC<BulkAddModalProps> = ({
     <AnimatedModal isOpen={isOpen} contentClassName="bg-discord-bg rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-700">
           <h2 className="text-xl font-bold text-discord-text">
-            항목 다중 추가
+            레코드 다중 추가
           </h2>
           <button
             onClick={onClose}

@@ -233,7 +233,7 @@ export function getDashboardWarnings(previewLimit = 8, profileId = getCurrentPro
     categoryRecords.forEach((record) => {
       const displayValue = displayField && record.data[displayField.id]
         ? String(record.data[displayField.id])
-        : `${new Date(record.createdAt).toLocaleDateString('ko-KR')} 항목`;
+        : `${new Date(record.createdAt).toLocaleDateString('ko-KR')} 레코드`;
 
       if (fileField && !fileField.thumbnailOnly) {
         const resolvedPath = resolveRecordFileSystemPath(record.data[fileField.id], fileField, appDataDir);

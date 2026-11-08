@@ -331,7 +331,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       onClose();
     } catch (error) {
       console.error('레코드 저장 중 오류 발생:', error);
-      showAlert('오류', '항목을 저장하는 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
+      showAlert('오류', '레코드를 저장하는 중 오류가 발생했습니다. 다시 시도해주세요.', 'error');
     } finally {
       setIsValidating(false);
     }
@@ -1049,7 +1049,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       }}
                     />
                     <CommandList className="max-h-[200px] overflow-y-auto">
-                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">항목을 찾을 수 없습니다.</CommandEmpty>
+                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">옵션을 찾을 수 없습니다.</CommandEmpty>
                       <CommandGroup>
                         <CommandItem
                           value=""
@@ -1161,7 +1161,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       }}
                     />
                     <CommandList className="text-discord-text">
-                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">항목을 찾을 수 없습니다.</CommandEmpty>
+                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">옵션을 찾을 수 없습니다.</CommandEmpty>
                       <CommandGroup>
                         <CommandItem
                           value=""
@@ -1243,7 +1243,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       }}
                     />
                     <CommandList className="max-h-[200px] overflow-y-auto">
-                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">항목을 찾을 수 없습니다.</CommandEmpty>
+                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">레코드를 찾을 수 없습니다.</CommandEmpty>
                       <CommandGroup>
                         {relatedRecords.map((record) => (
                           <CommandItem
@@ -1344,7 +1344,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       }}
                     />
                     <CommandList className="text-discord-text">
-                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">항목을 찾을 수 없습니다.</CommandEmpty>
+                      <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">레코드를 찾을 수 없습니다.</CommandEmpty>
                       <CommandGroup>
                         <CommandItem
                           value=""
@@ -1487,7 +1487,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-end">
             <h2 className="text-xl font-bold text-discord-text">
-              {record ? '항목 수정' : '새 항목 등록'}
+              {record ? '레코드 수정' : '새 레코드 등록'}
             </h2>
             <span className="ml-2 text-sm text-discord-muted flex items-center">
               (
@@ -1583,16 +1583,16 @@ export const RecordModal: React.FC<RecordModalProps> = ({
         variant={alertDialogProps.variant}
       />
 
-      {/* 중복 항목 선택 모달 */}
+      {/* 중복 레코드 선택 모달 */}
       {ambiguousDialogOpen && (
         <AnimatedModal isOpen={ambiguousDialogOpen} contentClassName="bg-discord-bg rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
             <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-700">
               <div>
                 <h2 className="text-xl font-bold text-discord-text">
-                  중복된 항목 선택
+                  중복된 레코드 선택
                 </h2>
                 <p className="text-discord-muted text-sm mt-1">
-                  붙여넣은 값 중 동일한 이름을 가진 항목이 여러 개 있습니다. 원하는 항목을 선택해 주세요.
+                  붙여넣은 값 중 동일한 이름을 가진 레코드가 여러 개 있습니다. 원하는 레코드를 선택해 주세요.
                 </p>
               </div>
               <button

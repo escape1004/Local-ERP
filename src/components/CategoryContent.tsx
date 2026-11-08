@@ -798,7 +798,7 @@ export const CategoryContent: React.FC<CategoryContentProps> = ({ categoryId }) 
               )}
             </h1>
             <p className="text-sm text-discord-muted mt-2">
-              전체 {sortedRecords.length}개 항목
+              전체 {sortedRecords.length}개 레코드
               {searchTerm && ` (검색 결과: ${sortedRecords.length}개)`}
             </p>
           </div>
@@ -813,7 +813,7 @@ export const CategoryContent: React.FC<CategoryContentProps> = ({ categoryId }) 
                   className="bg-discord-accent hover:bg-blue-600"
                 >
                   <Plus size={16} className="mr-2" />
-                  새 항목 추가
+                  새 레코드 추가
                 </Button>
               </ContextMenuTrigger>
               <ContextMenuContent>
@@ -823,7 +823,7 @@ export const CategoryContent: React.FC<CategoryContentProps> = ({ categoryId }) 
                     setIsBulkAddModalOpen(true);
                   }}
                 >
-                  항목 다중 추가
+                  레코드 다중 추가
                 </ContextMenuItem>
                 <ContextMenuItem
                   onClick={(e) => {
@@ -904,10 +904,10 @@ export const CategoryContent: React.FC<CategoryContentProps> = ({ categoryId }) 
           <div className="flex items-center justify-center h-full">
             <div className="text-center">
               <h3 className="text-lg font-semibold text-discord-text mb-2">
-                {searchTerm ? '검색 결과가 없습니다' : '등록된 항목이 없습니다'}
+                {searchTerm ? '검색 결과가 없습니다' : '등록된 레코드가 없습니다'}
               </h3>
               <p className="text-discord-muted mb-4">
-                {searchTerm ? '다른 검색어로 시도해보세요' : '첫 번째 항목을 추가해보세요'}
+                {searchTerm ? '다른 검색어로 시도해보세요' : '첫 번째 레코드를 추가해보세요'}
               </p>
               {!searchTerm && (
                 <Button
@@ -918,7 +918,7 @@ export const CategoryContent: React.FC<CategoryContentProps> = ({ categoryId }) 
                   className="bg-discord-accent hover:bg-blue-600"
                 >
                   <Plus size={16} className="mr-2" />
-                  항목 추가하기
+                  레코드 추가하기
                 </Button>
               )}
             </div>

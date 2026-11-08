@@ -45,7 +45,7 @@ export function recordLabelFromData(data, fields) {
 
 export function normalizeRelatedRecordIds(raw, sourceRecordId, existingIds) {
   if (!Array.isArray(raw)) {
-    return { ok: false, error: '관련 항목 선택값이 올바르지 않습니다.' };
+    return { ok: false, error: '관련 레코드 선택값이 올바르지 않습니다.' };
   }
 
   const ids = [...new Set(
@@ -55,15 +55,15 @@ export function normalizeRelatedRecordIds(raw, sourceRecordId, existingIds) {
   )];
 
   if (ids.length > MAX_RELATED_RECORDS) {
-    return { ok: false, error: '관련 항목은 최대 100개까지 지정할 수 있습니다.' };
+    return { ok: false, error: '관련 레코드는 최대 100개까지 지정할 수 있습니다.' };
   }
 
   for (const id of ids) {
     if (id === sourceRecordId) {
-      return { ok: false, error: '항목은 자기 자신과 연결할 수 없습니다.' };
+      return { ok: false, error: '레코드는 자기 자신과 연결할 수 없습니다.' };
     }
     if (!existingIds.has(id)) {
-      return { ok: false, error: '관련 항목 대상을 찾을 수 없습니다.' };
+      return { ok: false, error: '관련 레코드 대상을 찾을 수 없습니다.' };
     }
   }
 
@@ -185,7 +185,7 @@ export function searchRelatedRecordCandidates(database, options) {
 export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
   const source = database.prepare('SELECT 1 AS found FROM records WHERE id = ?').get(sourceId);
   if (!source) {
-    throw new Error('항목을 찾을 수 없습니다.');
+    throw new Error('레코드를 찾을 수 없습니다.');
   }
 
   const normalized = normalizeRelatedRecordIds(ids, sourceId, existingIds);
@@ -239,7 +239,7 @@ export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
 export function saveRelatedRecordIds(database, sourceId, relatedRecordIds, profileId) {
   if (relatedRecordIds === undefined) return;
   if (!Array.isArray(relatedRecordIds)) {
-    throw new Error('관련 항목 선택값이 올바르지 않습니다.');
+    throw new Error('관련 레코드 선택값이 올바르지 않습니다.');
   }
   replaceRelatedRecordIds(database, sourceId, relatedRecordIds, listProfileRecordIds(database, profileId));
 }

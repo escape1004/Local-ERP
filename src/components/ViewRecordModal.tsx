@@ -825,7 +825,7 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
         {/* Header */}
         <div className="flex-shrink-0 flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-end">
-            <h2 className="text-xl font-bold text-discord-text">항목 상세 정보</h2>
+            <h2 className="text-xl font-bold text-discord-text">레코드 상세 정보</h2>
             <span className="ml-2 text-sm text-discord-muted flex items-center">
               (
               {(() => {
