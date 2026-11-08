@@ -1,4 +1,4 @@
-import { isBlankBrowserTab, NEW_TAB_URL } from './browserTabs';
+import { isInternalBrowserTab, NEW_TAB_URL } from './browserTabs';
 
 export const BACKGROUND_TAB_LOAD_STAGGER_MS = 90;
 
@@ -8,7 +8,10 @@ export function resolveWebviewStartNavigation(input: {
   tabIndex?: number;
 }) {
   const startUrl = String(input.startUrl || '').trim() || NEW_TAB_URL;
-  if (isBlankBrowserTab({ url: startUrl }) || input.isActive) {
+  if (isInternalBrowserTab({ url: startUrl })) {
+    return { src: NEW_TAB_URL, deferUrl: null as string | null, deferMs: 0 };
+  }
+  if (input.isActive) {
     return { src: startUrl, deferUrl: null as string | null, deferMs: 0 };
   }
   const index = Math.max(0, Math.trunc(Number(input.tabIndex) || 0));
@@ -21,7 +24,7 @@ export function resolveWebviewStartNavigation(input: {
 
 export function shouldLoadPendingWebviewUrl(currentUrl: string | null | undefined, pendingUrl: string) {
   const pending = String(pendingUrl || '').trim();
-  if (!pending || pending === NEW_TAB_URL) return false;
+  if (!pending || isInternalBrowserTab({ url: pending })) return false;
   return String(currentUrl || '') !== pending;
 }
 

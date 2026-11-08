@@ -11,6 +11,11 @@ export type EmbeddedBrowserShortcutAction =
   | 'zoom-reset'
   | 'new-tab'
   | 'close-tab'
+  | 'restore-tab'
+  | 'duplicate-tab'
+  | 'find'
+  | 'find-next'
+  | 'find-prev'
   | 'next-tab'
   | 'prev-tab'
   | 'tab-1' | 'tab-2' | 'tab-3' | 'tab-4' | 'tab-5' | 'tab-6' | 'tab-7' | 'tab-8' | 'tab-9';
@@ -19,6 +24,11 @@ const HOST_SHORTCUT_ACTIONS = new Set<EmbeddedBrowserShortcutAction>([
   'focus-address',
   'new-tab',
   'close-tab',
+  'restore-tab',
+  'duplicate-tab',
+  'find',
+  'find-next',
+  'find-prev',
   'next-tab',
   'prev-tab',
 ]);
@@ -117,8 +127,15 @@ export function resolveEmbeddedBrowserShortcut(input: ShortcutInput = {}): Embed
   if (control && !alt && !shift && (letter === 'l' || isKey(input, ['l', 'L'], ['KeyL']))) return 'focus-address';
   if (alt && !control && !shift && (letter === 'd' || isKey(input, ['d', 'D'], ['KeyD']))) return 'focus-address';
 
+  if (control && !alt && shift && (letter === 't' || isKey(input, ['t', 'T'], ['KeyT']))) return 'restore-tab';
   if (control && !alt && !shift && (letter === 't' || isKey(input, ['t', 'T'], ['KeyT']))) return 'new-tab';
+  if (control && !alt && shift && (letter === 'd' || isKey(input, ['d', 'D'], ['KeyD']))) return 'duplicate-tab';
   if (control && !alt && !shift && (letter === 'w' || isKey(input, ['w', 'W'], ['KeyW']))) return 'close-tab';
+  if (control && !alt && !shift && (letter === 'f' || isKey(input, ['f', 'F'], ['KeyF']))) return 'find';
+  if (isKey(input, ['F3']) && !control && !alt) return shift ? 'find-prev' : 'find-next';
+  if (control && !alt && (letter === 'g' || isKey(input, ['g', 'G'], ['KeyG']))) {
+    return shift ? 'find-prev' : 'find-next';
+  }
   if (control && !alt && !shift && isKey(input, ['F4'])) return 'close-tab';
   if (control && !alt && isKey(input, ['Tab'])) return shift ? 'prev-tab' : 'next-tab';
   if (control && !alt && !shift && isKey(input, ['PageDown'])) return 'next-tab';
@@ -197,6 +214,8 @@ export function applyEmbeddedBrowserShortcut(contents, action: EmbeddedBrowserSh
   }
   if (action === 'stop') {
     contents.stop();
+    const host = contents.hostWebContents;
+    if (host && !host.isDestroyed()) host.send('browser:shortcut', 'stop');
     return;
   }
   if (action === 'devtools') {
@@ -230,7 +249,12 @@ export function attachEmbeddedBrowserShortcutGuard(contents, options: {
       ? options.resolveTarget(contents, action)
       : contents;
 
-    if (action === 'stop' && !isWebContentsLoading(target || contents)) return;
+    if (action === 'stop' && !isWebContentsLoading(target || contents)) {
+      event.preventDefault();
+      const host = contents.hostWebContents || contents;
+      if (host && !host.isDestroyed()) host.send('browser:shortcut', 'stop');
+      return;
+    }
 
     event.preventDefault();
     if (target) applyEmbeddedBrowserShortcut(target, action);

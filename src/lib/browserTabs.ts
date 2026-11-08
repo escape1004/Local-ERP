@@ -1,4 +1,6 @@
 export const NEW_TAB_URL = 'about:blank';
+export const HISTORY_PAGE_URL = 'about:history';
+export const DOWNLOADS_PAGE_URL = 'about:downloads';
 export const MAX_BROWSER_TABS = 16;
 
 export type BrowserTabState = {
@@ -21,8 +23,22 @@ export function isBlankBrowserTab(tab: Pick<BrowserTabState, 'url'>) {
   return !tab.url || tab.url === NEW_TAB_URL;
 }
 
+export function isHistoryBrowserTab(tab: Pick<BrowserTabState, 'url'>) {
+  return tab.url === HISTORY_PAGE_URL;
+}
+
+export function isDownloadsBrowserTab(tab: Pick<BrowserTabState, 'url'>) {
+  return tab.url === DOWNLOADS_PAGE_URL;
+}
+
+export function isInternalBrowserTab(tab: Pick<BrowserTabState, 'url'>) {
+  return isBlankBrowserTab(tab) || isHistoryBrowserTab(tab) || isDownloadsBrowserTab(tab);
+}
+
 export function titleForBrowserTab(url: string, title?: string) {
   const trimmed = String(title || '').trim();
+  if (isHistoryBrowserTab({ url })) return '기록';
+  if (isDownloadsBrowserTab({ url })) return '다운로드';
   if (trimmed && trimmed !== '브라우저') return trimmed;
   if (isBlankBrowserTab({ url })) return '새 탭';
   try {
@@ -39,7 +55,7 @@ export function createBrowserTab(url = NEW_TAB_URL): BrowserTabState {
     id: `tab-${tabSeq}`,
     url: nextUrl,
     title: titleForBrowserTab(nextUrl),
-    loading: !isBlankBrowserTab({ url: nextUrl }),
+    loading: !isInternalBrowserTab({ url: nextUrl }),
     canGoBack: false,
     canGoForward: false,
   };

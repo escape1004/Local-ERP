@@ -1,7 +1,9 @@
 import { expect, test } from 'vitest';
 import {
   BROWSER_PAGE_HTML_LIMIT,
+  BROWSER_PAGE_TEXT_LIMIT,
   getCaptureBrowserPageContextScript,
+  getCaptureBrowserPageTextScript,
   simplifyBrowserPageHtml,
 } from './browserPageContext';
 
@@ -24,4 +26,10 @@ test('builds a guest capture script with the html limit', () => {
   expect(script).toContain(String(BROWSER_PAGE_HTML_LIMIT));
   expect(script).toContain('document.documentElement');
   expect(script).toContain('document.title');
+});
+
+test('builds a guest text capture script for page translation', () => {
+  const script = getCaptureBrowserPageTextScript();
+  expect(script).toContain(String(BROWSER_PAGE_TEXT_LIMIT));
+  expect(script).toContain('innerText');
 });

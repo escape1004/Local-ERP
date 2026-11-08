@@ -4,6 +4,13 @@ import { faviconUrlFor } from '../../lib/browserFavicon';
 import type { BrowserTabState } from '../../lib/browserTabs';
 import { cn } from '../../lib/utils';
 import { WindowControls } from '../TitleBar';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from '../ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { FIELD_TOOLTIP_CLASSNAME } from '../records/FieldValueRenderer';
 
@@ -38,12 +45,24 @@ function TabFavicon({ url }: { url: string }) {
 type TabBarProps = {
   tabs: BrowserTabState[];
   activeId: string;
+  canRestoreClosedTab?: boolean;
   onSelect: (tabId: string) => void;
   onClose: (tabId: string) => void;
   onNewTab: () => void;
+  onDuplicate?: (tabId: string) => void;
+  onRestoreClosedTab?: () => void;
 };
 
-export function TabBar({ tabs, activeId, onSelect, onClose, onNewTab }: TabBarProps) {
+export function TabBar({
+  tabs,
+  activeId,
+  canRestoreClosedTab = false,
+  onSelect,
+  onClose,
+  onNewTab,
+  onDuplicate,
+  onRestoreClosedTab,
+}: TabBarProps) {
   return (
     <div
       className="flex h-9 shrink-0 cursor-default items-stretch bg-[#2B2D31] text-[#949BA4] [&_button]:cursor-default"
@@ -54,36 +73,48 @@ export function TabBar({ tabs, activeId, onSelect, onClose, onNewTab }: TabBarPr
           {tabs.map((tab) => {
             const active = tab.id === activeId;
             return (
-              <div
-                key={tab.id}
-                role="tab"
-                aria-selected={active}
-                title={tab.title}
-                onClick={() => onSelect(tab.id)}
-                style={noDragStyle}
-                className={cn(
-                  'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-default items-center gap-1.5 rounded-t-md px-2 text-sm',
-                  active ? 'bg-discord-bg text-discord-text' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text',
-                )}
-              >
-                <TabFavicon url={tab.url} />
-                <span className="min-w-0 flex-1 truncate">{tab.loading ? '불러오는 중' : tab.title}</span>
-                <button
-                  type="button"
-                  aria-label={`${tab.title} 탭 닫기`}
-                  className={cn(
-                    'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm hover:bg-white/10',
-                    active ? 'opacity-80' : 'opacity-0 group-hover:opacity-80',
-                  )}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    onClose(tab.id);
-                  }}
-                >
-                  <X size={11} />
-                </button>
-              </div>
+              <ContextMenu key={tab.id}>
+                <ContextMenuTrigger asChild>
+                  <div
+                    role="tab"
+                    aria-selected={active}
+                    title={tab.title}
+                    onClick={() => onSelect(tab.id)}
+                    onContextMenu={() => onSelect(tab.id)}
+                    style={noDragStyle}
+                    className={cn(
+                      'group flex h-8 w-40 min-w-[112px] shrink-0 cursor-default items-center gap-1.5 rounded-t-md px-2 text-sm',
+                      active ? 'bg-discord-bg text-discord-text' : 'text-discord-muted hover:bg-discord-hover hover:text-discord-text',
+                    )}
+                  >
+                    <TabFavicon url={tab.url} />
+                    <span className="min-w-0 flex-1 truncate">{tab.loading ? '불러오는 중' : tab.title}</span>
+                    <button
+                      type="button"
+                      aria-label={`${tab.title} 탭 닫기`}
+                      className={cn(
+                        'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm hover:bg-white/10',
+                        active ? 'opacity-80' : 'opacity-0 group-hover:opacity-80',
+                      )}
+                      onClick={(event) => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onClose(tab.id);
+                      }}
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                </ContextMenuTrigger>
+                <ContextMenuContent className="min-w-[180px] border-gray-700 bg-discord-sidebar text-discord-text">
+                  <ContextMenuItem onSelect={() => onDuplicate?.(tab.id)}>탭 복제</ContextMenuItem>
+                  <ContextMenuItem disabled={!canRestoreClosedTab} onSelect={() => onRestoreClosedTab?.()}>
+                    닫은 탭 다시 열기
+                  </ContextMenuItem>
+                  <ContextMenuSeparator className="bg-gray-700" />
+                  <ContextMenuItem onSelect={() => onClose(tab.id)}>탭 닫기</ContextMenuItem>
+                </ContextMenuContent>
+              </ContextMenu>
             );
           })}
         </div>

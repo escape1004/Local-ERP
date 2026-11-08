@@ -21,6 +21,9 @@ import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
 import { getConfiguredBrowserBlockedDomains, getConfiguredBrowserTrackerBlocking, log } from '../app/state';
 import { attachBrowserVideoSniffer, saveGuestMediaUrl } from './browser-video-download';
+import { attachBrowserSessionDownloads } from '../lib/browser-download-manager';
+import { recordBrowserHistoryVisit } from '../lib/browser-history-store';
+import { hasOpenAiApiKey } from './openai-secret';
 
 export const BROWSER_PARTITION = 'persist:erp-browser';
 
@@ -136,6 +139,34 @@ function attachGuestContextMenu(contents) {
     if (template.length > 0 && template[template.length - 1].type !== 'separator') {
       template.push({ type: 'separator' });
     }
+    const host = contents.hostWebContents || contents;
+    template.push({
+      label: '페이지 이미지 저장',
+      click: () => {
+        if (host && !host.isDestroyed()) host.send('browser:page-command', 'save-images');
+      },
+    });
+    template.push({
+      label: '페이지 영상 저장',
+      click: () => {
+        if (host && !host.isDestroyed()) host.send('browser:page-command', 'save-videos');
+      },
+    });
+    if (hasOpenAiApiKey()) {
+      template.push({
+        label: '페이지 번역',
+        click: () => {
+          if (host && !host.isDestroyed()) host.send('browser:page-command', 'translate-page');
+        },
+      });
+    }
+    template.push({
+      label: '방문 기록',
+      click: () => {
+        if (host && !host.isDestroyed()) host.send('browser:page-command', 'open-history');
+      },
+    });
+    template.push({ type: 'separator' });
     template.push({
       label: '요소 검사',
       click: () => contents.inspectElement(Number(params?.x) || 0, Number(params?.y) || 0),
@@ -146,7 +177,6 @@ function attachGuestContextMenu(contents) {
       click: () => toggleEmbeddedBrowserDevTools(contents),
     });
     const menu = Menu.buildFromTemplate(template);
-    const host = contents.hostWebContents || contents;
     const win = BrowserWindow.fromWebContents(host);
     menu.popup({ window: win && !win.isDestroyed() ? win : undefined });
   });
@@ -207,6 +237,7 @@ export function configureEmbeddedBrowserSession() {
     });
   });
   attachBrowserVideoSniffer(ses);
+  attachBrowserSessionDownloads(ses);
 }
 
 export function isEmbeddedBrowserGuest(contents) {
@@ -411,11 +442,21 @@ export function attachEmbeddedBrowserGuest(contents) {
 
   contents.on('did-finish-load', () => {
     injectMatchingScripts(contents);
+    try {
+      recordBrowserHistoryVisit({ url: contents.getURL(), title: contents.getTitle() });
+    } catch {
+      // Guest URL/title can throw before the page is ready.
+    }
   });
 
   contents.on('did-navigate-in-page', (_event, url) => {
     if (!contents.isDestroyed()) {
       contents.send('browser:url-changed', url);
+    }
+    try {
+      recordBrowserHistoryVisit({ url, title: contents.getTitle() });
+    } catch {
+      // Guest title can throw during in-page navigations.
     }
   });
 

@@ -19,6 +19,8 @@ test('navigates history with Alt arrows', () => {
 
 test('opens and cycles tabs with Ctrl+T, Ctrl+W, and Ctrl+Tab', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 't', control: true })).toBe('new-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 't', control: true, shift: true })).toBe('restore-tab');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'd', control: true, shift: true })).toBe('duplicate-tab');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'w', control: true })).toBe('close-tab');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'Tab', control: true })).toBe('next-tab');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'Tab', control: true, shift: true })).toBe('prev-tab');
@@ -31,6 +33,13 @@ test('opens guest developer tools with F12 and Ctrl+Shift+I', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'i', control: true, shift: true })).toBe('devtools');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'I', meta: true, shift: true })).toBe('devtools');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F12', control: true })).toBeNull();
+});
+
+test('opens find in page with Ctrl+F and F3', () => {
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'f', control: true })).toBe('find');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F3' })).toBe('find-next');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F3', shift: true })).toBe('find-prev');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'g', control: true })).toBe('find-next');
 });
 
 test('focuses the address bar with Ctrl+L', () => {

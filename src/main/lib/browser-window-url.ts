@@ -12,7 +12,7 @@ export function getEmbeddedBrowserHash(url?: string) {
 export function normalizeBrowserSessionUrl(value) {
   const text = String(value || '').trim();
   if (!text) return '';
-  if (text === 'about:blank') return 'about:blank';
+  if (text === 'about:blank' || text === 'about:history' || text === 'about:downloads') return text;
   const parsed = parseExternalHttpUrl(text);
   return parsed ? parsed.toString() : '';
 }

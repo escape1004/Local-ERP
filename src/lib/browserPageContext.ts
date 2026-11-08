@@ -1,4 +1,16 @@
 export const BROWSER_PAGE_HTML_LIMIT = 12000;
+export const BROWSER_PAGE_TEXT_LIMIT = 8000;
+
+export function getCaptureBrowserPageTextScript(maxLength = BROWSER_PAGE_TEXT_LIMIT) {
+  const parsed = Number(maxLength);
+  const limit = Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : BROWSER_PAGE_TEXT_LIMIT;
+  return `(() => {
+    const text = String(document.body && document.body.innerText || document.documentElement && document.documentElement.innerText || '')
+      .replace(/\\s+/g, ' ')
+      .trim();
+    return text.slice(0, ${limit});
+  })()`;
+}
 
 export function simplifyBrowserPageHtml(html: string, maxLength = BROWSER_PAGE_HTML_LIMIT) {
   const parsed = Number(maxLength);

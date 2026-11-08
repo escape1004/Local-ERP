@@ -201,6 +201,45 @@ export const SCHEMA_MIGRATIONS = [
       }
     },
   },
+  {
+    version: 10,
+    name: 'browser_history_and_downloads',
+    up(database) {
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS browser_history (
+          id TEXT PRIMARY KEY,
+          url TEXT NOT NULL,
+          title TEXT NOT NULL,
+          visited_at TEXT NOT NULL
+        )
+      `);
+      if (!indexExists(database, 'idx_browser_history_visited')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_browser_history_visited ON browser_history(visited_at DESC)'
+        );
+      }
+      database.exec(`
+        CREATE TABLE IF NOT EXISTS browser_downloads (
+          id TEXT PRIMARY KEY,
+          filename TEXT NOT NULL,
+          url TEXT NOT NULL,
+          file_path TEXT NOT NULL,
+          mime TEXT,
+          kind TEXT NOT NULL,
+          state TEXT NOT NULL,
+          received_bytes INTEGER NOT NULL DEFAULT 0,
+          total_bytes INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          completed_at TEXT
+        )
+      `);
+      if (!indexExists(database, 'idx_browser_downloads_created')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_browser_downloads_created ON browser_downloads(created_at DESC)'
+        );
+      }
+    },
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].version;

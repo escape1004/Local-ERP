@@ -1,5 +1,10 @@
 import { expect, test } from 'vitest';
-import { getInAppBrowserRoute, isStandaloneBrowserRole, resolveBrowserAddressInput } from './browserNavigation';
+import {
+  getInAppBrowserRoute,
+  isStandaloneBrowserRole,
+  resolveBrowserAddressInput,
+  resolveBrowserTabInput,
+} from './browserNavigation';
 
 test('builds an in-app browser route', () => {
   expect(getInAppBrowserRoute('https://example.com/a')).toBe('/browser?url=https%3A%2F%2Fexample.com%2Fa');
@@ -17,6 +22,13 @@ test('treats non-url address bar input as a Google search', () => {
   expect(resolveBrowserAddressInput('example.com/path')).toBe('https://example.com/path');
   expect(resolveBrowserAddressInput('https://example.com')).toBe('https://example.com/');
   expect(resolveBrowserAddressInput('javascript:alert(1)')).toBeNull();
+});
+
+test('keeps internal browser pages in the address bar', () => {
+  expect(resolveBrowserTabInput('about:blank')).toBe('about:blank');
+  expect(resolveBrowserTabInput('about:history')).toBe('about:history');
+  expect(resolveBrowserTabInput('about:downloads')).toBe('about:downloads');
+  expect(resolveBrowserTabInput('example.com')).toBe('https://example.com/');
 });
 
 test('detects a standalone browser window from the role query', () => {

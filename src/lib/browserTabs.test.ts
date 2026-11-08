@@ -13,9 +13,12 @@ import {
 
 test('labels blank tabs and hostnames', () => {
   expect(titleForBrowserTab('about:blank')).toBe('새 탭');
+  expect(titleForBrowserTab('about:history')).toBe('기록');
+  expect(titleForBrowserTab('about:downloads')).toBe('다운로드');
   expect(titleForBrowserTab('https://example.com/path')).toBe('example.com');
   expect(titleForBrowserTab('https://example.com', 'Example')).toBe('Example');
   expect(isBlankBrowserTab({ url: 'about:blank' })).toBe(true);
+  expect(isBlankBrowserTab({ url: 'about:history' })).toBe(false);
 });
 
 test('reuses an empty active tab instead of creating another', () => {
@@ -73,6 +76,20 @@ test('restores saved tabs and the active index', () => {
   const restored = restoreBrowserSession(['https://a.example/', 'about:blank', 'https://c.example/'], 2);
   expect(restored.tabs.map((tab) => tab.url)).toEqual(['https://a.example/', 'about:blank', 'https://c.example/']);
   expect(restored.activeId).toBe(restored.tabs[2].id);
+});
+
+test('restores a history page tab without treating it as a new tab', () => {
+  const restored = restoreBrowserSession(['about:history'], 0);
+  expect(restored.tabs[0].url).toBe('about:history');
+  expect(restored.tabs[0].title).toBe('기록');
+  expect(restored.tabs[0].loading).toBe(false);
+});
+
+test('restores a downloads page tab as an internal page', () => {
+  const restored = restoreBrowserSession(['about:downloads'], 0);
+  expect(restored.tabs[0].url).toBe('about:downloads');
+  expect(restored.tabs[0].title).toBe('다운로드');
+  expect(restored.tabs[0].loading).toBe(false);
 });
 
 test('opens a requested url as another tab without dropping the saved session', () => {

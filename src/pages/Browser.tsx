@@ -1,10 +1,12 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
 import {
   ArrowLeft,
   ArrowRight,
   Bookmark,
   Code2,
+  Download,
   PanelRightClose,
   PanelRightOpen,
   RotateCw,
@@ -13,9 +15,14 @@ import {
 } from 'lucide-react';
 import { BrowserVideoMenu } from '../components/browser/BrowserVideoMenu';
 import { BookmarkBar, collectManualSaveTargets } from '../components/browser/BookmarkBar';
+import { BrowserDownloadsPanel } from '../components/browser/BrowserDownloadsPanel';
+import { BrowserFindBar } from '../components/browser/BrowserFindBar';
+import { BrowserHistoryPanel } from '../components/browser/BrowserHistoryPanel';
+import { BrowserImagePickerModal } from '../components/browser/BrowserImagePickerModal';
 import { BrowserNewTab } from '../components/browser/BrowserNewTab';
 import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
 import { BrowserScriptModal } from '../components/browser/BrowserScriptModal';
+import { BrowserTranslateBar } from '../components/browser/BrowserTranslateBar';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
 import { TabBar } from '../components/browser/TabBar';
 import type { ManualDragItem } from '../components/browser/bookmark-dnd';
@@ -38,10 +45,26 @@ import {
   type BrowserPasswordPrompt,
 } from '../lib/browserPasswordPrompt';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton, shouldMuteInactiveBrowserTab } from '../lib/browserChrome';
-import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
+import { parseExternalHttpUrl, resolveBrowserTabInput } from '../lib/browserNavigation';
 import { scriptMatchesUrl, urlsReferToSameResource } from '../main/lib/browser-url';
 import { wrapUserscript, wrapUserscriptForRunAt } from '../main/lib/browser-userscript';
+import { popClosedBrowserTab, pushClosedBrowserTab, toClosedBrowserTab, type ClosedBrowserTab } from '../lib/browserClosedTabs';
+import { type BrowserDownloadItem } from '../lib/browserDownloads';
+import { type BrowserHistoryItem } from '../lib/browserHistory';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
+import {
+  getApplyPageTranslationsScript,
+  getCollectPageTranslateTextsScript,
+  getRestorePageTranslateScript,
+  packPageTranslateChunks,
+  parseTranslatedStringList,
+} from '../lib/browserPageTranslate';
+import {
+  collectUniquePageImages,
+  filenameFromImageUrl,
+  getCollectBrowserPageImagesScript,
+  type BrowserPageImage,
+} from '../lib/browserPageImages';
 import {
   getCollectBrowserPageVideosScript,
   parseCollectedBrowserPageVideos,
@@ -54,7 +77,12 @@ import {
 import {
   closeBrowserTab,
   cycleBrowserTab,
+  DOWNLOADS_PAGE_URL,
+  HISTORY_PAGE_URL,
   isBlankBrowserTab,
+  isDownloadsBrowserTab,
+  isHistoryBrowserTab,
+  isInternalBrowserTab,
   MAX_BROWSER_TABS,
   NEW_TAB_URL,
   openBrowserTab,
@@ -81,6 +109,8 @@ type EmbeddedWebview = HTMLElement & {
   setAudioMuted?: (muted: boolean) => void;
   executeJavaScript?: (code: string) => Promise<unknown>;
   send?: (channel: string, ...args: unknown[]) => void;
+  findInPage?: (text: string, options?: { forward?: boolean; findNext?: boolean }) => void;
+  stopFindInPage?: (action: 'clearSelection' | 'keepSelection' | 'activateSelection') => void;
   openDevTools?: () => void;
   closeDevTools?: () => void;
   isDevToolsOpened?: () => boolean;
@@ -168,10 +198,39 @@ const BrowserPage: React.FC = () => {
   const [generating, setGenerating] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [hasOpenAiApiKey, setHasOpenAiApiKey] = React.useState(false);
+  const [translationTargetLanguage, setTranslationTargetLanguage] = React.useState('ko');
   const [passwordPrompts, setPasswordPrompts] = React.useState<Record<string, BrowserPasswordPrompt>>({});
+  const [closedTabs, setClosedTabs] = React.useState<ClosedBrowserTab[]>([]);
+  const closedTabsRef = React.useRef<ClosedBrowserTab[]>([]);
+  const [findOpen, setFindOpen] = React.useState(false);
+  const findOpenRef = React.useRef(false);
+  const [findFocusSeq, setFindFocusSeq] = React.useState(0);
+  const [findQuery, setFindQuery] = React.useState('');
+  const findQueryRef = React.useRef('');
+  const [findMatch, setFindMatch] = React.useState({ active: 0, total: 0 });
+  const [historyItems, setHistoryItems] = React.useState<BrowserHistoryItem[]>([]);
+  const [downloadItems, setDownloadItems] = React.useState<BrowserDownloadItem[]>([]);
+  const [imagePickerOpen, setImagePickerOpen] = React.useState(false);
+  const [videoPickerOpen, setVideoPickerOpen] = React.useState(false);
+  const [downloadsOpen, setDownloadsOpen] = React.useState(false);
+  const downloadsRef = React.useRef<HTMLSpanElement>(null);
+  const downloadsBubbleRef = React.useRef<HTMLDivElement>(null);
+  const [downloadsBubblePos, setDownloadsBubblePos] = React.useState<{ top: number; right: number } | null>(null);
+  const progressingDownloadIdsRef = React.useRef(new Set<string>());
+  const [pageImages, setPageImages] = React.useState<BrowserPageImage[]>([]);
+  const [imagesLoading, setImagesLoading] = React.useState(false);
+  const [imagesSaving, setImagesSaving] = React.useState(false);
+  const [pageTranslate, setPageTranslate] = React.useState<{ status: 'idle' | 'loading' | 'done' | 'error'; error: string }>({
+    status: 'idle',
+    error: '',
+  });
+  const translateSeqRef = React.useRef(0);
 
   tabsRef.current = tabs;
   activeTabIdRef.current = activeTabId;
+  closedTabsRef.current = closedTabs;
+  findOpenRef.current = findOpen;
+  findQueryRef.current = findQuery;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const currentUrl = activeTab?.url || NEW_TAB_URL;
   const pageTitle = activeTab?.title || '브라우저';
@@ -209,6 +268,17 @@ const BrowserPage: React.FC = () => {
   const refreshOpenAiAvailability = React.useCallback(async () => {
     const config = await window.electronAPI.getConfig();
     setHasOpenAiApiKey(Boolean(config?.hasOpenAiApiKey));
+    setTranslationTargetLanguage(config?.translationTargetLanguage || 'ko');
+  }, []);
+
+  const refreshHistory = React.useCallback(async () => {
+    const items = await window.electronAPI.listBrowserHistory();
+    setHistoryItems(Array.isArray(items) ? items : []);
+  }, []);
+
+  const refreshDownloads = React.useCallback(async () => {
+    const items = await window.electronAPI.listBrowserDownloads();
+    setDownloadItems(Array.isArray(items) ? items : []);
   }, []);
 
   React.useEffect(() => {
@@ -223,6 +293,7 @@ const BrowserPage: React.FC = () => {
       setPreloadPath(nextPreload);
       if (nextPartition) setPartition(nextPartition);
       setHasOpenAiApiKey(Boolean(config?.hasOpenAiApiKey));
+      setTranslationTargetLanguage(config?.translationTargetLanguage || 'ko');
       setMuteInactiveTabs(config?.muteInactiveBrowserTabs === true);
       const requested = parseExternalHttpUrl(requestedUrl)?.toString() || '';
       const restored = restoreBrowserSession(
@@ -267,6 +338,11 @@ const BrowserPage: React.FC = () => {
 
   const syncTabFromWebview = React.useCallback((tabId: string, webview: EmbeddedWebview, extra?: Partial<BrowserTabState>) => {
     try {
+      const current = tabsRef.current.find((tab) => tab.id === tabId);
+      if (current && isInternalBrowserTab(current)) {
+        if (extra) patchTab(tabId, extra);
+        return;
+      }
       const nextUrl = webview.getURL() || NEW_TAB_URL;
       patchTab(tabId, {
         url: nextUrl,
@@ -302,6 +378,109 @@ const BrowserPage: React.FC = () => {
     } catch {
       return [];
     }
+  }, [activeWebview]);
+
+  const openImagePicker = React.useCallback(async () => {
+    const webview = activeWebview();
+    if (!webview?.executeJavaScript) {
+      toast({ title: '이미지를 수집할 페이지가 없습니다.', variant: 'destructive' });
+      return;
+    }
+    setImagePickerOpen(true);
+    setImagesLoading(true);
+    try {
+      const collected = collectUniquePageImages(await webview.executeJavaScript(getCollectBrowserPageImagesScript()));
+      setPageImages(collected);
+    } catch {
+      setPageImages([]);
+      toast({ title: '페이지 이미지를 읽지 못했습니다.', variant: 'destructive' });
+    } finally {
+      setImagesLoading(false);
+    }
+  }, [activeWebview]);
+
+  const downloadSelectedImages = React.useCallback(async (images: BrowserPageImage[]) => {
+    if (images.length === 0) return;
+    setImagesSaving(true);
+    try {
+      const result = await window.electronAPI.downloadBrowserFiles({
+        files: images.map((image, index) => ({
+          url: image.url,
+          filename: filenameFromImageUrl(image.url, index),
+          kind: 'image' as const,
+        })),
+      });
+      if (!result?.success) {
+        if (result?.error) toast({ title: result.error, variant: 'destructive' });
+        return;
+      }
+      setImagePickerOpen(false);
+      setDownloadsOpen(true);
+      await refreshDownloads();
+      toast({ title: `${images.length}장의 이미지 저장을 시작했습니다.` });
+    } catch (error) {
+      toast({
+        title: error instanceof Error ? error.message : '이미지를 저장하지 못했습니다.',
+        variant: 'destructive',
+      });
+    } finally {
+      setImagesSaving(false);
+    }
+  }, [refreshDownloads]);
+
+  const translateActivePage = React.useCallback(async () => {
+    if (!hasOpenAiApiKey) return;
+    const webview = activeWebview();
+    if (!webview?.executeJavaScript) {
+      toast({ title: '번역할 페이지가 없습니다.', variant: 'destructive' });
+      return;
+    }
+    const seq = translateSeqRef.current + 1;
+    translateSeqRef.current = seq;
+    setPageTranslate({ status: 'loading', error: '' });
+    try {
+      const collected = await webview.executeJavaScript(getCollectPageTranslateTextsScript());
+      const texts = Array.isArray(collected) ? collected.map((item) => String(item ?? '')) : [];
+      if (texts.length === 0) {
+        setPageTranslate({ status: 'error', error: '번역할 텍스트가 없습니다.' });
+        return;
+      }
+      const translated: string[] = [];
+      const language = translationTargetLanguage || 'ko';
+      for (const chunk of packPageTranslateChunks(texts)) {
+        if (translateSeqRef.current !== seq) return;
+        const result = await window.electronAPI.translateText({
+          text: `JSON array. Translate each string. Reply with a JSON array of the same length and nothing else.\n${JSON.stringify(chunk)}`,
+          targetLanguage: language,
+        });
+        const parsed = parseTranslatedStringList(result?.translatedText, chunk.length);
+        if (!result?.success || !parsed) {
+          setPageTranslate({ status: 'error', error: result?.error || '페이지를 번역하지 못했습니다.' });
+          return;
+        }
+        translated.push(...parsed);
+      }
+      if (translateSeqRef.current !== seq) return;
+      await webview.executeJavaScript(getApplyPageTranslationsScript(translated));
+      setPageTranslate({ status: 'done', error: '' });
+    } catch (error) {
+      if (translateSeqRef.current !== seq) return;
+      setPageTranslate({
+        status: 'error',
+        error: error instanceof Error ? error.message : '페이지를 번역하지 못했습니다.',
+      });
+    }
+  }, [activeWebview, hasOpenAiApiKey, translationTargetLanguage]);
+
+  const restorePageTranslation = React.useCallback(async () => {
+    const webview = activeWebview();
+    translateSeqRef.current += 1;
+    try {
+      await webview?.executeJavaScript?.(getRestorePageTranslateScript());
+    } catch {
+      // webview methods can throw before attachment
+    }
+    setPageTranslate({ status: 'idle', error: '' });
   }, [activeWebview]);
 
   const toggleActiveWebviewDevTools = React.useCallback(() => {
@@ -391,7 +570,15 @@ const BrowserPage: React.FC = () => {
   }, [readWebviewUrl]);
 
   const loadUrlInTab = React.useCallback((tabId: string, nextUrl: string) => {
-    patchTab(tabId, { url: nextUrl, title: titleForBrowserTab(nextUrl), loading: true });
+    patchTab(tabId, {
+      url: nextUrl,
+      title: titleForBrowserTab(nextUrl),
+      loading: !isInternalBrowserTab({ url: nextUrl }),
+    });
+    if (isInternalBrowserTab({ url: nextUrl })) {
+      clearDeferredTabLoad(tabId);
+      return;
+    }
     const webview = webviewByTabRef.current.get(tabId);
     if (webview?.loadURL) {
       clearDeferredTabLoad(tabId);
@@ -402,15 +589,13 @@ const BrowserPage: React.FC = () => {
   }, [clearDeferredTabLoad, patchTab]);
 
   const openTab = React.useCallback((rawUrl?: string, options?: { background?: boolean; newTab?: boolean }) => {
-    const nextUrl = rawUrl
-      ? (rawUrl === NEW_TAB_URL ? NEW_TAB_URL : resolveBrowserAddressInput(rawUrl))
-      : NEW_TAB_URL;
+    const nextUrl = rawUrl ? resolveBrowserTabInput(rawUrl) : NEW_TAB_URL;
     if (rawUrl && rawUrl !== NEW_TAB_URL && !nextUrl) {
       toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
       return;
     }
     const url = nextUrl || NEW_TAB_URL;
-    if (url !== NEW_TAB_URL) {
+    if (url !== NEW_TAB_URL && !options?.newTab) {
       const now = Date.now();
       if (url === lastOpenedTabRef.current.url && now - lastOpenedTabRef.current.at < 250) return;
       lastOpenedTabRef.current = { url, at: now };
@@ -439,6 +624,7 @@ const BrowserPage: React.FC = () => {
   }, [loadUrlInTab]);
 
   const closeTab = React.useCallback((tabId: string) => {
+    const closing = tabsRef.current.find((tab) => tab.id === tabId);
     const result = closeBrowserTab(tabsRef.current, activeTabIdRef.current, tabId);
     clearDeferredTabLoad(tabId);
     const webview = webviewByTabRef.current.get(tabId);
@@ -446,20 +632,113 @@ const BrowserPage: React.FC = () => {
       webviewByTabRef.current.delete(tabId);
       webview.remove();
     }
+    if (closing) {
+      setClosedTabs((stack) => pushClosedBrowserTab(stack, toClosedBrowserTab(closing)));
+    }
     setTabs(result.tabs);
     setActiveTabId(result.activeId);
   }, [clearDeferredTabLoad]);
 
+  const restoreClosedTab = React.useCallback(() => {
+    const popped = popClosedBrowserTab(closedTabsRef.current);
+    if (!popped.tab) {
+      toast({ title: '다시 열 탭이 없습니다.' });
+      return;
+    }
+    setClosedTabs(popped.stack);
+    openTab(popped.tab.url, { newTab: true });
+  }, [openTab]);
+
+  const duplicateTab = React.useCallback((tabId: string) => {
+    const tab = tabsRef.current.find((item) => item.id === tabId);
+    if (!tab) return;
+    let url = tab.url;
+    try {
+      url = webviewByTabRef.current.get(tabId)?.getURL?.() || url;
+    } catch {
+      // webview methods can throw before attachment
+    }
+    openTab(url || NEW_TAB_URL, { newTab: true });
+  }, [openTab]);
+
+  const runFindInPage = React.useCallback((direction: 'fresh' | 'next' | 'prev' = 'fresh') => {
+    const webview = activeWebview();
+    const query = findQueryRef.current.trim();
+    if (!webview?.findInPage) return;
+    if (!query) {
+      webview.stopFindInPage?.('clearSelection');
+      setFindMatch({ active: 0, total: 0 });
+      return;
+    }
+    webview.findInPage(query, {
+      forward: direction !== 'prev',
+      findNext: direction !== 'fresh',
+    });
+  }, [activeWebview]);
+
+  const closeFindBar = React.useCallback(() => {
+    setFindOpen(false);
+    setFindMatch({ active: 0, total: 0 });
+    try {
+      activeWebview()?.stopFindInPage?.('clearSelection');
+    } catch {
+      // webview methods can throw before attachment
+    }
+  }, [activeWebview]);
+
   const navigateTo = React.useCallback((rawUrl: string) => {
-    const nextUrl = resolveBrowserAddressInput(rawUrl);
+    const nextUrl = resolveBrowserTabInput(rawUrl);
     if (!nextUrl) {
       toast({ title: '주소를 확인할 수 없습니다.', variant: 'destructive' });
       return;
     }
-    addressRef.current = nextUrl;
-    setAddress(nextUrl);
+    addressRef.current = isBlankBrowserTab({ url: nextUrl }) ? '' : nextUrl;
+    setAddress(isBlankBrowserTab({ url: nextUrl }) ? '' : nextUrl);
     loadUrlInTab(activeTabIdRef.current, nextUrl);
   }, [loadUrlInTab]);
+
+  const openHistoryPage = React.useCallback(() => {
+    const existing = tabsRef.current.find((tab) => isHistoryBrowserTab(tab));
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+    openTab(HISTORY_PAGE_URL, { newTab: true });
+  }, [openTab]);
+
+  const openDownloadsPage = React.useCallback(() => {
+    setDownloadsOpen(false);
+    const existing = tabsRef.current.find((tab) => isDownloadsBrowserTab(tab));
+    if (existing) {
+      setActiveTabId(existing.id);
+      return;
+    }
+    openTab(DOWNLOADS_PAGE_URL, { newTab: true });
+  }, [openTab]);
+
+  const openDownloadItem = React.useCallback(async (id: string) => {
+    const result = await window.electronAPI.openBrowserDownload(id);
+    if (!result.success) toast({ title: result.error || '파일을 열지 못했습니다.', variant: 'destructive' });
+  }, []);
+
+  const showDownloadInFolder = React.useCallback(async (id: string) => {
+    const result = await window.electronAPI.showBrowserDownloadInFolder(id);
+    if (!result.success) toast({ title: result.error || '폴더를 열지 못했습니다.', variant: 'destructive' });
+  }, []);
+
+  const deleteDownloadItem = React.useCallback(async (id: string) => {
+    const result = await window.electronAPI.deleteBrowserDownload(id);
+    if (!result.success) {
+      toast({ title: result.error || '다운로드 기록을 삭제하지 못했습니다.', variant: 'destructive' });
+      return;
+    }
+    await refreshDownloads();
+  }, [refreshDownloads]);
+
+  const clearDownloadItems = React.useCallback(async () => {
+    await window.electronAPI.clearBrowserDownloads();
+    await refreshDownloads();
+  }, [refreshDownloads]);
 
   const openBookmark = React.useCallback((bookmark: { url: string }, options?: { newTab?: boolean; background?: boolean }) => {
     if (options?.newTab || options?.background) {
@@ -484,6 +763,26 @@ const BrowserPage: React.FC = () => {
   }, [openTab]);
 
   React.useEffect(() => {
+    return window.electronAPI.onBrowserPageCommand((action) => {
+      if (action === 'save-images') {
+        void openImagePicker();
+        return;
+      }
+      if (action === 'save-videos') {
+        setVideoPickerOpen(true);
+        return;
+      }
+      if (action === 'open-history') {
+        openHistoryPage();
+        return;
+      }
+      if (action === 'translate-page') {
+        void translateActivePage();
+      }
+    });
+  }, [openHistoryPage, openImagePicker, translateActivePage]);
+
+  React.useEffect(() => {
     return window.electronAPI.onBrowserShortcut((action) => {
       const webview = activeWebview();
       if (action === 'focus-address') {
@@ -495,8 +794,26 @@ const BrowserPage: React.FC = () => {
         openTab(NEW_TAB_URL, { newTab: true });
         return;
       }
+      if (action === 'restore-tab') {
+        restoreClosedTab();
+        return;
+      }
+      if (action === 'duplicate-tab') {
+        duplicateTab(activeTabIdRef.current);
+        return;
+      }
       if (action === 'close-tab') {
         closeTab(activeTabIdRef.current);
+        return;
+      }
+      if (action === 'find') {
+        setFindOpen(true);
+        setFindFocusSeq((value) => value + 1);
+        return;
+      }
+      if (action === 'find-next' || action === 'find-prev') {
+        if (!findOpenRef.current) setFindOpen(true);
+        else runFindInPage(action === 'find-next' ? 'next' : 'prev');
         return;
       }
       if (action === 'next-tab') {
@@ -525,12 +842,18 @@ const BrowserPage: React.FC = () => {
       }
       if (action === 'back' && webview.canGoBack()) webview.goBack();
       if (action === 'forward' && webview.canGoForward()) webview.goForward();
-      if (action === 'stop') webview.stop();
+      if (action === 'stop') {
+        if (findOpenRef.current) {
+          closeFindBar();
+          return;
+        }
+        webview.stop();
+      }
       if (action === 'zoom-in') applyPageZoom('in');
       if (action === 'zoom-out') applyPageZoom('out');
       if (action === 'zoom-reset') applyPageZoom('reset');
     });
-  }, [activeWebview, applyPageZoom, closeTab, openTab, toggleActiveWebviewDevTools]);
+  }, [activeWebview, applyPageZoom, closeFindBar, closeTab, duplicateTab, openTab, restoreClosedTab, runFindInPage, toggleActiveWebviewDevTools]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -651,12 +974,20 @@ const BrowserPage: React.FC = () => {
         syncTabFromWebview(tabId, webview, { loading: false });
       };
       const onTitle = (event: Event) => {
+        const current = tabsRef.current.find((item) => item.id === tabId);
+        if (current && isInternalBrowserTab(current)) return;
         const title = (event as Event & { title?: string }).title;
         if (title) patchTab(tabId, { title: titleForBrowserTab(webview.getURL?.() || NEW_TAB_URL, title) });
       };
 
       webview.addEventListener('did-start-loading', () => {
+        const current = tabsRef.current.find((item) => item.id === tabId);
+        if (current && isInternalBrowserTab(current)) return;
         patchTab(tabId, { loading: true });
+        if (tabId === activeTabIdRef.current) {
+          translateSeqRef.current += 1;
+          setPageTranslate({ status: 'idle', error: '' });
+        }
         setPasswordPrompts((current) => {
           if (current[tabId]?.kind !== 'fill') return current;
           const next = { ...current };
@@ -677,6 +1008,14 @@ const BrowserPage: React.FC = () => {
       }
       webview.addEventListener('ipc-message', (event: Event) => {
         handleWebviewIpcRef.current(tabId, event as WebviewIpcMessageEvent);
+      });
+      webview.addEventListener('found-in-page', (event: Event) => {
+        const result = (event as Event & { result?: { activeMatchOrdinal?: number; matches?: number } }).result;
+        if (!result) return;
+        setFindMatch({
+          active: Number(result.activeMatchOrdinal) || 0,
+          total: Number(result.matches) || 0,
+        });
       });
       webview.addEventListener('did-attach', applyInactiveTabAudioMute);
       webview.addEventListener('dom-ready', applyInactiveTabAudioMute);
@@ -701,6 +1040,85 @@ const BrowserPage: React.FC = () => {
       setMuteInactiveTabs(enabled);
     });
   }, []);
+
+  React.useEffect(() => {
+    return window.electronAPI.onBrowserDownloadsChange((items) => {
+      const next = Array.isArray(items) ? items : [];
+      const progressing = new Set(next.filter((item) => item.state === 'progressing').map((item) => item.id));
+      if ([...progressing].some((id) => !progressingDownloadIdsRef.current.has(id))) {
+        setDownloadsOpen(true);
+      }
+      progressingDownloadIdsRef.current = progressing;
+      setDownloadItems(next);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    void refreshDownloads();
+  }, [refreshDownloads]);
+
+  React.useEffect(() => {
+    if (!downloadsOpen) {
+      setDownloadsBubblePos(null);
+      return undefined;
+    }
+    const updatePosition = () => {
+      const el = downloadsRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      setDownloadsBubblePos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+    };
+    updatePosition();
+    window.addEventListener('resize', updatePosition);
+    return () => window.removeEventListener('resize', updatePosition);
+  }, [downloadsOpen]);
+
+  React.useEffect(() => {
+    if (!downloadsOpen) return undefined;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setDownloadsOpen(false);
+    };
+    const onMouseDown = (event: MouseEvent) => {
+      const target = event.target as Node;
+      if (downloadsRef.current?.contains(target) || downloadsBubbleRef.current?.contains(target)) return;
+      setDownloadsOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('mousedown', onMouseDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('mousedown', onMouseDown);
+    };
+  }, [downloadsOpen]);
+
+  React.useEffect(() => {
+    if (!isHistoryBrowserTab({ url: currentUrl })) return undefined;
+    void refreshHistory();
+    const timer = window.setInterval(() => {
+      void refreshHistory();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [currentUrl, refreshHistory]);
+
+  React.useEffect(() => {
+    if (!isDownloadsBrowserTab({ url: currentUrl })) return undefined;
+    void refreshDownloads();
+    const timer = window.setInterval(() => {
+      void refreshDownloads();
+    }, 4000);
+    return () => window.clearInterval(timer);
+  }, [currentUrl, refreshDownloads]);
+
+  React.useEffect(() => {
+    if (!findOpen) return undefined;
+    const timer = window.setTimeout(() => runFindInPage('fresh'), 120);
+    return () => window.clearTimeout(timer);
+  }, [activeTabId, findOpen, findQuery, runFindInPage]);
+
+  React.useEffect(() => {
+    translateSeqRef.current += 1;
+    setPageTranslate({ status: 'idle', error: '' });
+  }, [activeTabId]);
 
   React.useEffect(() => {
     flushDeferredTabLoad(activeTabId);
@@ -776,7 +1194,7 @@ const BrowserPage: React.FC = () => {
   };
 
   const saveBookmarkTo = async (folderId: string | null) => {
-    if (currentUrl === 'about:blank' || recordLocked) return;
+    if (isInternalBrowserTab({ url: currentUrl }) || recordLocked) return;
     const result = await window.electronAPI.addBrowserBookmark({
       url: currentUrl,
       title: pageTitle,
@@ -870,7 +1288,7 @@ const BrowserPage: React.FC = () => {
   const captureActiveTabPage = async () => {
     const webview = activeWebview();
     const fallbackTitle = activeTab?.title && activeTab.title !== '새 탭' ? activeTab.title : '';
-    if (!webview || isBlankBrowserTab({ url: currentUrl })) {
+    if (!webview || isInternalBrowserTab({ url: currentUrl })) {
       return { title: fallbackTitle, html: '' };
     }
     try {
@@ -1046,11 +1464,14 @@ const BrowserPage: React.FC = () => {
         <TabBar
           tabs={tabs}
           activeId={activeTabId}
+          canRestoreClosedTab={closedTabs.length > 0}
           onSelect={setActiveTabId}
           onClose={closeTab}
           onNewTab={() => openTab(NEW_TAB_URL, { newTab: true })}
+          onDuplicate={duplicateTab}
+          onRestoreClosedTab={restoreClosedTab}
         />
-        <div className="flex shrink-0 cursor-default items-center gap-2 border-b border-gray-800 px-3 py-2 [&_button]:cursor-default">
+        <div className="relative z-30 flex shrink-0 cursor-default items-center gap-2 border-b border-gray-800 px-3 py-2 [&_button]:cursor-default">
           <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>
             <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
               <ArrowLeft size={16} />
@@ -1112,12 +1533,53 @@ const BrowserPage: React.FC = () => {
               <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
             </BrowserTooltip>
           </form>
-          <BrowserVideoMenu
-            disabled={isBlankBrowserTab({ url: currentUrl })}
-            pageUrl={currentUrl}
-            pageTitle={pageTitle}
-            collectCaptures={collectPageVideoCaptures}
-          />
+          <span ref={downloadsRef} className="relative inline-flex">
+            <BrowserTooltip label="다운로드">
+              <span className="relative inline-flex">
+                <Button
+                  variant="ghost"
+                  className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text"
+                  aria-label="다운로드"
+                  aria-pressed={downloadsOpen}
+                  onClick={() => {
+                    if (downloadsOpen) {
+                      setDownloadsOpen(false);
+                      return;
+                    }
+                    const rect = downloadsRef.current?.getBoundingClientRect();
+                    if (rect) {
+                      setDownloadsBubblePos({ top: rect.bottom + 8, right: window.innerWidth - rect.right });
+                    }
+                    setDownloadsOpen(true);
+                  }}
+                >
+                  <Download size={16} />
+                </Button>
+                {downloadItems.some((item) => item.state === 'progressing') ? (
+                  <span className="pointer-events-none absolute -right-0.5 -top-0.5 h-2 w-2 rounded-full bg-discord-accent" />
+                ) : null}
+              </span>
+            </BrowserTooltip>
+          </span>
+          {downloadsOpen && downloadsBubblePos && createPortal(
+            <div
+              ref={downloadsBubbleRef}
+              className="z-[100]"
+              style={{ position: 'fixed', top: downloadsBubblePos.top, right: downloadsBubblePos.right }}
+            >
+              <BrowserDownloadsPanel
+                variant="bubble"
+                items={downloadItems}
+                onOpen={openDownloadItem}
+                onShowInFolder={showDownloadInFolder}
+                onDelete={deleteDownloadItem}
+                onClear={clearDownloadItems}
+                onOpenAll={openDownloadsPage}
+                onClose={() => setDownloadsOpen(false)}
+              />
+            </div>,
+            document.body,
+          )}
           <BrowserTooltip
             label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
             wrapDisabled
@@ -1135,7 +1597,7 @@ const BrowserPage: React.FC = () => {
               <button
                 type="button"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
-                disabled={currentUrl === 'about:blank'}
+                disabled={isInternalBrowserTab({ url: currentUrl })}
                 aria-label="북마크 해제"
                 onClick={() => void removeCurrentBookmark()}
               >
@@ -1147,7 +1609,7 @@ const BrowserPage: React.FC = () => {
                   <button
                     type="button"
                     className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
-                    disabled={currentUrl === 'about:blank'}
+                    disabled={isInternalBrowserTab({ url: currentUrl })}
                     aria-label="북마크할 위치 선택"
                   >
                     <Star size={16} className="text-discord-text" />
@@ -1270,6 +1732,9 @@ const BrowserPage: React.FC = () => {
                 className={`absolute inset-0 ${tab.id === activeTabId ? '' : 'invisible pointer-events-none'}`}
               />
             ))}
+            {downloadsOpen && (
+              <div className="absolute inset-0 z-10" onMouseDown={() => setDownloadsOpen(false)} />
+            )}
             {(!preloadPath || !sessionReady) && (
               <div className="absolute inset-0 z-20 flex items-center justify-center bg-discord-bg text-sm text-discord-muted">브라우저 준비 중...</div>
             )}
@@ -1280,6 +1745,60 @@ const BrowserPage: React.FC = () => {
                 onOpen={openBookmark}
                 onNavigate={navigateTo}
               />
+            )}
+            {sessionReady && isHistoryBrowserTab({ url: currentUrl }) && (
+              <div className="absolute inset-0 z-20">
+                <BrowserHistoryPanel
+                  variant="page"
+                  items={historyItems}
+                  onOpen={(url) => {
+                    navigateTo(url);
+                  }}
+                  onDelete={async (id) => {
+                    await window.electronAPI.deleteBrowserHistoryItem(id);
+                    await refreshHistory();
+                  }}
+                  onClear={async () => {
+                    await window.electronAPI.clearBrowserHistory();
+                    await refreshHistory();
+                  }}
+                />
+              </div>
+            )}
+            {sessionReady && isDownloadsBrowserTab({ url: currentUrl }) && (
+              <div className="absolute inset-0 z-20">
+                <BrowserDownloadsPanel
+                  variant="page"
+                  items={downloadItems}
+                  onOpen={openDownloadItem}
+                  onShowInFolder={showDownloadInFolder}
+                  onDelete={deleteDownloadItem}
+                  onClear={clearDownloadItems}
+                />
+              </div>
+            )}
+            {findOpen && (
+              <div className="pointer-events-none absolute right-3 top-2 z-30">
+                <BrowserFindBar
+                  query={findQuery}
+                  focusSeq={findFocusSeq}
+                  matchLabel={findQuery.trim() ? (findMatch.total > 0 ? `${findMatch.active} / ${findMatch.total}` : '결과 없음') : ''}
+                  onQueryChange={setFindQuery}
+                  onNext={() => runFindInPage('next')}
+                  onPrev={() => runFindInPage('prev')}
+                  onClose={closeFindBar}
+                />
+              </div>
+            )}
+            {pageTranslate.status !== 'idle' && (
+              <div className="pointer-events-none absolute left-3 top-2 z-30">
+                <BrowserTranslateBar
+                  status={pageTranslate.status}
+                  error={pageTranslate.error}
+                  onRestore={() => void restorePageTranslation()}
+                  onClose={() => setPageTranslate({ status: 'idle', error: '' })}
+                />
+              </div>
             )}
           </div>
 
@@ -1436,6 +1955,21 @@ const BrowserPage: React.FC = () => {
         onClose={() => setScriptModalOpen(false)}
         onSave={() => void saveDraft()}
         onDelete={draft.id ? () => void deleteDraft() : undefined}
+      />
+      <BrowserImagePickerModal
+        open={imagePickerOpen}
+        images={pageImages}
+        loading={imagesLoading}
+        saving={imagesSaving}
+        onOpenChange={setImagePickerOpen}
+        onDownload={(images) => void downloadSelectedImages(images)}
+      />
+      <BrowserVideoMenu
+        open={videoPickerOpen}
+        onOpenChange={setVideoPickerOpen}
+        pageUrl={currentUrl}
+        pageTitle={pageTitle}
+        collectCaptures={collectPageVideoCaptures}
       />
     </div>
   );

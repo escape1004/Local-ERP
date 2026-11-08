@@ -25,6 +25,7 @@ import {
   closeEmbeddedBrowserWindow,
   isEmbeddedBrowserWindowFocused,
   openEmbeddedBrowserWindow,
+  sendEmbeddedBrowserMessage,
   setRememberEmbeddedBrowserWindowBounds,
 } from '../app/browser-window';
 import { generateBrowserScriptWithOpenAi } from '../services/browser-ai';
@@ -45,6 +46,20 @@ import {
   listAndEnrichPageVideos,
   previewRememberedBrowserVideo,
 } from '../services/browser-video-download';
+import {
+  clearBrowserHistory,
+  deleteBrowserHistoryItem,
+  listBrowserHistory,
+} from '../lib/browser-history-store';
+import {
+  clearBrowserDownloads,
+  deleteBrowserDownload,
+  downloadBrowserFiles,
+  listBrowserDownloads,
+  openBrowserDownload,
+  setBrowserDownloadsChangedListener,
+  showBrowserDownloadInFolder,
+} from '../lib/browser-download-manager';
 
 function nowIso() {
   return new Date().toISOString();
@@ -178,6 +193,9 @@ function listScripts() {
 }
 
 export function registerBrowserHandlers() {
+  setBrowserDownloadsChangedListener((items) => {
+    sendEmbeddedBrowserMessage('browser:downloads-changed', items);
+  });
   ipcMain.handle('browser:getPreloadPath', () => path.join(electronDistDir, 'browser-preload.js'));
   ipcMain.handle('browser:getPartition', () => BROWSER_PARTITION);
   ipcMain.handle('browser:openWindow', (_event, url) => openEmbeddedBrowserWindow(url));
@@ -459,4 +477,15 @@ export function registerBrowserHandlers() {
     downloadRememberedBrowserVideo(payload, browserWindowFromEvent(event))
   ));
   ipcMain.handle('browser:previewPageVideo', (_event, payload = {}) => previewRememberedBrowserVideo(payload));
+  ipcMain.handle('browser:listHistory', (_event, limit) => listBrowserHistory(limit));
+  ipcMain.handle('browser:deleteHistory', (_event, id) => deleteBrowserHistoryItem(id));
+  ipcMain.handle('browser:clearHistory', () => clearBrowserHistory());
+  ipcMain.handle('browser:listDownloads', () => listBrowserDownloads());
+  ipcMain.handle('browser:openDownload', (_event, id) => openBrowserDownload(id));
+  ipcMain.handle('browser:showDownloadInFolder', (_event, id) => showBrowserDownloadInFolder(id));
+  ipcMain.handle('browser:deleteDownload', (_event, id) => deleteBrowserDownload(id));
+  ipcMain.handle('browser:clearDownloads', () => clearBrowserDownloads());
+  ipcMain.handle('browser:downloadFiles', async (event, payload = {}) => (
+    downloadBrowserFiles(payload, browserWindowFromEvent(event))
+  ));
 }

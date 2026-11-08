@@ -28,6 +28,19 @@ test('does not reload a webview that is already on the pending url', () => {
   expect(shouldLoadPendingWebviewUrl('https://a.example/', 'https://a.example/')).toBe(false);
   expect(shouldLoadPendingWebviewUrl('about:blank', 'https://a.example/')).toBe(true);
   expect(shouldLoadPendingWebviewUrl('', 'about:blank')).toBe(false);
+  expect(shouldLoadPendingWebviewUrl('about:blank', 'about:history')).toBe(false);
+  expect(shouldLoadPendingWebviewUrl('about:blank', 'about:downloads')).toBe(false);
+});
+
+test('keeps internal pages off the guest webview', () => {
+  expect(resolveWebviewStartNavigation({
+    startUrl: 'about:history',
+    isActive: true,
+  })).toEqual({ src: NEW_TAB_URL, deferUrl: null, deferMs: 0 });
+  expect(resolveWebviewStartNavigation({
+    startUrl: 'about:downloads',
+    isActive: true,
+  })).toEqual({ src: NEW_TAB_URL, deferUrl: null, deferMs: 0 });
 });
 
 test('upserts a saved script without refetching the whole list', () => {

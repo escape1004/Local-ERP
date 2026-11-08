@@ -18,6 +18,7 @@ import {
 } from '../lib/browser-video-detect';
 import { classifyMediaTrack, mergeBrowserVideoQualities, parseHlsPlaylist, parseVideoManifest, resolveQualityLabel } from '../lib/browser-video-playlist';
 import { log } from '../app/state';
+import { registerBrowserDownload, updateBrowserDownload } from '../lib/browser-download-manager';
 
 const BROWSER_PARTITION = 'persist:erp-browser';
 const PREVIEW_SECONDS = 12;
@@ -575,6 +576,13 @@ export async function downloadRememberedBrowserVideo(payload, parentWindow) {
   });
   if (canceled || !filePath) return { success: false };
 
+  const download = registerBrowserDownload({
+    filename: path.basename(filePath),
+    url: mediaUrl,
+    filePath,
+    kind: track === 'audio' ? 'audio' : 'video',
+    state: 'progressing',
+  });
   const headers = await mediaHeaders(pageUrl, mediaUrl);
   const audioUrl = pickTrackUrl(video, 'audio', '');
   const selectedTrack = (video.qualities || []).find((item) => item.url === mediaUrl)?.track
@@ -582,9 +590,7 @@ export async function downloadRememberedBrowserVideo(payload, parentWindow) {
   try {
     if (video.kind === 'file') {
       await downloadDirectFile(mediaUrl, filePath, headers);
-      return { success: true, path: filePath };
-    }
-    if (track === 'audio') {
+    } else if (track === 'audio') {
       await downloadStreamedVideo(mediaUrl || audioUrl || video.url, filePath, headers, video.kind, null, {
         audioOnly: selectedTrack !== 'audio',
       });
@@ -595,8 +601,15 @@ export async function downloadRememberedBrowserVideo(payload, parentWindow) {
     } else {
       await downloadStreamedVideo(mediaUrl, filePath, headers, video.kind);
     }
+    updateBrowserDownload(download.id, {
+      state: 'completed',
+      receivedBytes: 1,
+      totalBytes: 1,
+      filePath,
+    });
     return { success: true, path: filePath };
   } catch (error) {
+    updateBrowserDownload(download.id, { state: 'interrupted', filePath });
     log('브라우저 영상 저장 실패:', error);
     return { success: false, error: error?.message || '영상을 저장하지 못했습니다.' };
   }

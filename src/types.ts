@@ -1,3 +1,10 @@
+import type { BrowserDownloadItem, BrowserDownloadKind } from './lib/browserDownloads';
+import type { BrowserHistoryItem } from './lib/browserHistory';
+
+export type { BrowserHistoryItem } from './lib/browserHistory';
+export type { BrowserDownloadItem, BrowserDownloadKind, BrowserDownloadState } from './lib/browserDownloads';
+export type { BrowserPageImage } from './lib/browserPageImages';
+
 export type CategoryItemType = 'category' | 'separator';
 
 export interface Category {
@@ -427,6 +434,7 @@ export interface ElectronAPI {
   onBrowserOpenUrl: (callback: (url: string, options?: { background?: boolean }) => void) => () => void;
   onBrowserShortcut: (callback: (action: string) => void) => () => void;
   onMuteInactiveBrowserTabsChange: (callback: (enabled: boolean) => void) => () => void;
+  onBrowserPageCommand: (callback: (action: string) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string; folderId?: string | null }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;
@@ -482,6 +490,18 @@ export interface ElectronAPI {
     url?: string;
     qualityUrl?: string;
   }) => Promise<{ success: boolean; path?: string; error?: string }>;
+  listBrowserHistory: (limit?: number) => Promise<BrowserHistoryItem[]>;
+  deleteBrowserHistoryItem: (id: string) => Promise<{ success: boolean; error?: string }>;
+  clearBrowserHistory: () => Promise<{ success: boolean; error?: string }>;
+  listBrowserDownloads: () => Promise<BrowserDownloadItem[]>;
+  openBrowserDownload: (id: string) => Promise<{ success: boolean; error?: string }>;
+  showBrowserDownloadInFolder: (id: string) => Promise<{ success: boolean; error?: string }>;
+  deleteBrowserDownload: (id: string) => Promise<{ success: boolean; error?: string }>;
+  clearBrowserDownloads: () => Promise<{ success: boolean; error?: string }>;
+  downloadBrowserFiles: (payload: {
+    files: Array<{ url: string; filename?: string; kind?: BrowserDownloadKind }>;
+  }) => Promise<{ success: boolean; folder?: string; items?: Array<{ id: string; url: string; filePath: string }>; error?: string }>;
+  onBrowserDownloadsChange: (callback: (items: BrowserDownloadItem[]) => void) => () => void;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

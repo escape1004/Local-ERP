@@ -27,6 +27,8 @@ test('rejects non-http urls in the browser hash', () => {
 test('keeps http session urls and about:blank', () => {
   expect(normalizeBrowserSessionUrl('https://example.com/page')).toBe('https://example.com/page');
   expect(normalizeBrowserSessionUrl('about:blank')).toBe('about:blank');
+  expect(normalizeBrowserSessionUrl('about:history')).toBe('about:history');
+  expect(normalizeBrowserSessionUrl('about:downloads')).toBe('about:downloads');
   expect(normalizeBrowserSessionUrl('javascript:alert(1)')).toBe('');
 });
 

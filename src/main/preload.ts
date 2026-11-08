@@ -188,6 +188,11 @@ const api: ElectronAPI = {
     ipcRenderer.on('browser:mute-inactive-tabs', listener);
     return () => ipcRenderer.removeListener('browser:mute-inactive-tabs', listener);
   },
+  onBrowserPageCommand: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
+    ipcRenderer.on('browser:page-command', listener);
+    return () => ipcRenderer.removeListener('browser:page-command', listener);
+  },
   canonicalizeBrowserUrl: (url) => ipcRenderer.invoke('browser:canonicalizeUrl', url),
   listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),
   addBrowserBookmark: (payload) => ipcRenderer.invoke('browser:addBookmark', payload),
@@ -210,6 +215,20 @@ const api: ElectronAPI = {
   listBrowserPageVideos: (payload) => ipcRenderer.invoke('browser:listPageVideos', payload),
   downloadBrowserPageVideo: (payload) => ipcRenderer.invoke('browser:downloadPageVideo', payload),
   previewBrowserPageVideo: (payload) => ipcRenderer.invoke('browser:previewPageVideo', payload),
+  listBrowserHistory: (limit) => ipcRenderer.invoke('browser:listHistory', limit),
+  deleteBrowserHistoryItem: (id) => ipcRenderer.invoke('browser:deleteHistory', id),
+  clearBrowserHistory: () => ipcRenderer.invoke('browser:clearHistory'),
+  listBrowserDownloads: () => ipcRenderer.invoke('browser:listDownloads'),
+  openBrowserDownload: (id) => ipcRenderer.invoke('browser:openDownload', id),
+  showBrowserDownloadInFolder: (id) => ipcRenderer.invoke('browser:showDownloadInFolder', id),
+  deleteBrowserDownload: (id) => ipcRenderer.invoke('browser:deleteDownload', id),
+  clearBrowserDownloads: () => ipcRenderer.invoke('browser:clearDownloads'),
+  downloadBrowserFiles: (payload) => ipcRenderer.invoke('browser:downloadFiles', payload),
+  onBrowserDownloadsChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, items: Parameters<typeof callback>[0]) => callback(items);
+    ipcRenderer.on('browser:downloads-changed', listener);
+    return () => ipcRenderer.removeListener('browser:downloads-changed', listener);
+  },
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api); 

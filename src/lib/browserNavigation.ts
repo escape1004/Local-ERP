@@ -38,6 +38,12 @@ export function googleSearchUrl(query: string) {
   return `https://www.google.com/search?q=${encodeURIComponent(query)}`;
 }
 
+export function resolveBrowserTabInput(input: string): string | null {
+  const trimmed = typeof input === 'string' ? input.trim() : '';
+  if (trimmed === 'about:blank' || trimmed === 'about:history' || trimmed === 'about:downloads') return trimmed;
+  return resolveBrowserAddressInput(trimmed);
+}
+
 export function resolveBrowserAddressInput(input: string): string | null {
   const trimmed = typeof input === 'string' ? input.trim() : '';
   if (!trimmed || trimmed.length > 2048) return null;
