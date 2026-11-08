@@ -91,6 +91,7 @@ test('normalizes percentage and select field helpers', () => {
 test('formats stored dates the same way as the record detail modal', () => {
   expect(formatStoredDate('2024-03')).toBe('2024-03');
   expect(formatStoredDate('2024-03-09')).toBe('2024-03-09');
+  expect(formatStoredDate('2024년 3월 9일 15:30')).toBe('2024-03-09');
   expect(isStoredDateValueFromDateParse('2024-03-09')).toBe(true);
   expect(isStoredDateValueFromDateParse('2024-03')).toBe(true);
   expect(isStoredDateValueFromDateParse('2024-3-9')).toBe(false);

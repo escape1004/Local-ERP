@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest';
-import { parseFlexibleDateValue, isStoredDateValue } from './dateParse';
+import { extractDateLikeText, parseFlexibleDateValue, isStoredDateValue, stripTimeFromDateText } from './dateParse';
 
 test('empty or whitespace input becomes an empty string', () => {
   expect(parseFlexibleDateValue('')).toBe('');
@@ -37,6 +37,17 @@ test('rejects invalid dates instead of coercing them', () => {
 test('uses custom date-fns formats when provided', () => {
   expect(parseFlexibleDateValue('09-03-2024', ['dd-MM-yyyy'])).toBe('2024-03-09');
   expect(parseFlexibleDateValue('2024-03-09', ['dd/MM/yyyy'])).toBeNull();
+});
+
+test('drops clock time and keeps only the date', () => {
+  expect(stripTimeFromDateText('2024-03-09 15:30:00')).toBe('2024-03-09');
+  expect(stripTimeFromDateText('2024-03-09T15:30:00Z')).toBe('2024-03-09');
+  expect(stripTimeFromDateText('2024년 3월 9일 오후 3시 30분')).toBe('2024년 3월 9일');
+  expect(parseFlexibleDateValue('2024-03-09 15:30:00')).toBe('2024-03-09');
+  expect(parseFlexibleDateValue('2024.03.09 오후 3:30')).toBe('2024-03-09');
+  expect(parseFlexibleDateValue('2024년 3월 9일 15:30')).toBe('2024-03-09');
+  expect(parseFlexibleDateValue('03/09/2024 3:45 PM')).toBe('2024-03-09');
+  expect(extractDateLikeText('Posted: 2024-03-09 15:30:00')).toBe('2024-03-09');
 });
 
 test('accepts stored yyyy-MM-dd and yyyy-MM values', () => {

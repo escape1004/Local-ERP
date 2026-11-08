@@ -1,5 +1,6 @@
-import { format } from 'date-fns';
+import { format, isValid } from 'date-fns';
 import type { FieldDefinition } from '../types';
+import { extractDateLikeText, parseFlexibleDateValue } from './dateParse';
 
 export type PercentageValue = {
   value: number;
@@ -152,11 +153,13 @@ export const isUrlString = (value: string, ignoreCase = false) => (
 );
 
 export const formatStoredDate = (value: unknown) => {
-  const raw = String(value);
-  if (/^\d{4}-\d{2}$/.test(raw)) {
-    return format(new Date(raw), 'yyyy-MM');
-  }
-  return format(new Date(raw), 'yyyy-MM-dd');
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  if (/^\d{4}-\d{2}$/.test(raw) || /^\d{4}-\d{2}-\d{2}$/.test(raw)) return raw;
+  const normalized = parseFlexibleDateValue(extractDateLikeText(raw));
+  if (normalized) return normalized;
+  const parsed = new Date(raw);
+  return isValid(parsed) ? format(parsed, 'yyyy-MM-dd') : raw;
 };
 
 export const toScalarInputValue = (value: unknown): string | number => {

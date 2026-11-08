@@ -16,6 +16,7 @@ export type EmbeddedBrowserShortcutAction =
   | 'find'
   | 'find-next'
   | 'find-prev'
+  | 'save-record'
   | 'next-tab'
   | 'prev-tab'
   | 'tab-1' | 'tab-2' | 'tab-3' | 'tab-4' | 'tab-5' | 'tab-6' | 'tab-7' | 'tab-8' | 'tab-9';
@@ -29,6 +30,7 @@ const HOST_SHORTCUT_ACTIONS = new Set<EmbeddedBrowserShortcutAction>([
   'find',
   'find-next',
   'find-prev',
+  'save-record',
   'next-tab',
   'prev-tab',
 ]);
@@ -136,6 +138,7 @@ export function resolveEmbeddedBrowserShortcut(input: ShortcutInput = {}): Embed
   if (control && !alt && (letter === 'g' || isKey(input, ['g', 'G'], ['KeyG']))) {
     return shift ? 'find-prev' : 'find-next';
   }
+  if (control && !alt && shift && (letter === 'c' || isKey(input, ['c', 'C'], ['KeyC']))) return 'save-record';
   if (control && !alt && !shift && isKey(input, ['F4'])) return 'close-tab';
   if (control && !alt && isKey(input, ['Tab'])) return shift ? 'prev-tab' : 'next-tab';
   if (control && !alt && !shift && isKey(input, ['PageDown'])) return 'next-tab';

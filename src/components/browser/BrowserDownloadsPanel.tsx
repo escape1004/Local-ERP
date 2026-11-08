@@ -156,21 +156,14 @@ export function BrowserDownloadsPanel({
             />
           ))}
         </div>
-        <div className="flex items-center gap-1 px-2 py-2">
+        <div className="px-2 py-2">
           <button
             type="button"
-            className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-left text-sm text-discord-text hover:bg-white/5"
+            className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-discord-text hover:bg-white/5"
             onClick={onOpenAll}
           >
-            전체 다운로드 기록
-          </button>
-          <button
-            type="button"
-            aria-label="전체 다운로드 기록 열기"
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-discord-muted hover:bg-white/10 hover:text-discord-text"
-            onClick={onOpenAll}
-          >
-            <ExternalLink size={14} />
+            <span className="min-w-0 flex-1">전체 다운로드 기록</span>
+            <ExternalLink size={14} className="shrink-0 text-discord-muted" />
           </button>
         </div>
       </div>

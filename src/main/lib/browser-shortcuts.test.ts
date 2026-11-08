@@ -35,6 +35,12 @@ test('opens guest developer tools with F12 and Ctrl+Shift+I', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F12', control: true })).toBeNull();
 });
 
+test('opens the save-as-record picker with Ctrl+Shift+C', () => {
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'c', control: true, shift: true })).toBe('save-record');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'C', meta: true, shift: true })).toBe('save-record');
+  expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'c', control: true })).toBeNull();
+});
+
 test('opens find in page with Ctrl+F and F3', () => {
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'f', control: true })).toBe('find');
   expect(resolveEmbeddedBrowserShortcut({ type: 'keyDown', key: 'F3' })).toBe('find-next');

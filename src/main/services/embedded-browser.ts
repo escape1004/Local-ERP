@@ -181,6 +181,13 @@ function attachGuestContextMenu(contents) {
         if (host && !host.isDestroyed()) host.send('browser:page-command', 'open-history');
       },
     });
+    template.push({
+      label: '페이지를 레코드로 등록',
+      accelerator: 'CommandOrControl+Shift+C',
+      click: () => {
+        if (host && !host.isDestroyed()) host.send('browser:page-command', 'save-record');
+      },
+    });
     template.push({ type: 'separator' });
     template.push({
       label: '요소 검사',

@@ -257,3 +257,183 @@ if (document.readyState === 'loading') {
 }
 window.addEventListener('load', scheduleFillOffer, { once: true });
 }
+
+if (isTopGuestFrame) {
+  const PICK_HIGHLIGHT_ID = 'erp-record-pick-highlight';
+  const PICK_LABEL_ID = 'erp-record-pick-label';
+  const PICK_STYLE_ID = 'erp-record-pick-style';
+  let pickActive = false;
+  let pickTarget: Element | null = null;
+
+  function absHttpUrl(value: string) {
+    try {
+      const parsed = new URL(String(value || ''), window.location.href);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return '';
+      return parsed.toString();
+    } catch {
+      return '';
+    }
+  }
+
+  function backgroundSrc(element: Element) {
+    try {
+      const image = window.getComputedStyle(element).backgroundImage || '';
+      const match = image.match(/url\((['"]?)(.*?)\1\)/i);
+      return match ? absHttpUrl(match[2]) : '';
+    } catch {
+      return '';
+    }
+  }
+
+  function ensurePickOverlay() {
+    let style = document.getElementById(PICK_STYLE_ID) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement('style');
+      style.id = PICK_STYLE_ID;
+      style.textContent = 'html.erp-picking, html.erp-picking * { cursor: crosshair !important; }';
+      document.documentElement.appendChild(style);
+    }
+    let box = document.getElementById(PICK_HIGHLIGHT_ID) as HTMLDivElement | null;
+    if (!box) {
+      box = document.createElement('div');
+      box.id = PICK_HIGHLIGHT_ID;
+      box.setAttribute('data-erp-picker', '1');
+      Object.assign(box.style, {
+        position: 'fixed',
+        pointerEvents: 'none',
+        zIndex: '2147483646',
+        border: '2px solid #4c8dff',
+        background: 'rgba(76, 141, 255, 0.12)',
+        borderRadius: '2px',
+        display: 'none',
+      });
+      document.documentElement.appendChild(box);
+    }
+    let label = document.getElementById(PICK_LABEL_ID) as HTMLDivElement | null;
+    if (!label) {
+      label = document.createElement('div');
+      label.id = PICK_LABEL_ID;
+      label.setAttribute('data-erp-picker', '1');
+      Object.assign(label.style, {
+        position: 'fixed',
+        pointerEvents: 'none',
+        zIndex: '2147483647',
+        background: '#4c8dff',
+        color: '#fff',
+        font: '11px/1.2 sans-serif',
+        padding: '1px 4px',
+        borderRadius: '2px',
+        display: 'none',
+      });
+      document.documentElement.appendChild(label);
+    }
+    return { box, label };
+  }
+
+  function elementAtPoint(x: number, y: number) {
+    const stack = document.elementsFromPoint(x, y);
+    return stack.find((element) => element && !element.closest?.('[data-erp-picker]')) || null;
+  }
+
+  function updatePickHighlight(element: Element | null) {
+    const { box, label } = ensurePickOverlay();
+    if (!element || element === document.documentElement) {
+      pickTarget = null;
+      box.style.display = 'none';
+      label.style.display = 'none';
+      return;
+    }
+    pickTarget = element;
+    const rect = element.getBoundingClientRect();
+    box.style.display = 'block';
+    box.style.left = `${Math.round(rect.left)}px`;
+    box.style.top = `${Math.round(rect.top)}px`;
+    box.style.width = `${Math.max(0, Math.round(rect.width))}px`;
+    box.style.height = `${Math.max(0, Math.round(rect.height))}px`;
+    const tag = element.tagName.toLowerCase();
+    const id = element.id ? `#${element.id}` : '';
+    label.textContent = `${tag}${id}`;
+    label.style.display = 'block';
+    const labelTop = rect.top > 18 ? rect.top - 16 : Math.max(0, rect.bottom);
+    label.style.left = `${Math.max(0, Math.round(rect.left))}px`;
+    label.style.top = `${Math.round(labelTop)}px`;
+  }
+
+  function extractPicked(element: Element) {
+    const html = element as HTMLElement;
+    const image = element.closest('img') as HTMLImageElement | null;
+    const media = element.closest('video, audio, source') as HTMLMediaElement | null;
+    const anchor = element.closest('a[href]') as HTMLAnchorElement | null;
+    const src = absHttpUrl(
+      image?.currentSrc || image?.src || media?.currentSrc || (media as HTMLMediaElement | null)?.src || '',
+    ) || backgroundSrc(element);
+    const href = absHttpUrl(anchor?.href || '');
+    const text = String(html.innerText || element.textContent || '').replace(/\s+/g, ' ').trim().slice(0, 2000);
+    return {
+      tag: element.tagName,
+      text,
+      href: href || undefined,
+      src: src || undefined,
+      alt: image?.alt || html.getAttribute?.('alt') || undefined,
+      title: html.getAttribute?.('title') || image?.alt || undefined,
+    };
+  }
+
+  function stopPicker() {
+    if (!pickActive) return;
+    pickActive = false;
+    pickTarget = null;
+    document.documentElement.classList.remove('erp-picking');
+    window.removeEventListener('mousemove', onPickMove, true);
+    window.removeEventListener('mousedown', onPickGuard, true);
+    window.removeEventListener('click', onPickClick, true);
+    window.removeEventListener('auxclick', onPickGuard, true);
+    window.removeEventListener('scroll', onPickScroll, true);
+    window.removeEventListener('resize', onPickScroll);
+    const box = document.getElementById(PICK_HIGHLIGHT_ID);
+    const label = document.getElementById(PICK_LABEL_ID);
+    if (box) box.style.display = 'none';
+    if (label) label.style.display = 'none';
+  }
+
+  function onPickMove(event: MouseEvent) {
+    updatePickHighlight(elementAtPoint(event.clientX, event.clientY));
+  }
+
+  function onPickScroll() {
+    if (!pickTarget) return;
+    updatePickHighlight(pickTarget);
+  }
+
+  function onPickGuard(event: Event) {
+    event.preventDefault();
+    event.stopPropagation();
+  }
+
+  function onPickClick(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    const element = elementAtPoint(event.clientX, event.clientY) || pickTarget;
+    if (!element) return;
+    sendToHost('browser:element-picked', extractPicked(element));
+  }
+
+  function startPicker() {
+    if (pickActive) {
+      updatePickHighlight(pickTarget);
+      return;
+    }
+    pickActive = true;
+    document.documentElement.classList.add('erp-picking');
+    ensurePickOverlay();
+    window.addEventListener('mousemove', onPickMove, true);
+    window.addEventListener('mousedown', onPickGuard, true);
+    window.addEventListener('click', onPickClick, true);
+    window.addEventListener('auxclick', onPickGuard, true);
+    window.addEventListener('scroll', onPickScroll, true);
+    window.addEventListener('resize', onPickScroll);
+  }
+
+  ipcRenderer.on('browser:pick-element-start', () => startPicker());
+  ipcRenderer.on('browser:pick-element-stop', () => stopPicker());
+}

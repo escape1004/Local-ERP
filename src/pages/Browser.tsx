@@ -19,6 +19,7 @@ import { BrowserDownloadsPanel } from '../components/browser/BrowserDownloadsPan
 import { BrowserFindBar } from '../components/browser/BrowserFindBar';
 import { BrowserHistoryPanel } from '../components/browser/BrowserHistoryPanel';
 import { BrowserImagePickerModal } from '../components/browser/BrowserImagePickerModal';
+import { BrowserSaveRecordPanel, type SaveRecordAssignment } from '../components/browser/BrowserSaveRecordPanel';
 import { BrowserNewTab } from '../components/browser/BrowserNewTab';
 import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } from '../components/browser/BrowserAiChat';
 import { BrowserScriptModal } from '../components/browser/BrowserScriptModal';
@@ -38,7 +39,7 @@ import { Input } from '../components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
-import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript } from '../types';
+import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript, type Category, type FieldDefinition, type NewRecord } from '../types';
 import {
   parsePasswordFillPrompt,
   parsePasswordSavePrompt,
@@ -65,6 +66,12 @@ import {
   getCollectBrowserPageImagesScript,
   type BrowserPageImage,
 } from '../lib/browserPageImages';
+import {
+  nextEmptyPickableFieldId,
+  parseCategoryFields,
+  parsePickedPageElement,
+  saveRecordValueFromPicked,
+} from '../lib/browserSaveRecord';
 import {
   getCollectBrowserPageVideosScript,
   parseCollectedBrowserPageVideos,
@@ -226,12 +233,28 @@ const BrowserPage: React.FC = () => {
     error: '',
   });
   const translateSeqRef = React.useRef(0);
+  const [saveRecordOpen, setSaveRecordOpen] = React.useState(false);
+  const saveRecordOpenRef = React.useRef(false);
+  const [saveRecordSaving, setSaveRecordSaving] = React.useState(false);
+  const [saveRecordFilePending, setSaveRecordFilePending] = React.useState(false);
+  const [pickingFieldId, setPickingFieldId] = React.useState<string | null>(null);
+  const pickingFieldIdRef = React.useRef<string | null>(null);
+  const [pickedAssignment, setPickedAssignment] = React.useState<SaveRecordAssignment | null>(null);
+  const [resumePickSeq, setResumePickSeq] = React.useState(0);
+  const pickedAssignmentSeqRef = React.useRef(0);
+  const lastSaveRecordCategoryIdRef = React.useRef('');
+  const pickingFieldRef = React.useRef<FieldDefinition | null>(null);
+  const sidePanelBeforeRecordRef = React.useRef<boolean | null>(null);
+  const [pickingFieldName, setPickingFieldName] = React.useState('');
+  const dateParseFormatsRef = React.useRef<string[]>([]);
 
   tabsRef.current = tabs;
   activeTabIdRef.current = activeTabId;
   closedTabsRef.current = closedTabs;
   findOpenRef.current = findOpen;
   findQueryRef.current = findQuery;
+  saveRecordOpenRef.current = saveRecordOpen;
+  pickingFieldIdRef.current = pickingFieldId;
   const activeTab = tabs.find((tab) => tab.id === activeTabId) ?? tabs[0];
   const currentUrl = activeTab?.url || NEW_TAB_URL;
   const pageTitle = activeTab?.title || '브라우저';
@@ -296,6 +319,7 @@ const BrowserPage: React.FC = () => {
       setHasOpenAiApiKey(Boolean(config?.hasOpenAiApiKey));
       setTranslationTargetLanguage(config?.translationTargetLanguage || 'ko');
       setMuteInactiveTabs(config?.muteInactiveBrowserTabs === true);
+      dateParseFormatsRef.current = Array.isArray(config?.dateParseFormats) ? config.dateParseFormats : [];
       const requested = parseExternalHttpUrl(requestedUrl)?.toString() || '';
       const restored = restoreBrowserSession(
         Array.isArray(config?.browserLastTabs) ? config.browserLastTabs : [],
@@ -321,6 +345,7 @@ const BrowserPage: React.FC = () => {
       void refreshLists();
       void window.electronAPI.getConfig().then((config) => {
         setMuteInactiveTabs(config?.muteInactiveBrowserTabs === true);
+        dateParseFormatsRef.current = Array.isArray(config?.dateParseFormats) ? config.dateParseFormats : [];
       });
     };
     window.addEventListener('focus', onFocus);
@@ -721,6 +746,59 @@ const BrowserPage: React.FC = () => {
     openTab(DOWNLOADS_PAGE_URL, { newTab: true });
   }, [openTab]);
 
+  const stopRecordPicker = React.useCallback(() => {
+    pickingFieldRef.current = null;
+    setPickingFieldId(null);
+    setPickingFieldName('');
+    webviewByTabRef.current.forEach((webview) => {
+      try {
+        webview.send?.('browser:pick-element-stop');
+      } catch {
+        // guest may already be gone
+      }
+    });
+  }, []);
+
+  const closeSaveRecordPanel = React.useCallback(() => {
+    stopRecordPicker();
+    setSaveRecordOpen(false);
+    setSaveRecordSaving(false);
+    setSaveRecordFilePending(false);
+    setPickedAssignment(null);
+    setResumePickSeq(0);
+    if (sidePanelBeforeRecordRef.current != null) {
+      setSidePanelOpen(sidePanelBeforeRecordRef.current);
+      sidePanelBeforeRecordRef.current = null;
+    }
+  }, [stopRecordPicker]);
+
+  const openSaveRecordPanel = React.useCallback(() => {
+    const tab = tabsRef.current.find((item) => item.id === activeTabIdRef.current);
+    if (!tab || isInternalBrowserTab(tab) || isBlankBrowserTab(tab)) {
+      toast({ title: '이 페이지는 레코드로 등록할 수 없습니다.', variant: 'destructive' });
+      return;
+    }
+    if (saveRecordOpenRef.current) {
+      setResumePickSeq((value) => value + 1);
+      return;
+    }
+    sidePanelBeforeRecordRef.current = sidePanelOpen;
+    setSidePanelOpen(false);
+    setSaveRecordOpen(true);
+  }, [sidePanelOpen]);
+
+  const startRecordPicker = React.useCallback((field: FieldDefinition) => {
+    if (!saveRecordOpenRef.current) openSaveRecordPanel();
+    const tab = tabsRef.current.find((item) => item.id === activeTabIdRef.current);
+    if (!tab || isInternalBrowserTab(tab) || isBlankBrowserTab(tab)) {
+      toast({ title: '이 페이지에서는 요소를 선택할 수 없습니다.', variant: 'destructive' });
+      return;
+    }
+    pickingFieldRef.current = field;
+    setPickingFieldId(field.id);
+    setPickingFieldName(field.name || '필드');
+  }, [openSaveRecordPanel]);
+
   const openDownloadItem = React.useCallback(async (id: string) => {
     const result = await window.electronAPI.openBrowserDownload(id);
     if (!result.success) toast({ title: result.error || '파일을 열지 못했습니다.', variant: 'destructive' });
@@ -783,9 +861,13 @@ const BrowserPage: React.FC = () => {
       }
       if (action === 'translate-page') {
         void translateActivePage();
+        return;
+      }
+      if (action === 'save-record') {
+        openSaveRecordPanel();
       }
     });
-  }, [openHistoryPage, openImagePicker, translateActivePage]);
+  }, [openHistoryPage, openImagePicker, openSaveRecordPanel, translateActivePage]);
 
   React.useEffect(() => {
     return window.electronAPI.onBrowserShortcut((action) => {
@@ -809,6 +891,10 @@ const BrowserPage: React.FC = () => {
       }
       if (action === 'close-tab') {
         closeTab(activeTabIdRef.current);
+        return;
+      }
+      if (action === 'save-record') {
+        openSaveRecordPanel();
         return;
       }
       if (action === 'find') {
@@ -839,6 +925,22 @@ const BrowserPage: React.FC = () => {
         toggleActiveWebviewDevTools();
         return;
       }
+      if (action === 'stop') {
+        if (pickingFieldIdRef.current) {
+          stopRecordPicker();
+          return;
+        }
+        if (saveRecordOpenRef.current) {
+          closeSaveRecordPanel();
+          return;
+        }
+        if (findOpenRef.current) {
+          closeFindBar();
+          return;
+        }
+        webview?.stop();
+        return;
+      }
       if (!webview) return;
       if (action === 'reload') webview.reload();
       if (action === 'hard-reload') {
@@ -847,23 +949,23 @@ const BrowserPage: React.FC = () => {
       }
       if (action === 'back' && webview.canGoBack()) webview.goBack();
       if (action === 'forward' && webview.canGoForward()) webview.goForward();
-      if (action === 'stop') {
-        if (findOpenRef.current) {
-          closeFindBar();
-          return;
-        }
-        webview.stop();
-      }
       if (action === 'zoom-in') applyPageZoom('in');
       if (action === 'zoom-out') applyPageZoom('out');
       if (action === 'zoom-reset') applyPageZoom('reset');
     });
-  }, [activeWebview, applyPageZoom, closeFindBar, closeTab, duplicateTab, openTab, restoreClosedTab, runFindInPage, toggleActiveWebviewDevTools]);
+  }, [activeWebview, applyPageZoom, closeFindBar, closeSaveRecordPanel, closeTab, duplicateTab, openSaveRecordPanel, openTab, restoreClosedTab, runFindInPage, stopRecordPicker, toggleActiveWebviewDevTools]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const isF12 = event.key === 'F12' && !event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey;
       const isInspect = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'i';
+      const isSaveRecord = (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c';
+      if (isSaveRecord) {
+        event.preventDefault();
+        event.stopPropagation();
+        openSaveRecordPanel();
+        return;
+      }
       if (!isF12 && !isInspect) return;
       event.preventDefault();
       event.stopPropagation();
@@ -871,7 +973,7 @@ const BrowserPage: React.FC = () => {
     };
     window.addEventListener('keydown', onKeyDown, true);
     return () => window.removeEventListener('keydown', onKeyDown, true);
-  }, [toggleActiveWebviewDevTools]);
+  }, [openSaveRecordPanel, toggleActiveWebviewDevTools]);
 
   React.useEffect(() => {
     const onMouseUp = (event: MouseEvent) => {
@@ -894,6 +996,147 @@ const BrowserPage: React.FC = () => {
       window.removeEventListener('wheel', onWheel, { capture: true } as EventListenerOptions);
     };
   }, [applyPageZoom, navigateFromMouseButton]);
+
+  const waitForBrowserDownload = React.useCallback((id: string) => (
+    new Promise<string>((resolve, reject) => {
+      let settled = false;
+      const finish = (action: () => void) => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(timeout);
+        unsubscribe();
+        action();
+      };
+      const timeout = window.setTimeout(() => {
+        finish(() => reject(new Error('파일 저장이 너무 오래 걸립니다.')));
+      }, 60000);
+      const unsubscribe = window.electronAPI.onBrowserDownloadsChange((items) => {
+        const item = (Array.isArray(items) ? items : []).find((row) => row.id === id);
+        if (!item) return;
+        if (item.state === 'completed' && item.filePath) {
+          finish(() => resolve(item.filePath));
+          return;
+        }
+        if (item.state === 'cancelled' || item.state === 'interrupted') {
+          finish(() => reject(new Error('파일 저장이 취소되었습니다.')));
+        }
+      });
+      void window.electronAPI.listBrowserDownloads().then((items) => {
+        const item = (Array.isArray(items) ? items : []).find((row) => row.id === id);
+        if (item?.state === 'completed' && item.filePath) {
+          finish(() => resolve(item.filePath));
+          return;
+        }
+        if (item?.state === 'cancelled' || item?.state === 'interrupted') {
+          finish(() => reject(new Error('파일 저장이 취소되었습니다.')));
+        }
+      }).catch((error) => {
+        finish(() => reject(error instanceof Error ? error : new Error('파일 저장 상태를 확인하지 못했습니다.')));
+      });
+    })
+  ), []);
+
+  const applyPickedElement = React.useCallback(async (raw: unknown) => {
+    const field = pickingFieldRef.current;
+    const fieldId = pickingFieldIdRef.current;
+    if (!field || !fieldId) return;
+    const picked = parsePickedPageElement(raw);
+    if (!picked) {
+      toast({ title: '이 요소에서 값을 읽지 못했습니다.' });
+      return;
+    }
+    let value = saveRecordValueFromPicked(field, picked, { dateFormats: dateParseFormatsRef.current });
+    if (!value) {
+      toast({
+        title: field.type === 'date' ? '날짜를 인식하지 못했습니다.' : '이 요소에서 값을 읽지 못했습니다.',
+      });
+      return;
+    }
+    if (field.type === 'file') {
+      if (!/^https?:\/\//i.test(value)) {
+        toast({ title: '이미지 또는 파일 주소를 가진 요소를 선택하세요.' });
+        return;
+      }
+      setSaveRecordFilePending(true);
+      try {
+        const result = await window.electronAPI.downloadBrowserFiles({
+          files: [{ url: value, filename: filenameFromImageUrl(value, 0), kind: 'image' }],
+        });
+        if (!result?.success) {
+          if (result?.error) toast({ title: result.error, variant: 'destructive' });
+          return;
+        }
+        const downloadId = result.items?.[0]?.id;
+        value = downloadId ? await waitForBrowserDownload(downloadId) : (result.items?.[0]?.filePath || value);
+      } catch (error) {
+        toast({
+          title: error instanceof Error ? error.message : '파일을 저장하지 못했습니다.',
+          variant: 'destructive',
+        });
+        return;
+      } finally {
+        setSaveRecordFilePending(false);
+      }
+    }
+    pickedAssignmentSeqRef.current += 1;
+    setPickedAssignment({
+      seq: pickedAssignmentSeqRef.current,
+      fieldId,
+      value,
+    });
+  }, [waitForBrowserDownload]);
+
+  const handlePickApplied = React.useCallback((
+    values: Record<string, unknown>,
+    fieldId: string,
+    fields: FieldDefinition[],
+  ) => {
+    const nextId = nextEmptyPickableFieldId(fields, values, fieldId);
+    const nextField = fields.find((field) => field.id === nextId);
+    if (nextField) startRecordPicker(nextField);
+    else stopRecordPicker();
+  }, [startRecordPicker, stopRecordPicker]);
+
+  const savePickedRecord = React.useCallback(async ({
+    category,
+    values,
+  }: {
+    category: Category;
+    values: Record<string, unknown>;
+  }) => {
+    setSaveRecordSaving(true);
+    try {
+      const uniqueFields = parseCategoryFields(category).filter((field) => field.unique);
+      for (const field of uniqueFields) {
+        const value = values[field.id];
+        if (value === '' || value == null) continue;
+        const result = await window.electronAPI.checkDuplicate(category.id, field.id, value);
+        if (result?.isDuplicate) {
+          toast({ title: `${field.name} 값이 이미 등록되어 있습니다.`, variant: 'destructive' });
+          return;
+        }
+      }
+      const now = new Date().toISOString();
+      const record: NewRecord = {
+        id: (typeof crypto !== 'undefined' && crypto.randomUUID) ? crypto.randomUUID() : Math.random().toString(36).slice(2),
+        categoryId: category.id,
+        data: values,
+        createdAt: now,
+        updatedAt: now,
+      };
+      await window.electronAPI.addRecord(record);
+      toast({ title: '레코드가 등록되었습니다.' });
+      closeSaveRecordPanel();
+      await refreshLists();
+    } catch (error) {
+      toast({
+        title: error instanceof Error ? error.message : '레코드를 등록하지 못했습니다.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSaveRecordSaving(false);
+    }
+  }, [closeSaveRecordPanel, refreshLists]);
 
   const handleWebviewIpcRef = React.useRef<(tabId: string, message: WebviewIpcMessageEvent) => void>(() => undefined);
   handleWebviewIpcRef.current = (tabId, message) => {
@@ -926,6 +1169,11 @@ const BrowserPage: React.FC = () => {
         if (current[tabId]?.kind === 'save') return current;
         return { ...current, [tabId]: prompt };
       });
+      return;
+    }
+    if (message.channel === 'browser:element-picked') {
+      if (tabId !== activeTabIdRef.current) return;
+      void applyPickedElement(message.args?.[0]);
     }
   };
 
@@ -1037,6 +1285,16 @@ const BrowserPage: React.FC = () => {
   }, [applyInactiveTabAudioMute, muteInactiveTabs]);
 
   React.useEffect(() => {
+    if (!saveRecordOpen || !pickingFieldId || loading) return;
+    const webview = activeWebview();
+    try {
+      webview?.send?.('browser:pick-element-start');
+    } catch {
+      // guest may not be ready yet
+    }
+  }, [activeTabId, activeWebview, loading, pickingFieldId, saveRecordOpen]);
+
+  React.useEffect(() => {
     applyInactiveTabAudioMute();
   }, [activeTabId, applyInactiveTabAudioMute]);
 
@@ -1050,7 +1308,7 @@ const BrowserPage: React.FC = () => {
     return window.electronAPI.onBrowserDownloadsChange((items) => {
       const next = Array.isArray(items) ? items : [];
       const progressing = new Set(next.filter((item) => item.state === 'progressing').map((item) => item.id));
-      if ([...progressing].some((id) => !progressingDownloadIdsRef.current.has(id))) {
+      if ([...progressing].some((id) => !progressingDownloadIdsRef.current.has(id)) && !saveRecordOpenRef.current) {
         setDownloadsOpen(true);
       }
       progressingDownloadIdsRef.current = progressing;
@@ -1806,7 +2064,33 @@ const BrowserPage: React.FC = () => {
                 />
               </div>
             )}
+            {pickingFieldId && (
+              <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-md border border-discord-accent bg-[#1e1f22]/95 px-3 py-1.5 text-xs text-discord-text shadow-xl">
+                클릭해서 {pickingFieldName || '필드'} 값을 선택하세요 · Esc 취소
+              </div>
+            )}
           </div>
+
+          {saveRecordOpen && (
+            <BrowserSaveRecordPanel
+              pageUrl={currentUrl}
+              pageTitle={pageTitle}
+              initialCategoryId={lastSaveRecordCategoryIdRef.current}
+              pickingFieldId={pickingFieldId}
+              resumePickSeq={resumePickSeq}
+              assignment={pickedAssignment}
+              filePending={saveRecordFilePending}
+              saving={saveRecordSaving}
+              onCategoryChange={(id) => {
+                lastSaveRecordCategoryIdRef.current = id;
+              }}
+              onStartPick={startRecordPicker}
+              onStopPick={stopRecordPicker}
+              onPickApplied={handlePickApplied}
+              onClose={closeSaveRecordPanel}
+              onSave={savePickedRecord}
+            />
+          )}
 
           {sidePanelOpen && (
           <aside className="flex w-80 shrink-0 flex-col border-l border-gray-800 bg-discord-sidebar">

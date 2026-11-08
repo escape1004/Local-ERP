@@ -52,8 +52,46 @@ const SUPPORTED_KOREAN_DATE_PATTERNS = [
   /^(\d{2})년\s*(\d{1,2})월\s*(\d{1,2})일$/,
 ] as const;
 
+const DATE_CANDIDATE_PATTERNS = [
+  /\d{4}년\s*\d{1,2}월(?:\s*\d{1,2}일)?/,
+  /\d{2}년\s*\d{1,2}월(?:\s*\d{1,2}일)?/,
+  /\d{4}[-./]\d{1,2}[-./]\d{1,2}/,
+  /\d{2}[-./]\d{1,2}[-./]\d{1,2}/,
+  /\d{4}[-./]\d{1,2}/,
+  /\d{8}/,
+  /\d{6}/,
+];
+
+export const stripTimeFromDateText = (inputValue: string) => {
+  const value = String(inputValue || '').replace(/\s+/g, ' ').trim();
+  if (!value) return '';
+
+  const koreanDate = value.match(/^(\d{2,4}년\s*\d{1,2}월(?:\s*\d{1,2}일)?)/);
+  if (koreanDate) return koreanDate[1].replace(/\s+/g, ' ').trim();
+
+  const withoutClock = value.replace(
+    /(?:[T\s,]+|\s+)(?:오전|오후|AM|PM)?\s*\d{1,2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:\s*(?:Z|[+-]\d{2}:?\d{2}|UTC|오전|오후|AM|PM))?.*$/i,
+    '',
+  );
+  if (withoutClock !== value) return withoutClock.trim();
+
+  return value
+    .replace(/\s*(?:오전|오후)\s*\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?(?:\s*\d{1,2}\s*초)?.*$/i, '')
+    .replace(/\s*\d{1,2}\s*시(?:\s*\d{1,2}\s*분)?(?:\s*\d{1,2}\s*초)?.*$/i, '')
+    .trim();
+};
+
+export const extractDateLikeText = (inputValue: string) => {
+  const stripped = stripTimeFromDateText(inputValue);
+  for (const pattern of DATE_CANDIDATE_PATTERNS) {
+    const match = stripped.match(pattern);
+    if (match) return match[0];
+  }
+  return stripped;
+};
+
 export const parseFlexibleDateValue = (inputValue: string, customFormats: string[] = []): string | null => {
-  const trimmedValue = inputValue.trim();
+  const trimmedValue = stripTimeFromDateText(inputValue);
 
   if (!trimmedValue) {
     return "";
