@@ -102,6 +102,7 @@ const api: ElectronAPI = {
   setCategoryOrderLocked: (locked: boolean) => ipcRenderer.invoke('setCategoryOrderLocked', locked),
   setRememberBrowserWindowBounds: (enabled: boolean) => ipcRenderer.invoke('setRememberBrowserWindowBounds', enabled),
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => ipcRenderer.invoke('setBrowserStartupMode', mode),
+  setMuteInactiveBrowserTabs: (enabled: boolean) => ipcRenderer.invoke('setMuteInactiveBrowserTabs', enabled),
   setBrowserTrackerBlocking: (enabled: boolean) => ipcRenderer.invoke('setBrowserTrackerBlocking', enabled),
   setBrowserBlockedDomains: (domains) => ipcRenderer.invoke('setBrowserBlockedDomains', domains),
   setMuteAudioWhenBackgrounded: (enabled: boolean) => ipcRenderer.invoke('setMuteAudioWhenBackgrounded', enabled),
@@ -181,6 +182,11 @@ const api: ElectronAPI = {
     const listener = (_event: Electron.IpcRendererEvent, action: string) => callback(action);
     ipcRenderer.on('browser:shortcut', listener);
     return () => ipcRenderer.removeListener('browser:shortcut', listener);
+  },
+  onMuteInactiveBrowserTabsChange: (callback) => {
+    const listener = (_event: Electron.IpcRendererEvent, enabled: boolean) => callback(enabled === true);
+    ipcRenderer.on('browser:mute-inactive-tabs', listener);
+    return () => ipcRenderer.removeListener('browser:mute-inactive-tabs', listener);
   },
   canonicalizeBrowserUrl: (url) => ipcRenderer.invoke('browser:canonicalizeUrl', url),
   listBrowserBookmarks: () => ipcRenderer.invoke('browser:listBookmarks'),

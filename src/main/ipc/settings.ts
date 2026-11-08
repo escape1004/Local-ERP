@@ -52,6 +52,7 @@ import {
   getConfiguredIdleLockMinutes,
   normalizeBrowserStartupMode,
   getConfiguredBrowserStartupMode,
+  getConfiguredMuteInactiveBrowserTabs,
   getConfiguredBrowserTrackerBlocking,
   getConfiguredBrowserBlockedDomains,
   getPasswordLockUntil,
@@ -195,6 +196,7 @@ import {
 } from '../import-export';
 import { hasOpenAiApiKey } from '../services/openai-secret';
 import { resolveEmbeddedBrowserSession } from '../lib/browser-window-url';
+import { sendEmbeddedBrowserMessage } from '../app/browser-window';
 
 export function registerSettingsHandlers() {
 
@@ -215,6 +217,7 @@ export function registerSettingsHandlers() {
       categoryOrderLocked: appConfig.categoryOrderLocked === true,
       rememberBrowserWindowBounds: appConfig.rememberBrowserWindowBounds === true,
       browserStartupMode: getConfiguredBrowserStartupMode(),
+      muteInactiveBrowserTabs: getConfiguredMuteInactiveBrowserTabs(),
       browserTrackerBlocking: getConfiguredBrowserTrackerBlocking(),
       browserBlockedDomains: getConfiguredBrowserBlockedDomains(),
       browserLastTabs: browserSession.urls,
@@ -416,6 +419,14 @@ export function registerSettingsHandlers() {
     appConfig.browserStartupMode = normalized;
     saveAppConfig();
     return { success: true, browserStartupMode: normalized };
+  });
+
+  ipcMain.handle('setMuteInactiveBrowserTabs', (_event, enabled) => {
+    appConfig.muteInactiveBrowserTabs = enabled === true;
+    saveAppConfig();
+    const muteInactiveBrowserTabs = getConfiguredMuteInactiveBrowserTabs();
+    sendEmbeddedBrowserMessage('browser:mute-inactive-tabs', muteInactiveBrowserTabs);
+    return { success: true, muteInactiveBrowserTabs };
   });
 
   ipcMain.handle('setBrowserTrackerBlocking', (_event, enabled) => {

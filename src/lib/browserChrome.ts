@@ -13,6 +13,10 @@ export function resolveBrowserMouseButton(button: number): 'back' | 'forward' | 
   return null;
 }
 
+export function shouldMuteInactiveBrowserTab(enabled: boolean, isActive: boolean) {
+  return enabled && !isActive;
+}
+
 export function nextBrowserZoomFactor(current: number, direction: BrowserZoomDirection) {
   if (direction === 'reset') return 1;
   const value = Number(current);

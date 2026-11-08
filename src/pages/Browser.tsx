@@ -37,7 +37,7 @@ import {
   parsePasswordSavePrompt,
   type BrowserPasswordPrompt,
 } from '../lib/browserPasswordPrompt';
-import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
+import { nextBrowserZoomFactor, resolveBrowserMouseButton, shouldMuteInactiveBrowserTab } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
 import { scriptMatchesUrl, urlsReferToSameResource } from '../main/lib/browser-url';
 import { wrapUserscript, wrapUserscriptForRunAt } from '../main/lib/browser-userscript';
@@ -78,6 +78,7 @@ type EmbeddedWebview = HTMLElement & {
   getTitle: () => string;
   getZoomFactor?: () => number;
   setZoomFactor?: (factor: number) => void;
+  setAudioMuted?: (muted: boolean) => void;
   executeJavaScript?: (code: string) => Promise<unknown>;
   send?: (channel: string, ...args: unknown[]) => void;
   openDevTools?: () => void;
@@ -144,6 +145,8 @@ const BrowserPage: React.FC = () => {
   const [tabs, setTabs] = React.useState<BrowserTabState[]>([]);
   const [activeTabId, setActiveTabId] = React.useState('');
   const [sessionReady, setSessionReady] = React.useState(false);
+  const [muteInactiveTabs, setMuteInactiveTabs] = React.useState(false);
+  const muteInactiveTabsRef = React.useRef(false);
 
   const [preloadPath, setPreloadPath] = React.useState('');
   const [partition, setPartition] = React.useState('persist:erp-browser');
@@ -220,6 +223,7 @@ const BrowserPage: React.FC = () => {
       setPreloadPath(nextPreload);
       if (nextPartition) setPartition(nextPartition);
       setHasOpenAiApiKey(Boolean(config?.hasOpenAiApiKey));
+      setMuteInactiveTabs(config?.muteInactiveBrowserTabs === true);
       const requested = parseExternalHttpUrl(requestedUrl)?.toString() || '';
       const restored = restoreBrowserSession(
         Array.isArray(config?.browserLastTabs) ? config.browserLastTabs : [],
@@ -243,6 +247,9 @@ const BrowserPage: React.FC = () => {
     const onFocus = () => {
       void refreshOpenAiAvailability();
       void refreshLists();
+      void window.electronAPI.getConfig().then((config) => {
+        setMuteInactiveTabs(config?.muteInactiveBrowserTabs === true);
+      });
     };
     window.addEventListener('focus', onFocus);
     return () => window.removeEventListener('focus', onFocus);
@@ -594,6 +601,18 @@ const BrowserPage: React.FC = () => {
     }
   };
 
+  const applyInactiveTabAudioMute = React.useCallback(() => {
+    const enabled = muteInactiveTabsRef.current;
+    const activeId = activeTabIdRef.current;
+    webviewByTabRef.current.forEach((webview, tabId) => {
+      try {
+        webview.setAudioMuted?.(shouldMuteInactiveBrowserTab(enabled, tabId === activeId));
+      } catch {
+        // webview methods can throw before attachment
+      }
+    });
+  }, []);
+
   const attachTabHost = React.useCallback((tabId: string, host: HTMLDivElement | null) => {
     if (!host || !preloadPath) return;
     let webview = webviewByTabRef.current.get(tabId);
@@ -659,11 +678,29 @@ const BrowserPage: React.FC = () => {
       webview.addEventListener('ipc-message', (event: Event) => {
         handleWebviewIpcRef.current(tabId, event as WebviewIpcMessageEvent);
       });
+      webview.addEventListener('did-attach', applyInactiveTabAudioMute);
+      webview.addEventListener('dom-ready', applyInactiveTabAudioMute);
       webviewByTabRef.current.set(tabId, webview);
     }
     if (webview.parentElement !== host) host.replaceChildren(webview);
     if (tabId === activeTabIdRef.current) webviewRef.current = webview;
-  }, [flushDeferredTabLoad, partition, patchTab, preloadPath, syncTabFromWebview]);
+    applyInactiveTabAudioMute();
+  }, [applyInactiveTabAudioMute, flushDeferredTabLoad, partition, patchTab, preloadPath, syncTabFromWebview]);
+
+  React.useEffect(() => {
+    muteInactiveTabsRef.current = muteInactiveTabs;
+    applyInactiveTabAudioMute();
+  }, [applyInactiveTabAudioMute, muteInactiveTabs]);
+
+  React.useEffect(() => {
+    applyInactiveTabAudioMute();
+  }, [activeTabId, applyInactiveTabAudioMute]);
+
+  React.useEffect(() => {
+    return window.electronAPI.onMuteInactiveBrowserTabsChange((enabled) => {
+      setMuteInactiveTabs(enabled);
+    });
+  }, []);
 
   React.useEffect(() => {
     flushDeferredTabLoad(activeTabId);

@@ -498,6 +498,21 @@ export function AppSettingsModal({
     }
   };
 
+  const handleMuteInactiveBrowserTabsChange = async (checked: boolean) => {
+    const previous = config?.muteInactiveBrowserTabs === true;
+    setConfig((prev) => (prev ? { ...prev, muteInactiveBrowserTabs: checked } : prev));
+    setBrowserMessage('');
+    setIsSaving(true);
+    try {
+      const result = await window.electronAPI.setMuteInactiveBrowserTabs(checked);
+      if (result.success) return;
+      setConfig((prev) => (prev ? { ...prev, muteInactiveBrowserTabs: previous } : prev));
+      setBrowserMessage(result.error || '비활성 탭 음소거 설정을 저장하지 못했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   const handleBackup = async () => {
     setIsSaving(true);
     setBackupMessage('');
@@ -1112,6 +1127,23 @@ export function AppSettingsModal({
             </span>
           </label>
         </RadioGroup>
+      </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="text-sm font-medium text-white">비활성 탭 음소거</div>
+            <p className="text-sm text-discord-muted mt-2 leading-6">
+              현재 보고 있는 탭만 소리가 납니다. 다른 탭은 자동으로 음소거됩니다.
+            </p>
+          </div>
+          <Switch
+            checked={config?.muteInactiveBrowserTabs === true}
+            onCheckedChange={handleMuteInactiveBrowserTabsChange}
+            disabled={!config || isSaving}
+            className="data-[state=checked]:bg-discord-accent data-[state=unchecked]:bg-gray-600"
+          />
+        </div>
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">

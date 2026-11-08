@@ -151,6 +151,7 @@ export interface Config {
   categoryOrderLocked?: boolean;
   rememberBrowserWindowBounds?: boolean;
   browserStartupMode?: 'newtab' | 'continue';
+  muteInactiveBrowserTabs?: boolean;
   browserTrackerBlocking?: boolean;
   browserBlockedDomains?: string[];
   browserLastTabs?: string[];
@@ -377,6 +378,7 @@ export interface ElectronAPI {
   setCategoryOrderLocked: (locked: boolean) => Promise<{ success: boolean; categoryOrderLocked?: boolean }>;
   setRememberBrowserWindowBounds: (enabled: boolean) => Promise<{ success: boolean; rememberBrowserWindowBounds?: boolean }>;
   setBrowserStartupMode: (mode: 'newtab' | 'continue') => Promise<{ success: boolean; browserStartupMode?: 'newtab' | 'continue'; error?: string }>;
+  setMuteInactiveBrowserTabs: (enabled: boolean) => Promise<{ success: boolean; muteInactiveBrowserTabs?: boolean; error?: string }>;
   setBrowserTrackerBlocking: (enabled: boolean) => Promise<{ success: boolean; browserTrackerBlocking?: boolean; error?: string }>;
   setBrowserBlockedDomains: (domains: string[]) => Promise<{ success: boolean; browserBlockedDomains?: string[]; error?: string }>;
   setMuteAudioWhenBackgrounded: (enabled: boolean) => Promise<{ success: boolean }>;
@@ -424,6 +426,7 @@ export interface ElectronAPI {
   saveBrowserLastUrl: (payload: string | { urls: string[]; activeIndex: number }) => Promise<{ success: boolean }>;
   onBrowserOpenUrl: (callback: (url: string, options?: { background?: boolean }) => void) => () => void;
   onBrowserShortcut: (callback: (action: string) => void) => () => void;
+  onMuteInactiveBrowserTabsChange: (callback: (enabled: boolean) => void) => () => void;
   canonicalizeBrowserUrl: (url: string) => Promise<string | null>;
   listBrowserBookmarks: () => Promise<BrowserBookmarkList>;
   addBrowserBookmark: (payload: { url: string; title?: string; folderId?: string | null }) => Promise<{ success: boolean; bookmark?: BrowserBookmark; error?: string }>;

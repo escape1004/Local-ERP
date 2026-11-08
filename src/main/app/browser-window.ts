@@ -68,6 +68,11 @@ export function isEmbeddedBrowserWindowFocused() {
   return Boolean(browserWindow && !browserWindow.isDestroyed() && browserWindow.isFocused());
 }
 
+export function sendEmbeddedBrowserMessage(channel, ...args) {
+  if (!browserWindow || browserWindow.isDestroyed()) return;
+  browserWindow.webContents.send(channel, ...args);
+}
+
 export function closeEmbeddedBrowserWindow() {
   if (saveBoundsTimer) {
     clearTimeout(saveBoundsTimer);

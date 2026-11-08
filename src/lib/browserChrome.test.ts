@@ -1,5 +1,12 @@
 import { expect, test } from 'vitest';
-import { nextBrowserZoomFactor, resolveBrowserMouseButton } from './browserChrome';
+import { nextBrowserZoomFactor, resolveBrowserMouseButton, shouldMuteInactiveBrowserTab } from './browserChrome';
+
+test('mutes inactive browser tabs only when the setting is on', () => {
+  expect(shouldMuteInactiveBrowserTab(true, true)).toBe(false);
+  expect(shouldMuteInactiveBrowserTab(true, false)).toBe(true);
+  expect(shouldMuteInactiveBrowserTab(false, true)).toBe(false);
+  expect(shouldMuteInactiveBrowserTab(false, false)).toBe(false);
+});
 
 test('maps mouse side buttons to history navigation', () => {
   expect(resolveBrowserMouseButton(3)).toBe('back');

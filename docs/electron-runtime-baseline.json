@@ -2,8 +2,8 @@
   "main": {
     "source": "src/main/main.ts",
     "entry": "dist-electron-app/main.js",
-    "handlerCount": 139,
-    "handlersSha256": "0f144098452c625655fd770cdc1416ebdb200d6eb90cc7b7be7eda0b949c8845",
+    "handlerCount": 140,
+    "handlersSha256": "36980ad210e8176caa8ac86fe30a955eda8f3a5734c11235b045fe4b2a3f9bb8",
     "onChannels": [
       "window-control"
     ],
@@ -13,8 +13,8 @@
     "source": "src/main/preload.ts",
     "output": "dist-electron-app/preload.js",
     "browserWindowPath": "path.join(electronDistDir, 'preload.js')",
-    "apiCount": 140,
-    "apiAndChannelsSha256": "89ab138fc469070c1f96bed811cc16376d224d65bb2020113ffa9e2334a7c8c3"
+    "apiCount": 142,
+    "apiAndChannelsSha256": "47de3d189b33f7b5ed7bb0ccdd5bf6186e40888caf757adc47dec2743fe2137e"
   },
   "ipcAudit": {
     "preloadWithoutMainHandler": [
@@ -29,8 +29,8 @@
       "updateRecord"
     ]
   },
-  "rendererApiUsageCount": 127,
-  "rendererApiUsageSha256": "b58889e2c66d19c248ea34b123acea394c6e895027f6c4116eb73435a0a9e641",
+  "rendererApiUsageCount": 129,
+  "rendererApiUsageSha256": "409fd8fc35aca988694325d4f23c22a1f9be30574f81577295cd327326b00e75",
   "rendererSendChannels": [
     "window-control"
   ]

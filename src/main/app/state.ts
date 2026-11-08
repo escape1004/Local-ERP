@@ -118,6 +118,7 @@ export const defaultConfig = {
   rememberBrowserWindowBounds: false,
   browserWindowBounds: null,
   browserStartupMode: 'newtab',
+  muteInactiveBrowserTabs: false,
   browserTrackerBlocking: true,
   browserBlockedDomains: [],
   browserLastUrl: '',
@@ -252,6 +253,10 @@ export function getConfiguredIdleLockMinutes() {
 
 export function getConfiguredBrowserStartupMode() {
   return normalizeBrowserStartupMode(appConfig.browserStartupMode);
+}
+
+export function getConfiguredMuteInactiveBrowserTabs() {
+  return appConfig.muteInactiveBrowserTabs === true;
 }
 
 export function getConfiguredBrowserTrackerBlocking() {
