@@ -38,14 +38,13 @@ src/lib/*.js
 *.sqlite
 *.sqlite3
 *.db
+*.db-wal
+*.db-shm
 db.json
-save/*.db
-save/*.db-wal
-save/*.db-shm
-save/thumbnails/
-save/archive-video-cache/
+save/
+resources/save/
+/config.json
 thumbnails/
-resources/save/thumbnails/
 
 # Logs
 logs/

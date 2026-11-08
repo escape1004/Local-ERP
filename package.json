@@ -53,7 +53,9 @@
       "dist-electron-app/main.js",
       "dist-electron-app/preload.js",
       "dist-electron-app/**/*.js",
-      "resources/**/*"
+      "resources/**/*",
+      "!resources/save",
+      "!resources/save/**"
     ],
     "extraResources": [
       {
