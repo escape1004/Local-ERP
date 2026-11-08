@@ -1005,7 +1005,7 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
           />
         </div>
       )}
-      {showRelatedRecordsPanel && (
+      {showRelatedRecordsPanel && relatedRecords.length > 0 && (
         <div className="absolute left-[calc(100%+0.75rem)] top-0 h-full w-80">
           <RelatedRecordsPanel
             key={record.id}
