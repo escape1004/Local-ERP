@@ -30,6 +30,14 @@ import {
 import { getRelationDisplayLabel, getRelationPrimaryLabel, getRelationSecondaryLabel } from '../utils/relationDisplay';
 import { TextCaseContextMenu } from './records/TextCaseContextMenu';
 import { RelatedRecordsEditor } from './records/RelatedRecordsEditor';
+import {
+  CreateMissingRelationRecordsDialog,
+  type MissingRelationCreateRequest,
+} from './records/CreateMissingRelationRecordsDialog';
+import {
+  classifyRelationPasteValues,
+  splitRelationPasteValues,
+} from '../lib/relationPaste';
 import type { Config } from '../types';
 import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId, isTranslationEnabledField } from '../lib/translation';
 import {
@@ -80,6 +88,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   const [ambiguousOptions, setAmbiguousOptions] = useState<{ value: string, records: DataRecord[] }[]>([]);
   const [pendingAmbiguousField, setPendingAmbiguousField] = useState<FieldDefinition | null>(null);
   const [pendingAmbiguousCurrentValues, setPendingAmbiguousCurrentValues] = useState<string[]>([]);
+  const [missingCreate, setMissingCreate] = useState<MissingRelationCreateRequest | null>(null);
+  const pendingMissingAfterAmbiguousRef = useRef<MissingRelationCreateRequest | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [translatingFieldIds, setTranslatingFieldIds] = useState<Set<string>>(new Set());
   const [relatedRecordIds, setRelatedRecordIds] = useState<string[]>([]);
@@ -105,6 +115,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     setErrors({});
     setDuplicateErrors({});
     setOpenComboboxes({});
+    setMissingCreate(null);
+    pendingMissingAfterAmbiguousRef.current = null;
   }, [isOpen, record, category]);
 
   useEffect(() => {
@@ -581,6 +593,77 @@ export const RecordModal: React.FC<RecordModalProps> = ({
 
   const getSecondaryLabel = (record: DataRecord, field: FieldDefinition): string => {
     return getRelationSecondaryLabel(record, field, categories, getCategoryRecords);
+  };
+
+  const applyRelationSelection = (field: FieldDefinition, recordIds: string[], currentValue: unknown) => {
+    if (recordIds.length === 0) return;
+    if (field.multiple) {
+      const currentValues = Array.isArray(currentValue) ? currentValue.filter((item): item is string => typeof item === 'string') : [];
+      updateFieldValue(field.id, [...new Set([...currentValues, ...recordIds])]);
+      return;
+    }
+    updateFieldValue(field.id, recordIds[0]);
+    toggleCombobox(field.id);
+  };
+
+  const finishAmbiguousDialog = () => {
+    setAmbiguousDialogOpen(false);
+    setAmbiguousOptions([]);
+    setPendingAmbiguousField(null);
+    setPendingAmbiguousCurrentValues([]);
+    const pending = pendingMissingAfterAmbiguousRef.current;
+    pendingMissingAfterAmbiguousRef.current = null;
+    if (pending) setMissingCreate(pending);
+  };
+
+  const handleRelationPaste = (
+    field: FieldDefinition,
+    pastedText: string,
+    relatedRecords: DataRecord[],
+    currentValue: unknown,
+  ) => {
+    const relatedCategory = categories.find((item) => item.id === field.relationCategoryId);
+    if (!relatedCategory) return;
+
+    const classified = classifyRelationPasteValues(
+      splitRelationPasteValues(pastedText, Boolean(field.multiple)),
+      (value) => findMatchingRelationRecords(relatedRecords, field, value),
+    );
+    const validIds = classified.valid.map((item) => item.id);
+    if (validIds.length > 0) {
+      applyRelationSelection(field, validIds, currentValue);
+      if (!field.multiple && classified.ambiguous.length === 0 && classified.missing.length === 0) {
+        toast({
+          title: '값이 선택됨',
+          description: `"${getRelationLabel(classified.valid[0], field)}"이 선택되었습니다.`,
+        });
+      }
+    }
+
+    const missingRequest = classified.missing.length > 0
+      ? {
+        field,
+        category: relatedCategory,
+        values: classified.missing,
+      }
+      : null;
+
+    if (classified.ambiguous.length > 0) {
+      const currentValues = field.multiple
+        ? [...new Set([
+          ...(Array.isArray(currentValue) ? currentValue.filter((item): item is string => typeof item === 'string') : []),
+          ...validIds,
+        ])]
+        : [];
+      pendingMissingAfterAmbiguousRef.current = missingRequest;
+      setAmbiguousDialogOpen(true);
+      setAmbiguousOptions(classified.ambiguous);
+      setPendingAmbiguousField(field);
+      setPendingAmbiguousCurrentValues(currentValues);
+      return;
+    }
+
+    if (missingRequest) setMissingCreate(missingRequest);
   };
 
   const findMatchingRelationRecords = (records: DataRecord[], field: FieldDefinition, searchValue: string) => {
@@ -1156,45 +1239,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
                       onPaste={(e) => {
                         e.preventDefault();
-                        const pastedText = e.clipboardData.getData('text');
-                        const pastedValues = pastedText.split(',').map(v => v.trim()).filter(v => v);
-                        
-                        // 붙여넣기(다중)
-                        const ambiguousMatches: { value: string, records: DataRecord[] }[] = [];
-                        const validRecords: DataRecord[] = [];
-                        const invalidValues: string[] = [];
-                        
-                        pastedValues.forEach(v => {
-                          const matches = findMatchingRelationRecords(relatedRecords, field, v);
-                          if (matches.length === 1) {
-                            validRecords.push(matches[0]);
-                          } else if (matches.length > 1) {
-                            ambiguousMatches.push({ value: v, records: matches });
-                          } else {
-                            // 일치하는 항목이 없는 경우
-                            invalidValues.push(v);
-                          }
-                        });
-                        
-                        // 유효하지 않은 값이 있는 경우 토스트 메시지 표시
-                        if (invalidValues.length > 0) {
-                          toast({
-                            title: "유효하지 않은 값",
-                            description: `"${invalidValues.join(', ')}"는 유효한 항목이 아닙니다.`,
-                            variant: "destructive",
-                          });
-                        }
-                        
-                        if (ambiguousMatches.length > 0) {
-                          setAmbiguousDialogOpen(true);
-                          setAmbiguousOptions(ambiguousMatches);
-                          setPendingAmbiguousField(field);
-                          // 현재 값과 이미 처리된 validRecords를 모두 포함
-                          const currentValues = Array.isArray(value) ? value : [];
-                          setPendingAmbiguousCurrentValues([...currentValues, ...validRecords.map(r => r.id)]);
-                        } else if (validRecords.length > 0) {
-                          updateFieldValue(field.id, [...new Set([...Array.isArray(value) ? value : [], ...validRecords.map(r => r.id)])]);
-                        }
+                        handleRelationPaste(field, e.clipboardData.getData('text'), relatedRecords, value);
                       }}
                     />
                     <CommandList className="max-h-[200px] overflow-y-auto">
@@ -1295,34 +1340,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
                       onPaste={(e) => {
                         e.preventDefault();
-                        const pastedText = e.clipboardData.getData('text');
-                        const pastedValue = pastedText.trim();
-                        
-                        // 기존 레코드에서 일치하는 값 찾기
-                        const matchingRecords = findMatchingRelationRecords(relatedRecords, field, pastedValue);
-                        
-                        if (matchingRecords.length === 1) {
-                          // 단일 일치: 바로 선택
-                          updateFieldValue(field.id, matchingRecords[0].id);
-                          toggleCombobox(field.id);
-                          toast({
-                            title: "값이 선택됨",
-                            description: `"${getRelationLabel(matchingRecords[0], field)}"이 선택되었습니다.`,
-                          });
-                        } else if (matchingRecords.length > 1) {
-                          // 다중 일치: 선택 모달 띄우기
-                          setAmbiguousDialogOpen(true);
-                          setAmbiguousOptions([{ value: pastedValue, records: matchingRecords }]);
-                          setPendingAmbiguousField(field);
-                          setPendingAmbiguousCurrentValues([]);
-                        } else {
-                          // 일치하는 항목 없음
-                          toast({
-                            title: "유효하지 않은 값",
-                            description: `"${pastedValue}"는 유효한 항목이 아닙니다.`,
-                            variant: "destructive",
-                          });
-                        }
+                        handleRelationPaste(field, e.clipboardData.getData('text'), relatedRecords, value);
                       }}
                     />
                     <CommandList className="text-discord-text">
@@ -1578,12 +1596,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 </p>
               </div>
               <button
-                onClick={() => {
-                  setAmbiguousDialogOpen(false);
-                  setAmbiguousOptions([]);
-                  setPendingAmbiguousField(null);
-                  setPendingAmbiguousCurrentValues([]);
-                }}
+                onClick={finishAmbiguousDialog}
                 className="text-discord-muted hover:text-discord-text"
               >
                 <X size={24} />
@@ -1613,21 +1626,14 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                                 setAmbiguousOptions(nextOptions);
                               } else {
                                 updateFieldValue(pendingAmbiguousField.id, newValues);
-                                setAmbiguousDialogOpen(false);
-                                setAmbiguousOptions([]);
-                                setPendingAmbiguousField(null);
-                                setPendingAmbiguousCurrentValues([]);
+                                finishAmbiguousDialog();
                               }
                             } else {
-                              // 단일: id만 저장
                               updateFieldValue(
                                 pendingAmbiguousField.id,
                                 record.id
                               );
-                              setAmbiguousDialogOpen(false);
-                              setAmbiguousOptions([]);
-                              setPendingAmbiguousField(null);
-                              setPendingAmbiguousCurrentValues([]);
+                              finishAmbiguousDialog();
                             }
                           }}
                           className="justify-start text-left h-auto p-4 bg-discord-dark hover:bg-discord-hover border-gray-600 text-discord-text"
@@ -1649,12 +1655,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
             <div className="flex-shrink-0 flex items-center justify-end gap-3 p-6 border-t border-gray-700">
               <Button 
                 variant="ghost" 
-                onClick={() => {
-                  setAmbiguousDialogOpen(false);
-                  setAmbiguousOptions([]);
-                  setPendingAmbiguousField(null);
-                  setPendingAmbiguousCurrentValues([]);
-                }}
+                onClick={finishAmbiguousDialog}
                 className="text-discord-text hover:bg-discord-hover"
               >
                 취소
@@ -1662,6 +1663,22 @@ export const RecordModal: React.FC<RecordModalProps> = ({
             </div>
           </AnimatedModal>
       )}
+
+      <CreateMissingRelationRecordsDialog
+        isOpen={Boolean(missingCreate)}
+        category={missingCreate?.category || null}
+        values={missingCreate?.values || []}
+        preferredFieldId={missingCreate?.field.displayFieldId}
+        onClose={() => setMissingCreate(null)}
+        onCreated={(recordIds) => {
+          if (!missingCreate) return;
+          applyRelationSelection(
+            missingCreate.field,
+            recordIds,
+            formData[missingCreate.field.id],
+          );
+        }}
+      />
     </>
   );
 };
