@@ -39,7 +39,7 @@ import {
 } from '../lib/browserPasswordPrompt';
 import { nextBrowserZoomFactor, resolveBrowserMouseButton } from '../lib/browserChrome';
 import { parseExternalHttpUrl, resolveBrowserAddressInput } from '../lib/browserNavigation';
-import { scriptMatchesUrl } from '../main/lib/browser-url';
+import { scriptMatchesUrl, urlsReferToSameResource } from '../main/lib/browser-url';
 import { wrapUserscript, wrapUserscriptForRunAt } from '../main/lib/browser-userscript';
 import { getCaptureBrowserPageContextScript } from '../lib/browserPageContext';
 import {
@@ -719,7 +719,11 @@ const BrowserPage: React.FC = () => {
   }, [activeTabId, sessionReady, tabs]);
 
   const matchesCurrentUrl = (item: BrowserBookmark) => (
-    Boolean(item.url) && (item.url === canonicalCurrent || item.url === currentUrl)
+    Boolean(item.url) && (
+      item.url === currentUrl
+      || item.url === canonicalCurrent
+      || urlsReferToSameResource(item.url, currentUrl)
+    )
   );
   const currentManualBookmark = bookmarks.find((item) => item.source !== 'record' && matchesCurrentUrl(item));
   const currentRecordBookmark = bookmarks.find((item) => item.source === 'record' && matchesCurrentUrl(item));
@@ -1011,17 +1015,17 @@ const BrowserPage: React.FC = () => {
         />
         <div className="flex shrink-0 cursor-default items-center gap-2 border-b border-gray-800 px-3 py-2 [&_button]:cursor-default">
           <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>
-            <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
+            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text" disabled={!canGoBack} aria-label="뒤로" onClick={() => webviewRef.current?.goBack()}>
               <ArrowLeft size={16} />
             </Button>
           </BrowserTooltip>
           <BrowserTooltip label="앞으로 (Alt+→)" wrapDisabled={!canGoForward}>
-            <Button variant="ghost" className="h-8 w-8 p-0" disabled={!canGoForward} aria-label="앞으로" onClick={() => webviewRef.current?.goForward()}>
+            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text" disabled={!canGoForward} aria-label="앞으로" onClick={() => webviewRef.current?.goForward()}>
               <ArrowRight size={16} />
             </Button>
           </BrowserTooltip>
           <BrowserTooltip label={loading ? '불러오는 중' : '새로고침 (F5)'}>
-            <Button variant="ghost" className="h-8 w-8 p-0" aria-label="새로고침" onClick={() => webviewRef.current?.reload()}>
+            <Button variant="ghost" className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text" aria-label="새로고침" onClick={() => webviewRef.current?.reload()}>
               <RotateCw size={16} className={loading ? 'animate-spin' : ''} />
             </Button>
           </BrowserTooltip>
@@ -1081,7 +1085,16 @@ const BrowserPage: React.FC = () => {
             label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
             wrapDisabled
           >
-            {starred && !recordLocked ? (
+            {recordLocked ? (
+              <button
+                type="button"
+                className="pointer-events-none inline-flex h-8 w-8 items-center justify-center rounded-md"
+                disabled
+                aria-label="레코드에서 자동 등록된 북마크입니다"
+              >
+                <Star size={16} className="fill-discord-accent text-discord-accent" />
+              </button>
+            ) : starred ? (
               <button
                 type="button"
                 className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
@@ -1096,13 +1109,11 @@ const BrowserPage: React.FC = () => {
                 <DropdownMenuTrigger asChild>
                   <button
                     type="button"
-                    className={`inline-flex h-8 w-8 items-center justify-center rounded-md disabled:opacity-100 ${
-                      recordLocked ? 'cursor-not-allowed' : 'hover:bg-discord-hover'
-                    }`}
-                    disabled={currentUrl === 'about:blank' || recordLocked}
-                    aria-label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : '북마크할 위치 선택'}
+                    className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
+                    disabled={currentUrl === 'about:blank'}
+                    aria-label="북마크할 위치 선택"
                   >
-                    <Star size={16} className={starred ? 'fill-yellow-400 text-yellow-400' : 'text-discord-text'} />
+                    <Star size={16} className="text-discord-text" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent
@@ -1128,7 +1139,7 @@ const BrowserPage: React.FC = () => {
           <BrowserTooltip label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}>
             <Button
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text"
               aria-label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}
               onClick={() => setSidePanelOpen((open) => !open)}
             >

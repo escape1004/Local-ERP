@@ -206,7 +206,7 @@ export function BrowserVideoMenu({
               <PopoverTrigger asChild>
                 <Button
                   variant="ghost"
-                  className="h-8 w-8 p-0"
+                  className="h-8 w-8 p-0 hover:bg-discord-hover hover:text-discord-text"
                   disabled={disabled}
                   aria-label={countBadge ? `영상 저장 ${countBadge}개` : '영상 저장'}
                 >
