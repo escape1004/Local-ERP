@@ -119,6 +119,18 @@ export function selectBrowserTabByNumber(tabs: BrowserTabState[], number: number
   return tabs[number - 1]?.id || null;
 }
 
+export function moveBrowserTab(tabs: BrowserTabState[], tabId: string, toIndex: number) {
+  const from = tabs.findIndex((tab) => tab.id === tabId);
+  if (from < 0 || tabs.length < 2) return tabs;
+  let target = Math.max(0, Math.min(tabs.length, Math.trunc(Number(toIndex) || 0)));
+  if (from === target || from + 1 === target) return tabs;
+  const next = [...tabs];
+  const [tab] = next.splice(from, 1);
+  if (target > from) target -= 1;
+  next.splice(target, 0, tab);
+  return next;
+}
+
 export function cycleBrowserTab(tabs: BrowserTabState[], activeId: string, delta: number) {
   if (tabs.length === 0) return activeId;
   const index = Math.max(0, tabs.findIndex((tab) => tab.id === activeId));

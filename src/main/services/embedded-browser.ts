@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, clipboard, session, webContents } from 'electron';
+import { BrowserWindow, Menu, clipboard, dialog, session, webContents } from 'electron';
 import { parseExternalHttpUrl } from '../lib/security';
 import {
   isUserBlockedBrowserUrl,
@@ -21,7 +21,7 @@ import { wrapUserscriptForRunAt } from '../lib/browser-userscript';
 import { db } from '../database/connection';
 import { getConfiguredBrowserBlockedDomains, getConfiguredBrowserTrackerBlocking, log } from '../app/state';
 import { attachBrowserVideoSniffer, saveGuestMediaUrl } from './browser-video-download';
-import { attachBrowserSessionDownloads } from '../lib/browser-download-manager';
+import { attachBrowserSessionDownloads, saveBrowserFileAs } from '../lib/browser-download-manager';
 import { recordBrowserHistoryVisit } from '../lib/browser-history-store';
 import { hasOpenAiApiKey } from './openai-secret';
 
@@ -126,6 +126,21 @@ function attachGuestContextMenu(contents) {
       });
     }
     const mediaUrl = String(params?.srcURL || '');
+    if (params?.mediaType === 'image' && /^https?:\/\//i.test(mediaUrl)) {
+      template.push({
+        label: '다른 이름으로 저장',
+        click: () => {
+          const host = contents.hostWebContents || contents;
+          const win = BrowserWindow.fromWebContents(host);
+          void saveBrowserFileAs(
+            { url: mediaUrl, kind: 'image' },
+            win && !win.isDestroyed() ? win : null,
+          ).then((result) => {
+            if (!result?.success && result?.error) dialog.showErrorBox('다른 이름으로 저장', result.error);
+          });
+        },
+      });
+    }
     if (params?.mediaType === 'video' && /^https?:\/\//i.test(mediaUrl)) {
       template.push({
         label: '영상 저장',

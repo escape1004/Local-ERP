@@ -57,7 +57,6 @@ function bindMiddleClick(page: NewTabPage, onOpen: BrowserNewTabProps['onOpen'])
     onPointerDown: (event: React.PointerEvent) => {
       if (event.button !== 1) return;
       event.preventDefault();
-      onOpen(page, { newTab: true, background: true });
     },
     onAuxClick: (event: React.MouseEvent) => {
       if (event.button !== 1) return;

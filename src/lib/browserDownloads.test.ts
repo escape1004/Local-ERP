@@ -3,9 +3,11 @@ import {
   downloadMetaLabel,
   downloadProgressPercent,
   downloadStateLabel,
+  ensureFilenameExtension,
   formatDownloadSize,
   recentBrowserDownloads,
   suggestedDownloadKind,
+  suggestedSaveFilename,
 } from './browserDownloads';
 
 test('classifies download kinds and progress', () => {
@@ -23,6 +25,16 @@ test('formats download sizes like the chrome bubble', () => {
   expect(formatDownloadSize(1024)).toBe('1KB');
   expect(downloadMetaLabel({ receivedBytes: 28160, totalBytes: 28160, state: 'completed' })).toBe('27.5KB • 완료');
   expect(downloadMetaLabel({ receivedBytes: 512, totalBytes: 1024, state: 'progressing' })).toBe('512B / 1KB • 저장 중');
+});
+
+test('keeps an image extension on save-as filenames', () => {
+  expect(suggestedSaveFilename({ url: 'https://cdn.example/photo.png' })).toBe('photo.png');
+  expect(suggestedSaveFilename({ url: 'https://pbs.twimg.com/media/abc?format=jpg&name=large' })).toBe('abc.jpg');
+  expect(suggestedSaveFilename({ url: 'https://img.example/hash', mime: 'image/webp' })).toBe('hash.webp');
+  expect(suggestedSaveFilename({ url: 'https://img.example/hash', kind: 'image' })).toBe('hash.jpg');
+  expect(suggestedSaveFilename({ filename: 'cover', mime: 'image/png', kind: 'image' })).toBe('cover.png');
+  expect(ensureFilenameExtension('C:\\Downloads\\cover', 'cover.png')).toBe('C:\\Downloads\\cover.png');
+  expect(ensureFilenameExtension('C:\\Downloads\\cover.jpg', 'cover.png')).toBe('C:\\Downloads\\cover.jpg');
 });
 
 test('keeps the five most recent downloads for the bubble', () => {

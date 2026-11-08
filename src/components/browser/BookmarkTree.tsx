@@ -171,7 +171,6 @@ function BookmarkRow({
       onPointerDown={(event) => {
         if (event.button === 1) {
           event.preventDefault();
-          if (!renaming) onOpen(bookmark, { newTab: true, background: true });
           return;
         }
         if (!canDrag || !dnd) return;

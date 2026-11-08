@@ -5,6 +5,7 @@ import {
   cycleBrowserTab,
   isBlankBrowserTab,
   MAX_BROWSER_TABS,
+  moveBrowserTab,
   openBrowserTab,
   restoreBrowserSession,
   selectBrowserTabByNumber,
@@ -43,6 +44,17 @@ test('keeps one empty tab when the last tab closes', () => {
   expect(result.tabs).toHaveLength(1);
   expect(result.tabs[0].id).not.toBe(tab.id);
   expect(isBlankBrowserTab(result.tabs[0])).toBe(true);
+});
+
+test('reorders tabs by drop index without changing identities', () => {
+  const first = createBrowserTab('https://a.example/');
+  const second = createBrowserTab('https://b.example/');
+  const third = createBrowserTab('https://c.example/');
+  const tabs = [first, second, third];
+  expect(moveBrowserTab(tabs, first.id, 2).map((tab) => tab.id)).toEqual([second.id, first.id, third.id]);
+  expect(moveBrowserTab(tabs, third.id, 0).map((tab) => tab.id)).toEqual([third.id, first.id, second.id]);
+  expect(moveBrowserTab(tabs, first.id, 1)).toBe(tabs);
+  expect(moveBrowserTab(tabs, first.id, 0)).toBe(tabs);
 });
 
 test('cycles tabs and stops at the max count', () => {

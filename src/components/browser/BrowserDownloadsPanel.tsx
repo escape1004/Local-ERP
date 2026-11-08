@@ -90,16 +90,15 @@ function DownloadRow({
           )}
         </span>
       </button>
-      {!compact && (
-        <button
-          type="button"
-          aria-label="폴더에서 보기"
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-discord-muted hover:bg-white/10 hover:text-discord-text"
-          onClick={() => onShowInFolder(item.id)}
-        >
-          <FolderOpen size={14} />
-        </button>
-      )}
+      <button
+        type="button"
+        aria-label="폴더에서 보기"
+        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-discord-muted hover:bg-white/10 hover:text-discord-text disabled:opacity-40"
+        disabled={!item.filePath}
+        onClick={() => onShowInFolder(item.id)}
+      >
+        <FolderOpen size={14} />
+      </button>
       <button
         type="button"
         aria-label={`${item.filename} 기록 삭제`}

@@ -254,7 +254,6 @@ export function BookmarkBar({
                           onPointerDown={(event) => {
                             if (event.button !== 1) return;
                             event.preventDefault();
-                            onOpen(bookmark, { newTab: true, background: true });
                           }}
                           onClick={(event) => {
                             if (suppressClickRef.current) {

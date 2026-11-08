@@ -84,6 +84,7 @@ import {
   isHistoryBrowserTab,
   isInternalBrowserTab,
   MAX_BROWSER_TABS,
+  moveBrowserTab,
   NEW_TAB_URL,
   openBrowserTab,
   restoreBrowserSession,
@@ -648,6 +649,10 @@ const BrowserPage: React.FC = () => {
     setClosedTabs(popped.stack);
     openTab(popped.tab.url, { newTab: true });
   }, [openTab]);
+
+  const reorderTab = React.useCallback((tabId: string, toIndex: number) => {
+    setTabs((current) => moveBrowserTab(current, tabId, toIndex));
+  }, []);
 
   const duplicateTab = React.useCallback((tabId: string) => {
     const tab = tabsRef.current.find((item) => item.id === tabId);
@@ -1470,6 +1475,7 @@ const BrowserPage: React.FC = () => {
           onNewTab={() => openTab(NEW_TAB_URL, { newTab: true })}
           onDuplicate={duplicateTab}
           onRestoreClosedTab={restoreClosedTab}
+          onReorder={reorderTab}
         />
         <div className="relative z-30 flex shrink-0 cursor-default items-center gap-2 border-b border-gray-800 px-3 py-2 [&_button]:cursor-default">
           <BrowserTooltip label="뒤로 (Alt+←)" wrapDisabled={!canGoBack}>

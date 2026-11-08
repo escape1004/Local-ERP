@@ -3,7 +3,14 @@ export type {
   BrowserDownloadKind,
   BrowserDownloadState,
 } from '../main/lib/browser-downloads';
-export { suggestedDownloadKind } from '../main/lib/browser-downloads';
+export {
+  ensureFilenameExtension,
+  extensionFromDownloadUrl,
+  extensionFromMime,
+  filenameFromContentDisposition,
+  suggestedDownloadKind,
+  suggestedSaveFilename,
+} from '../main/lib/browser-downloads';
 
 import type { BrowserDownloadItem, BrowserDownloadState } from '../main/lib/browser-downloads';
 

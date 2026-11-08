@@ -4,7 +4,14 @@ import path from 'path';
 import { app, dialog, session as electronSession, shell } from 'electron';
 import { db } from '../database/connection';
 import { log } from '../app/state';
-import { suggestedDownloadKind, type BrowserDownloadItem, type BrowserDownloadKind } from './browser-downloads';
+import {
+  ensureFilenameExtension,
+  filenameFromContentDisposition,
+  suggestedDownloadKind,
+  suggestedSaveFilename,
+  type BrowserDownloadItem,
+  type BrowserDownloadKind,
+} from './browser-downloads';
 
 const BROWSER_PARTITION = 'persist:erp-browser';
 
@@ -195,6 +202,74 @@ export function attachBrowserSessionDownloads(ses) {
       });
     });
   });
+}
+
+async function sniffRemoteSaveHint(url: string) {
+  try {
+    const response = await electronSession.fromPartition(BROWSER_PARTITION).fetch(url, {
+      method: 'HEAD',
+      signal: AbortSignal.timeout(2500),
+    });
+    return {
+      mime: response.headers.get('content-type') || '',
+      filename: filenameFromContentDisposition(response.headers.get('content-disposition') || ''),
+    };
+  } catch {
+    return { mime: '', filename: '' };
+  }
+}
+
+export async function saveBrowserFileAs(payload: {
+  url?: string;
+  filename?: string;
+  kind?: BrowserDownloadKind;
+} = {}, parentWindow) {
+  const url = String(payload.url || '');
+  if (!/^https?:\/\//i.test(url)) return { success: false, error: '저장할 파일을 찾을 수 없습니다.' };
+  const remote = await sniffRemoteSaveHint(url);
+  const filename = suggestedSaveFilename({
+    url,
+    filename: payload.filename || remote.filename,
+    mime: remote.mime,
+    kind: payload.kind || 'image',
+  });
+  const ext = filename.match(/\.([a-z0-9]{2,5})$/i)?.[1] || '';
+  const { canceled, filePath } = await dialog.showSaveDialog(
+    parentWindow && !parentWindow.isDestroyed() ? parentWindow : undefined,
+    {
+      title: '다른 이름으로 저장',
+      defaultPath: path.join(app.getPath('downloads'), filename),
+      filters: ext
+        ? [
+          { name: ext.toUpperCase(), extensions: [ext] },
+          { name: '모든 파일', extensions: ['*'] },
+        ]
+        : [
+          { name: '이미지', extensions: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'svg'] },
+          { name: '모든 파일', extensions: ['*'] },
+        ],
+    },
+  );
+  if (canceled || !filePath) return { success: false };
+  const dest = ensureFilenameExtension(filePath, filename);
+  const item = registerBrowserDownload({
+    filename: path.basename(dest),
+    url,
+    filePath: dest,
+    mime: remote.mime,
+    kind: payload.kind || suggestedDownloadKind(path.basename(dest), remote.mime),
+    state: 'progressing',
+  });
+  pendingSaveByUrl.set(url, { id: item.id, filePath: dest });
+  try {
+    electronSession.fromPartition(BROWSER_PARTITION).downloadURL(url);
+  } catch (error) {
+    pendingSaveByUrl.delete(url);
+    updateBrowserDownload(item.id, { state: 'interrupted' });
+    log('브라우저 다른 이름으로 저장 실패:', error);
+    return { success: false, error: error?.message || '파일을 저장하지 못했습니다.' };
+  }
+  return { success: true, path: dest };
 }
 
 export async function downloadBrowserFiles(payload: {
