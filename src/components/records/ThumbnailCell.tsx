@@ -5,6 +5,7 @@ import { getLocalVideoHttpUrl } from '../../lib/local-media';
 import { isCustomThumbnailRecord, shouldShowCustomThumbnailBadge, VIDEO_HOVER_PREVIEW_PATTERN } from '../../lib/recordFields';
 import { cn } from '../../lib/utils';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { formatVideoDurationLabel } from '../viewer/viewerLogic';
 import { FIELD_TOOLTIP_CLASSNAME } from './FieldValueRenderer';
 
 const embeddedCoverCache = new Map<string, boolean>();
@@ -83,6 +84,8 @@ export const ThumbnailCell: React.FC<{
   videoHoverPreviewEnabled?: boolean;
   inlineVideoPreview?: boolean;
   showStatusIcons?: boolean;
+  fileExtensionAlign?: 'left' | 'right';
+  showVideoDuration?: boolean;
   onPreviewChange?: (preview: ThumbnailPreviewState | null) => void;
 }> = ({
   filePath,
@@ -95,6 +98,8 @@ export const ThumbnailCell: React.FC<{
   videoHoverPreviewEnabled = true,
   inlineVideoPreview = false,
   showStatusIcons = true,
+  fileExtensionAlign = 'right',
+  showVideoDuration = false,
   onPreviewChange,
 }) => {
   const [dataUrl, setDataUrl] = React.useState<string | null>(null);
@@ -320,8 +325,15 @@ export const ThumbnailCell: React.FC<{
         />
       )}
       {filePath && !thumbnailOnly && (
-        <div className="absolute bottom-1 right-1 bg-black bg-opacity-70 text-white text-xs px-1 py-0.5 rounded">
+        <div className={`absolute bottom-1 z-10 bg-black bg-opacity-70 text-white text-xs px-1 py-0.5 rounded ${
+          fileExtensionAlign === 'left' ? 'left-1' : 'right-1'
+        }`}>
           {getFileExtension(filePath)}
+        </div>
+      )}
+      {showVideoDuration && isVideoFile && typeof record?.duration === 'number' && record.duration > 0 && (
+        <div className="absolute bottom-1 right-1 z-10 bg-black bg-opacity-70 text-white text-xs px-1 py-0.5 rounded">
+          {formatVideoDurationLabel(record.duration)}
         </div>
       )}
     </div>

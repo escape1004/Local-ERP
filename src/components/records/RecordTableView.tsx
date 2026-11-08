@@ -166,6 +166,7 @@ export const RecordTableView: React.FC<RecordTableViewProps> = ({
                       thumbnailFit={listThumbnailFit}
                       thumbnailOnly={fileField.thumbnailOnly}
                       videoHoverPreviewEnabled={videoHoverPreviewEnabled}
+                      fileExtensionAlign="left"
                       onPreviewChange={onPreviewChange}
                       onThumbnailClick={(filePath) => onThumbnailClick(filePath, record)}
                     />

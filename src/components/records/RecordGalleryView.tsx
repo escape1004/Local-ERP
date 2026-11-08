@@ -106,6 +106,8 @@ export const RecordGalleryView: React.FC<RecordGalleryViewProps> = ({
                     sizeStyle={{ height: `${galleryThumbnailHeight}px` }}
                     videoHoverPreviewEnabled={videoHoverPreviewEnabled}
                     inlineVideoPreview
+                    fileExtensionAlign="left"
+                    showVideoDuration
                     onPreviewChange={undefined}
                     onThumbnailClick={(filePath) => onThumbnailClick(filePath, record)}
                   />

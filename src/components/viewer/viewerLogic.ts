@@ -50,6 +50,17 @@ export function formatMediaTime(time: number) {
   return `${minutes}:${seconds.toString().padStart(2, '0')}`;
 }
 
+export function formatVideoDurationLabel(time: number) {
+  const safeTime = Number.isFinite(time) ? Math.max(0, Math.floor(time)) : 0;
+  const hours = Math.floor(safeTime / 3600);
+  const minutes = Math.floor((safeTime % 3600) / 60);
+  const seconds = safeTime % 60;
+  if (hours > 0) {
+    return `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+  }
+  return `${minutes}:${seconds.toString().padStart(2, '0')}`;
+}
+
 export function findArchiveSubtitles(files: ArchiveFile[], videoName: string) {
   const normalizedVideoName = videoName.replace(/\\/g, '/');
   const lastSlashIndex = normalizedVideoName.lastIndexOf('/');

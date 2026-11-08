@@ -6,6 +6,7 @@ import {
   filterArchiveFiles,
   findArchiveSubtitles,
   formatMediaTime,
+  formatVideoDurationLabel,
   getAdjacentArchiveOriginalIndex,
   getArchiveNavigationIndex,
   getLoopRangePercents,
@@ -40,6 +41,13 @@ test('formats media time and clamps invalid values', () => {
   expect(formatMediaTime(125)).toBe('2:05');
   expect(formatMediaTime(-3)).toBe('0:00');
   expect(formatMediaTime(Number.NaN)).toBe('0:00');
+});
+
+test('formats gallery video duration with hours when needed', () => {
+  expect(formatVideoDurationLabel(0)).toBe('0:00');
+  expect(formatVideoDurationLabel(125)).toBe('2:05');
+  expect(formatVideoDurationLabel(3661)).toBe('1:01:01');
+  expect(formatVideoDurationLabel(Number.NaN)).toBe('0:00');
 });
 
 test('matches archive subtitles in the same folder with optional language suffix', () => {
