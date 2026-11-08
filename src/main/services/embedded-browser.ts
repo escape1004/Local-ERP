@@ -182,8 +182,7 @@ function attachGuestContextMenu(contents) {
       },
     });
     template.push({
-      label: '페이지를 레코드로 등록',
-      accelerator: 'CommandOrControl+Shift+C',
+      label: '페이지를 레코드로 등록 (베타 기능)',
       click: () => {
         if (host && !host.isDestroyed()) host.send('browser:page-command', 'save-record');
       },

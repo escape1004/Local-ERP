@@ -182,6 +182,9 @@ export function BrowserSaveRecordPanel({
     <aside className="flex w-80 shrink-0 flex-col border-l border-gray-800 bg-discord-sidebar">
       <div className="flex shrink-0 items-center gap-2 border-b border-gray-800 px-3 py-2">
         <h2 className="min-w-0 flex-1 truncate text-sm font-medium text-discord-text">레코드로 등록</h2>
+        <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/15 px-1.5 py-0.5 text-[10px] font-medium leading-none text-amber-300">
+          베타 기능
+        </span>
         <Button
           type="button"
           variant="ghost"
