@@ -1,6 +1,5 @@
 import {
   canonicalizeBrowserUrl,
-  collectHttpUrls,
   isHttpUrlString,
 } from './browser-url';
 
@@ -68,6 +67,7 @@ export function collectRecordHttpUrls(record, category): string[] {
   const urls = new Set<string>();
 
   fields.forEach((field) => {
+    if (!fieldHasUrlAffix(field)) return;
     const value = data[field.id];
     const items = Array.isArray(value) ? value : [value];
     items.forEach((item) => {
@@ -76,7 +76,6 @@ export function collectRecordHttpUrls(record, category): string[] {
     });
   });
 
-  collectHttpUrls(data).forEach((item) => pushCanonicalUrl(urls, item));
   return [...urls];
 }
 
@@ -158,9 +157,7 @@ export function buildBrowserBookmarkTree({
 
   const included = new Set();
   parsedCategories.forEach((category) => {
-    const hasAffix = category.fields.some(fieldHasUrlAffix);
-    const hasBookmarks = (autoBookmarksByCategory.get(category.id) || []).length > 0;
-    if (!hasAffix && !hasBookmarks) return;
+    if (!category.fields.some(fieldHasUrlAffix)) return;
     let currentId = category.id;
     while (currentId && !included.has(currentId)) {
       included.add(currentId);

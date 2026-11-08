@@ -15,14 +15,20 @@ test('picks an unused default folder name', () => {
 const movies = {
   id: 'movies',
   name: '영화',
-  fields: [{ id: 'title', type: 'text' }, { id: 'link', type: 'text' }],
+  fields: [
+    { id: 'title', type: 'text' },
+    { id: 'link', type: 'text', textPrefix: 'https://youtu.be/' },
+  ],
   order: 0,
 };
 const actors = {
   id: 'actors',
   name: '배우',
   parentId: 'movies',
-  fields: [{ id: 'name', type: 'text' }, { id: 'page', type: 'text' }],
+  fields: [
+    { id: 'name', type: 'text' },
+    { id: 'page', type: 'text', textPrefix: 'https://example.com/' },
+  ],
   order: 0,
 };
 const unused = {
@@ -36,8 +42,8 @@ test('puts record urls into category folders and nests subcategories', () => {
   const result = buildBrowserBookmarkTree({
     categories: [movies, actors, unused],
     records: [
-      { id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'https://youtu.be/abc123XYZ01' } },
-      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'https://example.com/pacino' } },
+      { id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'abc123XYZ01' } },
+      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'pacino' } },
     ],
     manualBookmarks: [
       { id: 'manual-1', title: '검색', url: 'https://www.google.com', createdAt: '2026-01-01' },
@@ -50,7 +56,7 @@ test('puts record urls into category folders and nests subcategories', () => {
   expect(result.tree[1].bookmarks[0]).toMatchObject({
     source: 'record',
     title: 'Heat',
-    subtitle: 'https://youtu.be/abc123XYZ01',
+    subtitle: 'abc123XYZ01',
     url: 'https://www.youtube.com/watch?v=abc123XYZ01',
   });
   expect(result.tree[1].children).toHaveLength(1);
@@ -58,7 +64,7 @@ test('puts record urls into category folders and nests subcategories', () => {
   expect(result.tree[1].children[0].bookmarks[0]).toMatchObject({
     source: 'record',
     title: 'Pacino',
-    subtitle: 'https://example.com/pacino',
+    subtitle: 'pacino',
     url: 'https://example.com/pacino',
   });
   expect(result.items.some((item) => item.source === 'manual')).toBe(true);
@@ -69,7 +75,7 @@ test('keeps parent folders when only a subcategory has urls', () => {
   const result = buildBrowserBookmarkTree({
     categories: [movies, actors],
     records: [
-      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'https://example.com/pacino' } },
+      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'pacino' } },
     ],
   });
 
@@ -87,8 +93,8 @@ test('omits categories without urls and skips separators', () => {
       { id: 'sep', name: '----', itemType: 'separator', fields: [], order: 2 },
     ],
     records: [
-      { id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'https://example.com/heat' } },
-      { id: 'n1', categoryId: 'notes', data: { body: 'no url here' } },
+      { id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'abc123XYZ01' } },
+      { id: 'n1', categoryId: 'notes', data: { body: 'https://example.com/note' } },
     ],
   });
 
@@ -125,7 +131,7 @@ test('nests a url subcategory under its parent folder', () => {
   const result = buildBrowserBookmarkTree({
     categories: [series, { ...actors, parentId: 'series' }],
     records: [
-      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'https://example.com/pacino' } },
+      { id: 'a1', categoryId: 'actors', data: { name: 'Pacino', page: 'pacino' } },
     ],
   });
 
@@ -247,11 +253,21 @@ test('keeps an empty manual folder in the tree', () => {
   });
 });
 
+test('omits categories that have urls in data but no url field', () => {
+  const result = buildBrowserBookmarkTree({
+    categories: [unused],
+    records: [{ id: 'n1', categoryId: 'notes', data: { body: 'https://example.com/note' } }],
+  });
+
+  expect(result.tree).toEqual([]);
+  expect(result.items).toEqual([]);
+});
+
 test('drops manual bookmarks that duplicate record urls', () => {
   const result = buildBrowserBookmarkTree({
     categories: [movies],
-    records: [{ id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'https://example.com/heat' } }],
-    manualBookmarks: [{ id: 'man', title: 'Heat copy', url: 'https://example.com/heat', createdAt: '' }],
+    records: [{ id: 'm1', categoryId: 'movies', data: { title: 'Heat', link: 'abc123XYZ01' } }],
+    manualBookmarks: [{ id: 'man', title: 'Heat copy', url: 'https://www.youtube.com/watch?v=abc123XYZ01', createdAt: '' }],
   });
 
   expect(result.tree.map((folder) => folder.kind)).toEqual(['category']);
