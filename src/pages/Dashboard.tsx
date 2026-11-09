@@ -36,12 +36,12 @@ import { isSeparatorCategory } from '../lib/category';
 import { getDashboardSummaryGridClass, hasDashboardRecords } from '../lib/dashboardLayout';
 import {
   ALL_ROOT_CATEGORIES_VALUE,
+  buildDashboardCategoryStats,
   collectCategoryTreeIds,
   formatNumber,
   getChildCategoryRecordChartData,
   getDashboardTotalStats,
   getFileTypeChartData,
-  getFileTypeCounts,
   getRecordDisplayValue,
   getRecordViewCountKey,
   getRootCategoryRecordChartData,
@@ -49,6 +49,7 @@ import {
   getTrackableFileField,
   getVisibleDashboardCategories,
   groupChildrenByParentId,
+  mapRecordViewCounts,
   summarizeWarningCounts,
   type CategoryStats,
 } from '../lib/dashboardStats';
@@ -155,6 +156,16 @@ export default function Dashboard() {
       if (showProfileLoading) {
         setGlobalLoading(true, '데이터를 불러오는 중...');
       }
+
+      const revealDashboard = () => {
+        if (cancelled) return;
+        setLoading(false);
+        markProfileReady();
+        if (showProfileLoading) {
+          hideLoading();
+        }
+      };
+
       try {
         await loadCategories();
 
@@ -163,54 +174,36 @@ export default function Dashboard() {
         const allCategories = loadedCategories
           .filter((cat) => !isSeparatorCategory(cat))
           .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-        const rootCategories = allCategories.filter((cat) => !cat.parentId);
+        const nextRootCategories = allCategories.filter((cat) => !cat.parentId);
 
-        if (rootCategories.length === 0) {
+        setWarningItems([]);
+        setWarningTotalCount(0);
+        setWarningCounts({ missingFiles: 0, brokenRelations: 0 });
+
+        if (nextRootCategories.length === 0) {
           setCategoryStats([]);
-          setWarningItems([]);
-          setWarningTotalCount(0);
-          setWarningCounts({ missingFiles: 0, brokenRelations: 0 });
           setRecordViewCounts({});
           return;
         }
 
         await Promise.all(allCategories.map((category) => loadRecords(category.id)));
-        const [warningResult, viewCounts] = await Promise.all([
-          window.electronAPI.getDashboardWarnings(8),
-          window.electronAPI.getRecordViewCounts(),
-        ]);
+        const viewCounts = await window.electronAPI.getRecordViewCounts();
+        if (cancelled) return;
 
-        const stats: CategoryStats[] = allCategories.map((category) => {
-          const records = store.getCategoryRecords(category.id) || [];
-          const { imageCount, videoCount, archiveCount } = getFileTypeCounts(category, records);
-          const recentRecords = [...records]
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-            .slice(0, 5);
+        setCategoryStats(buildDashboardCategoryStats(
+          allCategories,
+          (categoryId) => store.getCategoryRecords(categoryId),
+        ));
+        setRecordViewCounts(mapRecordViewCounts(viewCounts));
+        revealDashboard();
 
-          return {
-            category,
-            recordCount: records.length,
-            imageCount,
-            videoCount,
-            archiveCount,
-            recentRecords,
-          };
-        });
-
-        setCategoryStats(stats);
+        const warningResult = await window.electronAPI.getDashboardWarnings(8);
+        if (cancelled) return;
         setWarningItems(warningResult.items);
         setWarningTotalCount(warningResult.totalCount);
         setWarningCounts(warningResult.counts);
-        setRecordViewCounts(Object.fromEntries(
-          viewCounts.map((item) => [getRecordViewCountKey(item.categoryId, item.recordId), item.viewCount])
-        ));
       } finally {
-        if (cancelled) return;
-        setLoading(false);
-        markProfileReady();
-        if (showProfileLoading) {
-          hideLoading();
-        }
+        revealDashboard();
       }
     };
 
@@ -224,9 +217,7 @@ export default function Dashboard() {
     const refreshRecordViewCounts = () => {
       void window.electronAPI.getRecordViewCounts()
         .then((viewCounts) => {
-          setRecordViewCounts(Object.fromEntries(
-            viewCounts.map((item) => [getRecordViewCountKey(item.categoryId, item.recordId), item.viewCount])
-          ));
+          setRecordViewCounts(mapRecordViewCounts(viewCounts));
         })
         .catch(() => {});
     };

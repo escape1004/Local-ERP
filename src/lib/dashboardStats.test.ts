@@ -1,14 +1,17 @@
 import { expect, test } from 'vitest';
 import type { Category, DataRecord } from '../types';
 import {
+  buildDashboardCategoryStats,
   collectCategoryTreeIds,
   getChildCategoryRecordChartData,
   getDashboardTotalStats,
   getFileTypeChartData,
   getFileTypeCounts,
+  getRecordViewCountKey,
   getRootCategoryRecordChartData,
   getVisibleDashboardCategories,
   groupChildrenByParentId,
+  mapRecordViewCounts,
   summarizeWarningCounts,
 } from './dashboardStats';
 
@@ -31,6 +34,25 @@ function record(fileName: string): DataRecord {
     updatedAt: '2024-01-01T00:00:00.000Z',
   };
 }
+
+test('maps view counts and builds per-category stats without waiting on warnings', () => {
+  const cat = category({ id: 'c1', name: '미디어', fields: [fileField] });
+  const newer = { ...record('b.MP4'), id: 'newer', createdAt: '2024-02-01T00:00:00.000Z' };
+  const older = { ...record('a.jpg'), id: 'older', createdAt: '2024-01-01T00:00:00.000Z' };
+
+  expect(mapRecordViewCounts([
+    { categoryId: 'c1', recordId: 'newer', viewCount: 4 },
+  ])).toEqual({ [getRecordViewCountKey('c1', 'newer')]: 4 });
+
+  expect(buildDashboardCategoryStats([cat], () => [newer, older])).toEqual([{
+    category: cat,
+    recordCount: 2,
+    imageCount: 1,
+    videoCount: 1,
+    archiveCount: 0,
+    recentRecords: [newer, older],
+  }]);
+});
 
 test('counts image, video, and archive files from a file field', () => {
   const cat = category({ id: 'c1', name: '미디어', fields: [fileField] });

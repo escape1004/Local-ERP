@@ -21,6 +21,36 @@ export function getRecordViewCountKey(categoryId: string, recordId: string) {
   return `${categoryId}:${recordId}`;
 }
 
+export function mapRecordViewCounts(
+  viewCounts: Array<{ categoryId: string; recordId: string; viewCount: number }>,
+): Record<string, number> {
+  return Object.fromEntries(
+    viewCounts.map((item) => [getRecordViewCountKey(item.categoryId, item.recordId), item.viewCount])
+  );
+}
+
+export function buildDashboardCategoryStats(
+  categories: Category[],
+  getRecords: (categoryId: string) => DataRecord[],
+): CategoryStats[] {
+  return categories.map((category) => {
+    const records = getRecords(category.id) || [];
+    const { imageCount, videoCount, archiveCount } = getFileTypeCounts(category, records);
+    const recentRecords = [...records]
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      .slice(0, 5);
+
+    return {
+      category,
+      recordCount: records.length,
+      imageCount,
+      videoCount,
+      archiveCount,
+      recentRecords,
+    };
+  });
+}
+
 export function getTrackableFileField(category: Category) {
   return category.fields.find((field) => field.type === 'file' && !field.thumbnailOnly);
 }
