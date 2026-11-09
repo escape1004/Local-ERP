@@ -140,11 +140,14 @@ function expectLatestSchema(database) {
     'profileId', 'recordId', 'categoryId', 'viewCount', 'updatedAt',
   ]));
   expect(getTableColumns(database, 'browser_bookmarks')).toEqual(expect.arrayContaining([
-    'id', 'title', 'url', 'record_id', 'folder_id', 'sort_order', 'created_at',
+    'id', 'profileId', 'title', 'url', 'record_id', 'folder_id', 'sort_order', 'created_at',
   ]));
   expect(getTableColumns(database, 'browser_bookmark_folders')).toEqual(expect.arrayContaining([
-    'id', 'name', 'parent_id', 'sort_order', 'created_at',
+    'id', 'profileId', 'name', 'parent_id', 'sort_order', 'created_at',
   ]));
+  expect(database.prepare(
+    "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'index' AND name = 'idx_browser_bookmarks_profile_url'"
+  ).get().count).toBe(1);
   expect(getTableColumns(database, 'browser_scripts')).toEqual(expect.arrayContaining([
     'id', 'name', 'enabled', 'matches_json', 'run_at', 'source', 'updated_at',
   ]));
@@ -229,7 +232,7 @@ test('removes the bundled youtube highlight script from an existing browser data
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([8, 9, 10]);
+    expect(result.appliedVersions).toEqual([8, 9, 10, 11, 12]);
     expect(temp.database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
       .toBeUndefined();
     expect(tableExists(temp.database, 'record_references')).toBe(true);
@@ -245,7 +248,7 @@ test('adds record_references when upgrading from version 8', () => {
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([9, 10]);
+    expect(result.appliedVersions).toEqual([9, 10, 11, 12]);
     expect(tableExists(temp.database, 'record_references')).toBe(true);
     expect(getTableColumns(temp.database, 'record_references')).toEqual(expect.arrayContaining([
       'source_record_id', 'target_record_id', 'sort_order', 'created_at',
@@ -263,7 +266,7 @@ test('adds browser history and downloads when upgrading from version 9', () => {
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([10]);
+    expect(result.appliedVersions).toEqual([10, 11, 12]);
     expect(tableExists(temp.database, 'browser_history')).toBe(true);
     expect(tableExists(temp.database, 'browser_downloads')).toBe(true);
     expect(getTableColumns(temp.database, 'browser_history')).toEqual(expect.arrayContaining([
@@ -272,6 +275,98 @@ test('adds browser history and downloads when upgrading from version 9', () => {
     expect(getTableColumns(temp.database, 'browser_downloads')).toEqual(expect.arrayContaining([
       'id', 'filename', 'url', 'file_path', 'kind', 'state',
     ]));
+  });
+});
+
+test('scopes existing browser bookmarks to a profile and allows the same url in another profile', () => {
+  withMigrationDb((temp) => {
+    migrate(temp.database, temp.backupDir, {
+      migrations: SCHEMA_MIGRATIONS.filter((migration) => migration.version <= 10),
+    });
+    temp.database.prepare(
+      'INSERT INTO profiles (id, name, createdAt, updatedAt) VALUES (?, ?, ?, ?)'
+    ).run('profile-1', 'Studio', '2024-01-01', '2024-01-02');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-1', '검색', 'https://www.google.com/', '2024-01-03');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmark_folders (id, name, parent_id, sort_order, created_at)
+      VALUES (?, ?, NULL, 0, ?)
+    `).run('folder-1', '작업', '2024-01-03');
+
+    const result = migrate(temp.database, temp.backupDir);
+
+    expect(result.appliedVersions).toEqual([11, 12]);
+    expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-1').profileId)
+      .toBe('profile-1');
+    expect(temp.database.prepare('SELECT profileId FROM browser_bookmark_folders WHERE id = ?').get('folder-1').profileId)
+      .toBe('profile-1');
+
+    temp.database.prepare(
+      'INSERT INTO profiles (id, name, createdAt, updatedAt) VALUES (?, ?, ?, ?)'
+    ).run('profile-2', 'Other', '2024-02-01', '2024-02-02');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-2', 'profile-2', '검색', 'https://www.google.com/', '2024-02-03');
+
+    expect(temp.database.prepare('SELECT COUNT(*) AS count FROM browser_bookmarks WHERE url = ?').get('https://www.google.com/').count)
+      .toBe(2);
+    expect(() => temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-3', 'profile-1', '중복', 'https://www.google.com/', '2024-02-04')).toThrow();
+  });
+});
+
+test('moves legacy browser bookmarks from the oldest profile to the one with the most records', () => {
+  withMigrationDb((temp) => {
+    migrate(temp.database, temp.backupDir, {
+      migrations: SCHEMA_MIGRATIONS.filter((migration) => migration.version <= 11),
+    });
+    temp.database.prepare(
+      'INSERT INTO profiles (id, name, createdAt, updatedAt) VALUES (?, ?, ?, ?)'
+    ).run('old', 'Old', '2024-01-01', '2024-01-01');
+    temp.database.prepare(
+      'INSERT INTO profiles (id, name, createdAt, updatedAt) VALUES (?, ?, ?, ?)'
+    ).run('main', 'Main', '2024-06-01', '2024-06-01');
+    temp.database.prepare(`
+      INSERT INTO categories (id, profileId, name, parentId, fields, order_num, createdAt, updatedAt)
+      VALUES (?, ?, ?, NULL, '[]', 0, ?, ?)
+    `).run('cat-main', 'main', '미디어', '2024-06-01', '2024-06-01');
+    temp.database.prepare(`
+      INSERT INTO records (id, profileId, categoryId, data, createdAt, updatedAt)
+      VALUES (?, ?, ?, '{}', ?, ?)
+    `).run('rec-1', 'main', 'cat-main', '2024-06-01', '2024-06-01');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-legacy', 'old', '검색', 'https://www.google.com/', '2024-01-03');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-keep', 'old', '유튜브', 'https://www.youtube.com/', '2024-01-04');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmark_folders (id, profileId, name, parent_id, sort_order, created_at)
+      VALUES (?, ?, ?, NULL, 0, ?)
+    `).run('folder-legacy', 'old', '작업', '2024-01-03');
+    temp.database.prepare(`
+      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+      VALUES (?, ?, ?, ?, NULL, NULL, 0, ?)
+    `).run('bm-main', 'main', '검색', 'https://www.google.com/', '2024-06-02');
+
+    const result = migrate(temp.database, temp.backupDir);
+
+    expect(result.appliedVersions).toEqual([12]);
+    expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-legacy'))
+      .toBeUndefined();
+    expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-keep').profileId)
+      .toBe('main');
+    expect(temp.database.prepare('SELECT profileId, url FROM browser_bookmarks WHERE id = ?').get('bm-main'))
+      .toEqual({ profileId: 'main', url: 'https://www.google.com/' });
+    expect(temp.database.prepare('SELECT profileId FROM browser_bookmark_folders WHERE id = ?').get('folder-legacy').profileId)
+      .toBe('main');
   });
 });
 

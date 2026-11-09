@@ -8,6 +8,7 @@ import {
   indexExists,
   recordSchemaMigration,
 } from './schema';
+import { getPrimaryProfileId, rehomeBrowserBookmarksToPrimaryProfile } from '../lib/browser-bookmark-profile';
 
 export const SCHEMA_MIGRATIONS = [
   {
@@ -238,6 +239,75 @@ export const SCHEMA_MIGRATIONS = [
           'CREATE INDEX IF NOT EXISTS idx_browser_downloads_created ON browser_downloads(created_at DESC)'
         );
       }
+    },
+  },
+  {
+    version: 11,
+    name: 'browser_bookmarks_profile_scope',
+    up(database) {
+      addColumnIfMissing(database, 'browser_bookmarks', 'profileId', 'TEXT');
+      addColumnIfMissing(database, 'browser_bookmark_folders', 'profileId', 'TEXT');
+
+      const profileId = getPrimaryProfileId(database);
+      if (profileId) {
+        database.prepare(`
+          UPDATE browser_bookmarks SET profileId = ? WHERE profileId IS NULL OR profileId = ''
+        `).run(profileId);
+        database.prepare(`
+          UPDATE browser_bookmark_folders SET profileId = ? WHERE profileId IS NULL OR profileId = ''
+        `).run(profileId);
+      }
+
+      database.exec(`
+        CREATE TABLE browser_bookmarks_scoped (
+          id TEXT PRIMARY KEY,
+          profileId TEXT NOT NULL,
+          title TEXT NOT NULL,
+          url TEXT NOT NULL,
+          record_id TEXT,
+          folder_id TEXT,
+          sort_order INTEGER NOT NULL DEFAULT 0,
+          created_at TEXT NOT NULL
+        )
+      `);
+      database.exec(`
+        INSERT INTO browser_bookmarks_scoped (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
+        SELECT
+          id,
+          COALESCE(NULLIF(profileId, ''), ''),
+          title,
+          url,
+          record_id,
+          folder_id,
+          COALESCE(sort_order, 0),
+          created_at
+        FROM browser_bookmarks
+      `);
+      database.exec('DROP TABLE browser_bookmarks');
+      database.exec('ALTER TABLE browser_bookmarks_scoped RENAME TO browser_bookmarks');
+
+      if (!indexExists(database, 'idx_browser_bookmarks_profile_url')) {
+        database.exec(
+          'CREATE UNIQUE INDEX IF NOT EXISTS idx_browser_bookmarks_profile_url ON browser_bookmarks(profileId, url)'
+        );
+      }
+      if (!indexExists(database, 'idx_browser_bookmarks_profile_folder')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_browser_bookmarks_profile_folder ON browser_bookmarks(profileId, folder_id, sort_order)'
+        );
+      }
+      if (!indexExists(database, 'idx_browser_bookmark_folders_profile')) {
+        database.exec(
+          'CREATE INDEX IF NOT EXISTS idx_browser_bookmark_folders_profile ON browser_bookmark_folders(profileId, parent_id, sort_order)'
+        );
+      }
+    },
+  },
+  {
+    version: 12,
+    name: 'rehome_legacy_browser_bookmarks',
+    up(database) {
+      rehomeBrowserBookmarksToPrimaryProfile(database);
     },
   },
 ];

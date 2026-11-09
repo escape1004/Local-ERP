@@ -9,6 +9,8 @@ export function initializeDatabase() {
     const defaultProfile = ensureDefaultProfile();
     db.prepare('UPDATE categories SET profileId = ? WHERE profileId IS NULL OR profileId = ?').run(defaultProfile.id, '');
     db.prepare('UPDATE records SET profileId = ? WHERE profileId IS NULL OR profileId = ?').run(defaultProfile.id, '');
+    db.prepare('UPDATE browser_bookmarks SET profileId = ? WHERE profileId IS NULL OR profileId = ?').run(defaultProfile.id, '');
+    db.prepare('UPDATE browser_bookmark_folders SET profileId = ? WHERE profileId IS NULL OR profileId = ?').run(defaultProfile.id, '');
   } catch (error) {
     log('Error initializing database:', error);
     throw error;

@@ -291,6 +291,9 @@ export function registerProfileHandlers() {
     deleteRelatedRecordLinksForProfile(db, profileId);
     db.prepare('DELETE FROM records WHERE profileId = ?').run(profileId);
     db.prepare('DELETE FROM categories WHERE profileId = ?').run(profileId);
+    db.prepare('DELETE FROM browser_bookmarks WHERE profileId = ?').run(profileId);
+    db.prepare('UPDATE browser_bookmark_folders SET parent_id = NULL WHERE profileId = ?').run(profileId);
+    db.prepare('DELETE FROM browser_bookmark_folders WHERE profileId = ?').run(profileId);
     db.prepare('DELETE FROM profiles WHERE id = ?').run(profileId);
     categoryDirs
       .sort((a: string, b: string) => b.length - a.length)
