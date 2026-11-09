@@ -43,6 +43,7 @@ test('normalizeTranslation helpers keep supported values', () => {
   assert.equal(normalizeTranslationModel('gpt-5-mini'), DEFAULT_TRANSLATION_MODEL);
   assert.equal(normalizeTranslationModel('unknown'), DEFAULT_TRANSLATION_MODEL);
   assert.equal(normalizeTranslationDisplayMode('inline-hover'), 'inline-hover');
+  assert.equal(normalizeTranslationDisplayMode('click-toggle'), 'click-toggle');
   assert.equal(normalizeTranslationDisplayMode('tooltip'), 'tooltip');
   assert.equal(normalizeTranslationDisplayMode('unknown'), 'tooltip');
 });

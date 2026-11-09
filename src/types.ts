@@ -180,7 +180,7 @@ export interface Config {
   dateParseFormats?: string[];
   translationTargetLanguage?: string;
   translationModel?: string;
-  translationDisplayMode?: 'tooltip' | 'inline-hover';
+  translationDisplayMode?: 'tooltip' | 'inline-hover' | 'click-toggle';
 }
 
 export interface BrowserIdleState {
@@ -420,7 +420,7 @@ export interface ElectronAPI {
   setDefaultGalleryZoom: (scale: number) => Promise<{ success: boolean; defaultGalleryZoom?: number; error?: string }>;
   setTranslationTargetLanguage: (language: string) => Promise<{ success: boolean; translationTargetLanguage?: string; error?: string }>;
   setTranslationModel: (model: string) => Promise<{ success: boolean; translationModel?: string; error?: string }>;
-  setTranslationDisplayMode: (mode: 'tooltip' | 'inline-hover') => Promise<{ success: boolean; translationDisplayMode?: 'tooltip' | 'inline-hover'; error?: string }>;
+  setTranslationDisplayMode: (mode: 'tooltip' | 'inline-hover' | 'click-toggle') => Promise<{ success: boolean; translationDisplayMode?: 'tooltip' | 'inline-hover' | 'click-toggle'; error?: string }>;
   setOpenAiApiKey: (apiKey: string) => Promise<{ success: boolean; hasOpenAiApiKey?: boolean; error?: string }>;
   clearOpenAiApiKey: () => Promise<{ success: boolean; hasOpenAiApiKey?: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;

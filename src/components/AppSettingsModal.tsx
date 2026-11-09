@@ -1,5 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from 'react';
-import { FolderOpen, Globe, HelpCircle, Keyboard, Languages, List, Loader2, Monitor, Plus, RefreshCw, Save, Settings, Shield, Trash2, X } from 'lucide-react';
+import { FolderOpen, Globe, HelpCircle, Keyboard, Languages, List, Loader2, Monitor, Plus, RefreshCw, Save, Settings, Shield, Sparkles, Trash2, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from './ui/dialog';
 import { RadioGroup, RadioGroupItem } from './ui/radio-group';
 import { Switch } from './ui/switch';
@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/t
 import type { AppUpdateState, BrowserPasswordSummary, Config } from '../types';
 import { DEFAULT_DATE_PARSE_FORMATS } from './ui/date-picker';
 import { useLoadingStore } from '../hooks/useLoadingStore';
-import { DEFAULT_TRANSLATION_DISPLAY_MODE, OPENAI_TRANSLATION_MODEL, OPENAI_TRANSLATION_MODELS, type TranslationDisplayMode } from '../lib/translation';
+import { OPENAI_TRANSLATION_MODEL, OPENAI_TRANSLATION_MODELS, normalizeTranslationDisplayMode, type TranslationDisplayMode } from '../lib/translation';
 import { toast } from './ui/use-toast';
 
 interface AppSettingsModalProps {
@@ -153,7 +153,8 @@ export function AppSettingsModal({
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
-  const [translationApiKeyInput, setTranslationApiKeyInput] = useState('');
+  const [aiApiKeyInput, setAiApiKeyInput] = useState('');
+  const [aiMessage, setAiMessage] = useState('');
   const [translationMessage, setTranslationMessage] = useState('');
 
   const settingsSections = useMemo(() => {
@@ -163,10 +164,16 @@ export function AppSettingsModal({
       description: '페이지별 키보드 도움말',
       icon: Keyboard,
     };
+    const aiSection = {
+      id: 'ai',
+      label: 'AI',
+      description: 'OpenAI 준비와 API 키',
+      icon: Sparkles,
+    };
     const translationSection = {
       id: 'translation',
       label: '번역',
-      description: '자동 번역과 OpenAI 설정',
+      description: '자동 번역 언어와 표시 방식',
       icon: Languages,
     };
     const dataSection = {
@@ -178,6 +185,7 @@ export function AppSettingsModal({
     const securityIndex = sections.findIndex((section) => section.id === 'security');
     const alreadyExists =
       sections.some((section) => section.id === shortcutsSection.id) ||
+      sections.some((section) => section.id === aiSection.id) ||
       sections.some((section) => section.id === translationSection.id) ||
       sections.some((section) => section.id === dataSection.id);
 
@@ -186,15 +194,16 @@ export function AppSettingsModal({
     }
 
     if (securityIndex < 0) {
-      return [...sections, shortcutsSection, translationSection, dataSection];
+      return [...sections, translationSection, aiSection, dataSection, shortcutsSection];
     }
 
     return [
       ...sections.slice(0, securityIndex),
-      shortcutsSection,
       translationSection,
+      aiSection,
       dataSection,
       ...sections.slice(securityIndex),
+      shortcutsSection,
     ];
   }, []);
 
@@ -268,7 +277,8 @@ export function AppSettingsModal({
         setListMessage('');
         setDateFormatInput('');
         setDateFormatMessage('');
-        setTranslationApiKeyInput('');
+        setAiApiKeyInput('');
+        setAiMessage('');
         setTranslationMessage('');
       })
       .catch((error) => {
@@ -854,7 +864,7 @@ export function AppSettingsModal({
 
     const previousModel = config.translationModel || OPENAI_TRANSLATION_MODEL;
     setConfig((prev) => (prev ? { ...prev, translationModel: model } : prev));
-    setTranslationMessage('');
+    setAiMessage('');
     setIsSaving(true);
 
     try {
@@ -862,15 +872,15 @@ export function AppSettingsModal({
       if (result.success) {
         const savedModel = result.translationModel || model;
         setConfig((prev) => (prev ? { ...prev, translationModel: savedModel } : prev));
-        setTranslationMessage('번역 모델이 변경되었습니다.');
+        setAiMessage('AI 모델이 변경되었습니다.');
         return;
       }
 
       setConfig((prev) => (prev ? { ...prev, translationModel: previousModel } : prev));
-      setTranslationMessage(result.error || '번역 모델 저장에 실패했습니다.');
+      setAiMessage(result.error || 'AI 모델 저장에 실패했습니다.');
     } catch (error) {
       setConfig((prev) => (prev ? { ...prev, translationModel: previousModel } : prev));
-      setTranslationMessage(error instanceof Error ? error.message : '번역 모델 저장에 실패했습니다.');
+      setAiMessage(error instanceof Error ? error.message : 'AI 모델 저장에 실패했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -879,7 +889,7 @@ export function AppSettingsModal({
   const handleTranslationDisplayModeChange = async (mode: TranslationDisplayMode) => {
     if (!config) return;
 
-    const previousMode = config.translationDisplayMode === 'inline-hover' ? 'inline-hover' : DEFAULT_TRANSLATION_DISPLAY_MODE;
+    const previousMode = normalizeTranslationDisplayMode(config.translationDisplayMode);
     setConfig((prev) => (prev ? { ...prev, translationDisplayMode: mode } : prev));
     setTranslationMessage('');
     setIsSaving(true);
@@ -887,7 +897,7 @@ export function AppSettingsModal({
     try {
       const result = await window.electronAPI.setTranslationDisplayMode(mode);
       if (result.success) {
-        const savedMode = result.translationDisplayMode === 'inline-hover' ? 'inline-hover' : DEFAULT_TRANSLATION_DISPLAY_MODE;
+        const savedMode = normalizeTranslationDisplayMode(result.translationDisplayMode);
         setConfig((prev) => (prev ? { ...prev, translationDisplayMode: savedMode } : prev));
         window.dispatchEvent(new CustomEvent('config:updated', { detail: { translationDisplayMode: savedMode } }));
         return;
@@ -904,9 +914,9 @@ export function AppSettingsModal({
   };
 
   const handleSaveOpenAiApiKey = async () => {
-    const normalizedApiKey = translationApiKeyInput.trim();
+    const normalizedApiKey = aiApiKeyInput.trim();
     if (!normalizedApiKey) {
-      setTranslationMessage('OpenAI API 키를 입력해주세요.');
+      setAiMessage('OpenAI API 키를 입력해주세요.');
       return;
     }
 
@@ -915,12 +925,13 @@ export function AppSettingsModal({
       const result = await window.electronAPI.setOpenAiApiKey(normalizedApiKey);
       if (result.success) {
         setConfig((prev) => (prev ? { ...prev, hasOpenAiApiKey: true } : prev));
-        setTranslationApiKeyInput('');
-        setTranslationMessage('OpenAI API 키가 저장되었습니다.');
+        setAiApiKeyInput('');
+        setAiMessage('OpenAI API 키가 저장되었습니다.');
+        window.dispatchEvent(new CustomEvent('config:updated', { detail: { hasOpenAiApiKey: true } }));
         return;
       }
 
-      setTranslationMessage(result.error || 'OpenAI API 키 저장에 실패했습니다.');
+      setAiMessage(result.error || 'OpenAI API 키 저장에 실패했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -932,12 +943,13 @@ export function AppSettingsModal({
       const result = await window.electronAPI.clearOpenAiApiKey();
       if (result.success) {
         setConfig((prev) => (prev ? { ...prev, hasOpenAiApiKey: false } : prev));
-        setTranslationApiKeyInput('');
-        setTranslationMessage('저장된 OpenAI API 키가 제거되었습니다.');
+        setAiApiKeyInput('');
+        setAiMessage('저장된 OpenAI API 키가 제거되었습니다.');
+        window.dispatchEvent(new CustomEvent('config:updated', { detail: { hasOpenAiApiKey: false } }));
         return;
       }
 
-      setTranslationMessage(result.error || 'OpenAI API 키 삭제에 실패했습니다.');
+      setAiMessage(result.error || 'OpenAI API 키 삭제에 실패했습니다.');
     } finally {
       setIsSaving(false);
     }
@@ -1074,8 +1086,31 @@ export function AppSettingsModal({
     await persistIdleLockMinutes(minutes);
   };
 
+  const renderAiSettingsLinkCard = (description: string) => (
+    <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-white">OpenAI 설정</div>
+          <p className="mt-2 text-sm leading-6 text-discord-muted">{description}</p>
+          <div className="mt-3 text-xs text-discord-muted">
+            저장 상태: {config?.hasOpenAiApiKey ? '저장됨' : '미설정'}
+          </div>
+        </div>
+        <Button
+          type="button"
+          onClick={() => setActiveSection('ai')}
+          className="shrink-0 bg-discord-accent hover:bg-blue-600 text-white"
+        >
+          AI 설정으로 이동
+        </Button>
+      </div>
+    </div>
+  );
+
   const renderBrowserSection = () => (
     <div className="space-y-4">
+      {renderAiSettingsLinkCard('브라우저 AI와 페이지 번역은 OpenAI API 키가 필요합니다. 키와 준비 순서는 AI 탭에서 관리합니다.')}
+
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="flex items-start justify-between gap-4">
           <div>
@@ -1770,29 +1805,29 @@ export function AppSettingsModal({
     </div>
   );
 
-  const renderTranslationSection = () => (
+  const renderAiSection = () => (
     <div className="space-y-4">
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="text-sm font-medium text-white">OpenAI 준비 순서</div>
         <p className="mt-2 text-sm leading-6 text-discord-muted">
-          자동 번역을 쓰려면 먼저 OpenAI 사이트에서 API 결제 설정을 마쳐야 합니다.
+          자동 번역, 브라우저 페이지 번역, 브라우저 AI를 쓰려면 먼저 OpenAI 사이트에서 API 결제 설정을 마쳐야 합니다.
         </p>
         <div className="mt-4 space-y-2 rounded-lg border border-gray-700 bg-discord-bg/80 px-4 py-4 text-sm text-discord-text">
           <div>1. OpenAI 계정으로 로그인합니다.</div>
           <div>2. 결제 수단에서 카드를 등록하고 API 크레딧을 충전합니다.</div>
           <div>3. API Keys 메뉴에서 새 API 키를 생성합니다.</div>
-          <div>4. 생성한 키를 이 화면의 OpenAI API 키 입력칸에 붙여넣고 저장합니다.</div>
+          <div>4. 생성한 키를 아래 OpenAI API 키 입력칸에 붙여넣고 저장합니다.</div>
         </div>
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
-        <div className="text-sm font-medium text-white">자동 번역 엔진</div>
+        <div className="text-sm font-medium text-white">사용 모델</div>
         <p className="text-sm text-discord-muted mt-2 leading-6">
-          번역 품질과 처리 비용에 맞는 OpenAI 모델을 선택합니다. 자동 번역 버튼을 눌렀을 때만 API가 호출됩니다.
+          번역과 브라우저 AI에서 사용할 OpenAI 모델을 선택합니다. 기능을 실행했을 때만 API가 호출됩니다.
         </p>
 
         <div className="mt-5 max-w-md">
-          <div className="text-xs text-discord-muted mb-2">사용 모델</div>
+          <div className="text-xs text-discord-muted mb-2">모델</div>
           <Select
             value={config?.translationModel || OPENAI_TRANSLATION_MODEL}
             onValueChange={(value) => void handleTranslationModelChange(value)}
@@ -1816,6 +1851,71 @@ export function AppSettingsModal({
           </p>
         </div>
       </div>
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">OpenAI API 키</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          키는 이 앱의 로컬 환경설정에 저장됩니다. 저장된 키가 있더라도 보안상 이 화면에는 다시 표시하지 않습니다.
+        </p>
+
+        {!config?.hasOpenAiApiKey && (
+          <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+            OpenAI API 키가 등록되지 않아 자동 번역과 브라우저 AI를 사용할 수 없습니다. 아래 입력칸에 API 키를 저장한 뒤 기능을 사용할 수 있습니다.
+          </div>
+        )}
+
+        <div className="mt-3 text-xs text-discord-muted">
+          저장 상태:{' '}
+          {config?.hasOpenAiApiKey ? (
+            <span className="text-discord-accent">저장됨</span>
+          ) : (
+            '미설정'
+          )}
+        </div>
+
+        <div className="mt-5 grid gap-3 max-w-xl">
+          <Input
+            type="password"
+            value={aiApiKeyInput}
+            onChange={(e) => {
+              setAiApiKeyInput(e.target.value);
+              setAiMessage('');
+            }}
+            placeholder={config?.hasOpenAiApiKey ? '새 OpenAI API 키 입력' : 'OpenAI API 키 입력'}
+            className="bg-discord-bg border-gray-600 text-discord-text"
+          />
+
+          {aiMessage && <p className="text-sm text-discord-muted">{aiMessage}</p>}
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              onClick={() => void handleSaveOpenAiApiKey()}
+              className="bg-discord-accent hover:bg-blue-600 text-white"
+              disabled={isSaving}
+            >
+              {config?.hasOpenAiApiKey ? 'API 키 변경' : 'API 키 저장'}
+            </Button>
+            {config?.hasOpenAiApiKey && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => void handleClearOpenAiApiKey()}
+                className="border-gray-600 hover:bg-discord-hover text-discord-text"
+                disabled={isSaving}
+              >
+                API 키 삭제
+              </Button>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderTranslationSection = () => (
+    <div className="space-y-4">
+      {renderAiSettingsLinkCard('자동 번역은 OpenAI API 키가 필요합니다. 키와 준비 순서는 AI 탭에서 관리합니다.')}
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="text-sm font-medium text-white">기본 번역 언어</div>
@@ -1857,7 +1957,7 @@ export function AppSettingsModal({
         <div className="mt-5 max-w-md">
           <div className="text-xs text-discord-muted mb-2">표시 방식</div>
           <Select
-            value={config?.translationDisplayMode === 'inline-hover' ? 'inline-hover' : DEFAULT_TRANSLATION_DISPLAY_MODE}
+            value={normalizeTranslationDisplayMode(config?.translationDisplayMode)}
             onValueChange={(value: TranslationDisplayMode) => void handleTranslationDisplayModeChange(value)}
             disabled={!config || isSaving}
           >
@@ -1877,64 +1977,18 @@ export function AppSettingsModal({
               >
                 호버 시 번역 대상 텍스트 대신 번역 텍스트 출력
               </SelectItem>
+              <SelectItem
+                value="click-toggle"
+                className="text-discord-text focus:bg-discord-hover focus:text-discord-text hover:bg-discord-hover"
+              >
+                번역 아이콘 클릭 시 전환 출력
+              </SelectItem>
             </SelectContent>
           </Select>
         </div>
       </div>
 
-      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
-        <div className="text-sm font-medium text-white">OpenAI API 키</div>
-        <p className="text-sm text-discord-muted mt-2 leading-6">
-          키는 이 앱의 로컬 환경설정에 저장됩니다. 저장된 키가 있더라도 보안상 이 화면에는 다시 표시하지 않습니다.
-        </p>
-
-        {!config?.hasOpenAiApiKey && (
-          <div className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
-            OpenAI API 키가 등록되지 않아 자동 번역을 사용할 수 없습니다. 아래 입력칸에 API 키를 저장한 뒤 자동 번역 버튼을 사용할 수 있습니다.
-          </div>
-        )}
-
-        <div className="mt-3 text-xs text-discord-muted">
-          저장 상태: {config?.hasOpenAiApiKey ? '저장됨' : '미설정'}
-        </div>
-
-        <div className="mt-5 grid gap-3 max-w-xl">
-          <Input
-            type="password"
-            value={translationApiKeyInput}
-            onChange={(e) => {
-              setTranslationApiKeyInput(e.target.value);
-              setTranslationMessage('');
-            }}
-            placeholder={config?.hasOpenAiApiKey ? '새 OpenAI API 키 입력' : 'OpenAI API 키 입력'}
-            className="bg-discord-bg border-gray-600 text-discord-text"
-          />
-
-          {translationMessage && <p className="text-sm text-discord-muted">{translationMessage}</p>}
-
-          <div className="flex gap-3 pt-2">
-            <Button
-              type="button"
-              onClick={() => void handleSaveOpenAiApiKey()}
-              className="bg-discord-accent hover:bg-blue-600 text-white"
-              disabled={isSaving}
-            >
-              {config?.hasOpenAiApiKey ? 'API 키 변경' : 'API 키 저장'}
-            </Button>
-            {config?.hasOpenAiApiKey && (
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => void handleClearOpenAiApiKey()}
-                className="border-gray-600 hover:bg-discord-hover text-discord-text"
-                disabled={isSaving}
-              >
-                API 키 삭제
-              </Button>
-            )}
-          </div>
-        </div>
-      </div>
+      {translationMessage && <p className="text-sm text-discord-muted">{translationMessage}</p>}
     </div>
   );
 
@@ -2252,6 +2306,8 @@ export function AppSettingsModal({
                 ? renderGeneralSection()
                 : currentSection.id === 'data'
                   ? renderDataSection()
+                : currentSection.id === 'ai'
+                  ? renderAiSection()
                 : currentSection.id === 'translation'
                   ? renderTranslationSection()
                   : currentSection.id === 'list'

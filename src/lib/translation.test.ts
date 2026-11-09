@@ -33,6 +33,7 @@ test('reads translated values and ignores non-string data', () => {
 test('normalizes translation display modes', () => {
   expect(normalizeTranslationDisplayMode('tooltip')).toBe('tooltip');
   expect(normalizeTranslationDisplayMode('inline-hover')).toBe('inline-hover');
+  expect(normalizeTranslationDisplayMode('click-toggle')).toBe('click-toggle');
   expect(normalizeTranslationDisplayMode('other')).toBe('tooltip');
 });
 

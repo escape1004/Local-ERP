@@ -65,7 +65,8 @@ export function normalizeTranslationModel(value) {
 }
 
 export function normalizeTranslationDisplayMode(value) {
-  return value === 'inline-hover' ? 'inline-hover' : 'tooltip';
+  if (value === 'inline-hover' || value === 'click-toggle') return value;
+  return 'tooltip';
 }
 
 export const BROWSER_STARTUP_NEW_TAB = 'newtab';

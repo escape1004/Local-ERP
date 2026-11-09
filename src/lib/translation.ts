@@ -47,11 +47,14 @@ export const getTranslatedFieldValue = (
   return typeof translatedValue === 'string' ? translatedValue : '';
 };
 
-export type TranslationDisplayMode = 'tooltip' | 'inline-hover';
+export const TRANSLATION_DISPLAY_MODES = ['tooltip', 'inline-hover', 'click-toggle'] as const;
+export type TranslationDisplayMode = (typeof TRANSLATION_DISPLAY_MODES)[number];
 export const DEFAULT_TRANSLATION_DISPLAY_MODE: TranslationDisplayMode = 'tooltip';
 
 export const normalizeTranslationDisplayMode = (value: unknown): TranslationDisplayMode => (
-  value === 'inline-hover' ? 'inline-hover' : DEFAULT_TRANSLATION_DISPLAY_MODE
+  TRANSLATION_DISPLAY_MODES.includes(value as TranslationDisplayMode)
+    ? value as TranslationDisplayMode
+    : DEFAULT_TRANSLATION_DISPLAY_MODE
 );
 
 export const getTranslationMeta = (

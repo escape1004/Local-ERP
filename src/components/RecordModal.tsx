@@ -424,7 +424,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     }
 
     if (!config?.hasOpenAiApiKey) {
-      showAlert('OpenAI API 키 필요', '환경설정 > 번역에서 OpenAI API 키를 먼저 저장해주세요.', 'warning');
+      showAlert('OpenAI API 키 필요', '환경설정 > AI에서 OpenAI API 키를 먼저 저장해주세요.', 'warning');
       return;
     }
 

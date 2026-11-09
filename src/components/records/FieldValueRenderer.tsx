@@ -380,6 +380,10 @@ export const FieldValueRenderer: React.FC<FieldValueRendererProps> = ({
   const translationDisplayMode = useTranslationDisplayMode();
   const [isShowingTranslation, setIsShowingTranslation] = useState(false);
 
+  useEffect(() => {
+    setIsShowingTranslation(false);
+  }, [field.id, translationDisplayMode, value]);
+
   if (field.type === 'file') {
     return <>{fileValue ?? <span className="text-gray-500">-</span>}</>;
   }
@@ -435,9 +439,10 @@ export const FieldValueRenderer: React.FC<FieldValueRendererProps> = ({
         ? getTranslatedFieldValue(recordData, field.id)
         : '';
       const translationMeta = translatedText ? getTranslationMeta(recordData, field.id) : null;
-      const showTranslatedInline = translationDisplayMode === 'inline-hover' && Boolean(translatedText) && isShowingTranslation;
+      const swapsInline = translationDisplayMode === 'inline-hover' || translationDisplayMode === 'click-toggle';
+      const showTranslatedInline = swapsInline && Boolean(translatedText) && isShowingTranslation;
       const displayedText = showTranslatedInline ? translatedText : formattedValue;
-      const reserveHoverSpace = translationDisplayMode === 'inline-hover' && Boolean(translatedText);
+      const reserveHoverSpace = swapsInline && Boolean(translatedText);
       if (isUrlString(formattedValue, isDetail)) {
         return <UrlValue url={formattedValue} variant={variant} onSelectRow={onSelectRow} />;
       }
@@ -464,7 +469,11 @@ export const FieldValueRenderer: React.FC<FieldValueRendererProps> = ({
               setIsShowingTranslation(true);
             }
           }}
-          onMouseLeave={() => setIsShowingTranslation(false)}
+          onMouseLeave={() => {
+            if (translationDisplayMode === 'inline-hover') {
+              setIsShowingTranslation(false);
+            }
+          }}
         >
           <TooltipProvider>
             <Tooltip>
@@ -526,6 +535,32 @@ export const FieldValueRenderer: React.FC<FieldValueRendererProps> = ({
             >
               <Languages size={14} />
             </span>
+          )}
+          {translatedText && translationDisplayMode === 'click-toggle' && (
+            <TooltipProvider delayDuration={0} skipDelayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-label={isShowingTranslation ? '원문 보기' : '번역문 보기'}
+                    aria-pressed={isShowingTranslation}
+                    className={`inline-flex shrink-0 cursor-pointer items-center rounded p-1 text-blue-300 transition-colors hover:bg-discord-hover hover:text-blue-200 ${
+                      isShowingTranslation ? 'bg-discord-hover text-blue-200' : ''
+                    } ${isDetail ? 'mt-0.5' : ''}`}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setIsShowingTranslation((current) => !current);
+                      onSelectRow?.();
+                    }}
+                  >
+                    <Languages size={14} />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top" align="center" className={FIELD_TOOLTIP_CLASSNAME}>
+                  {isShowingTranslation ? '원문 보기' : '번역문 보기'}
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       );
