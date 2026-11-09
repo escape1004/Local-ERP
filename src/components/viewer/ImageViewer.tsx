@@ -42,8 +42,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   showPlaybackOverlay = false,
   playbackOverlayState = 'play',
   playbackOverlayVisible = false,
-  className = 'max-w-full max-h-full object-contain rounded shadow-lg select-none',
-  wrapperClassName = 'relative flex w-full flex-col items-center justify-center',
+  className = 'max-h-full max-w-full object-contain select-none',
+  wrapperClassName = 'relative flex h-full w-full items-center justify-center overflow-hidden',
   containerStyle,
   onMouseDown,
   onMouseMove,
@@ -51,8 +51,8 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   onGifClick,
 }) => {
   const style: React.CSSProperties = {
-    maxWidth: rotation % 180 !== 0 ? '80vh' : '100%',
-    maxHeight: rotation % 180 !== 0 ? '95vw' : '80vh',
+    maxWidth: '100%',
+    maxHeight: '100%',
     transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px) rotate(${rotation}deg)`,
     cursor: scale > 1 ? (isPanning ? 'grabbing' : 'grab') : (isGif ? 'pointer' : 'default'),
     transition: isPanning ? 'none' : 'transform 0.2s',

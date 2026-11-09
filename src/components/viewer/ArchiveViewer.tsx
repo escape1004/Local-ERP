@@ -241,8 +241,8 @@ export const ArchiveViewer: React.FC<ArchiveViewerProps> = ({
             <ImageViewer
               {...imageViewer}
               src={currentArchiveDataUrl}
-              className="max-w-full max-h-full object-contain rounded shadow-lg block mx-auto select-none"
-              wrapperClassName="relative flex w-full flex-col items-center"
+              className="max-h-full max-w-full object-contain select-none"
+              wrapperClassName="relative flex h-full w-full items-center justify-center overflow-hidden"
             />
           ) : (
             <div className="text-discord-muted">이미지를 로드할 수 없습니다.</div>

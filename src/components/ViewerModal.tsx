@@ -860,7 +860,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
           ) : (
             <>
               {effectiveFileType === 'image' && dataUrl && (
-                <div className="w-full h-full flex flex-col items-center justify-center">
+                <div className="h-full min-h-0 w-full">
                   <ImageViewer
                     src={dataUrl}
                     alt="이미지 뷰어"
@@ -876,12 +876,7 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
                     showPlaybackOverlay={playback.showPlaybackOverlay}
                     playbackOverlayState={playback.playbackOverlayState}
                     playbackOverlayVisible={playback.playbackOverlayVisible}
-                    wrapperClassName="relative flex-1 w-full h-full flex items-center justify-center"
-                    containerStyle={{
-                      maxHeight: '80vh',
-                      maxWidth: '100%',
-                      overflow: imgScale > 1 ? 'hidden' : 'visible',
-                    }}
+                    wrapperClassName="relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
                     onMouseDown={(event) => {
                       if (imgScale === 1) return;
                       setIsPanning(true);
