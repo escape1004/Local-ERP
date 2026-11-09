@@ -1,6 +1,7 @@
 import { Lock, Plus } from 'lucide-react';
 import type { Profile } from '../types';
 import { GateCard } from './GateCard';
+import { GateScreen } from './GateScreen';
 import {
   ContextMenu,
   ContextMenuContent,
@@ -9,6 +10,7 @@ import {
 } from './ui/context-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip';
 import { getProfileSwatchStyle, isDefaultProfile } from '../lib/profileAppearance';
+import { getProfileSelectCardWidthPx } from '../lib/profileSelectLayout';
 
 interface AppProfileSelectProps {
   profiles: Profile[];
@@ -29,15 +31,19 @@ export function AppProfileSelect({
   onDelete,
   onCreate,
 }: AppProfileSelectProps) {
+  const cardWidthPx = getProfileSelectCardWidthPx(profiles.length);
+
   return (
-    <div className="h-full flex items-center justify-center bg-discord-bg p-6">
+    <GateScreen className="h-full">
       <GateCard
         title="프로필 선택"
         description="프로필마다 카테고리와 대시보드 통계가 분리됩니다."
+        className="max-w-full"
+        style={{ width: cardWidthPx }}
       >
         <div className="flex justify-center">
-          <div className="w-fit max-w-full">
-            <div className="flex flex-wrap justify-center gap-x-8 gap-y-10">
+          <div className="w-fit">
+            <div className="flex flex-nowrap justify-center gap-x-8">
               {profiles.map((profile) => (
                 <ContextMenu key={profile.id}>
                   <ContextMenuTrigger asChild>
@@ -106,6 +112,6 @@ export function AppProfileSelect({
           </div>
         </div>
       </GateCard>
-    </div>
+    </GateScreen>
   );
 }

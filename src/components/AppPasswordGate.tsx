@@ -2,6 +2,7 @@ import type { RefObject } from 'react';
 import { Eye, EyeOff } from 'lucide-react';
 import type { Profile } from '../types';
 import { GateCard } from './GateCard';
+import { GateScreen } from './GateScreen';
 import { Input } from './ui/input';
 import { Button } from './ui/button';
 
@@ -33,8 +34,8 @@ export function AppPasswordGate({
   onKeepFocus,
 }: AppPasswordGateProps) {
   return (
-    <div
-      className={`${currentProfile ? 'absolute inset-0 z-50' : 'h-full'} flex items-center justify-center bg-discord-bg p-6`}
+    <GateScreen
+      className={currentProfile ? 'absolute inset-0 z-50' : 'h-full'}
       onMouseDownCapture={(e) => {
         if (e.target === passwordInputRef.current) return;
         if ((e.target as HTMLElement).closest('[data-password-toggle]')) return;
@@ -47,7 +48,7 @@ export function AppPasswordGate({
         description={currentProfile
           ? '자리를 비운 동안 앱이 잠겼습니다. 비밀번호를 입력하면 이어서 사용할 수 있습니다.'
           : '비밀번호를 입력한 뒤 프로필을 선택할 수 있습니다.'}
-        className="max-w-md"
+        className="w-full max-w-md"
       >
         <div className="max-w-md space-y-3">
           <div className="relative">
@@ -98,6 +99,6 @@ export function AppPasswordGate({
           </Button>
         </div>
       </GateCard>
-    </div>
+    </GateScreen>
   );
 }
