@@ -6,9 +6,9 @@ Local ERP는 컴퓨터에 보관한 파일과 관련 정보를 한곳에서 정�
 
 ## 다운로드 및 설치
 
-[**Local ERP v1.1.25 Windows 설치 파일 다운로드**](https://github.com/escape1004/LCERP/releases/download/v1.1.25/Local-ERP-Setup-1.1.25.exe)
+[**Local ERP v1.1.26 Windows 설치 파일 다운로드**](https://github.com/escape1004/LCERP/releases/download/v1.1.26/Local-ERP-Setup-1.1.26.exe)
 
-다운로드한 `Local-ERP-Setup-1.1.25.exe` 파일을 실행하고 안내에 따라 설치하면 됩니다. 이전 버전이 설치되어 있다면 기존 데이터와 설정을 유지한 상태로 업데이트됩니다.
+다운로드한 `Local-ERP-Setup-1.1.26.exe` 파일을 실행하고 안내에 따라 설치하면 됩니다. 이전 버전이 설치되어 있다면 기존 데이터와 설정을 유지한 상태로 업데이트됩니다.
 
 다른 버전과 전체 배포 파일은 [GitHub Releases](https://github.com/escape1004/LCERP/releases)에서 확인할 수 있습니다.
 
