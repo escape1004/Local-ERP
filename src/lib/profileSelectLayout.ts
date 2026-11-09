@@ -4,7 +4,7 @@ export const PROFILE_CARD_PADDING_X_PX = 64;
 export const PROFILE_CARD_BORDER_X_PX = 2;
 
 export function getProfileSelectTileCount(profileCount: number) {
-  return Math.max(profileCount, 1) + 1;
+  return Math.max(profileCount, 2) + 1;
 }
 
 export function getProfileSelectCardWidthPx(profileCount: number) {
