@@ -62,6 +62,12 @@ interface RecordModalProps {
   initialFilePath?: string | null;
 }
 
+function isCommandSearchFocused() {
+  const active = document.activeElement;
+  if (!(active instanceof HTMLElement)) return false;
+  return active.closest('[cmdk-input-wrapper]') !== null || active.hasAttribute('cmdk-input');
+}
+
 export const RecordModal: React.FC<RecordModalProps> = ({
   isOpen,
   onClose,
@@ -669,6 +675,63 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     if (missingRequest) setMissingCreate(missingRequest);
   };
 
+  const handleSelectPaste = (field: FieldDefinition, pastedText: string, currentValue: unknown) => {
+    if (field.multiple) {
+      const pastedValues = pastedText.split(',').map((item) => item.trim()).filter(Boolean);
+      const validOptions = field.options?.filter((option) =>
+        pastedValues.some((item) => option.toLowerCase() === item.toLowerCase())
+      ) || [];
+
+      if (validOptions.length > 0) {
+        const currentValues = Array.isArray(currentValue) ? currentValue : [];
+        const newValues = [...new Set([...currentValues, ...validOptions])];
+        updateFieldValue(field.id, newValues);
+
+        const invalidValues = pastedValues.filter((item) =>
+          !field.options?.some((option) => option.toLowerCase() === item.toLowerCase())
+        );
+        if (invalidValues.length > 0) {
+          toast({
+            title: '일부 값이 무시됨',
+            description: `다음 값들이 유효하지 않아 제외되었습니다: ${invalidValues.join(', ')}`,
+            variant: 'destructive',
+          });
+        } else {
+          toast({
+            title: '값이 추가됨',
+            description: `${validOptions.length}개의 값이 추가되었습니다.`,
+          });
+        }
+        return;
+      }
+
+      toast({
+        title: '유효하지 않은 값',
+        description: `붙여넣은 모든 값이 유효하지 않습니다: ${pastedValues.join(', ')}`,
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    const pastedValue = pastedText.trim();
+    const matchingOption = field.options?.find((option) => option.toLowerCase() === pastedValue.toLowerCase());
+    if (matchingOption) {
+      updateFieldValue(field.id, matchingOption);
+      toggleCombobox(field.id);
+      toast({
+        title: '값이 선택됨',
+        description: `"${matchingOption}"이 선택되었습니다.`,
+      });
+      return;
+    }
+
+    toast({
+      title: '유효하지 않은 값',
+      description: `"${pastedValue}"는 유효한 옵션이 아닙니다.`,
+      variant: 'destructive',
+    });
+  };
+
   const findMatchingRelationRecords = (records: DataRecord[], field: FieldDefinition, searchValue: string) => {
     const normalizedSearchValue = searchValue.trim().toLowerCase();
     if (!normalizedSearchValue) {
@@ -686,6 +749,34 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       );
     });
   };
+
+  useEffect(() => {
+    const openFieldId = Object.entries(openComboboxes).find(([, isOpen]) => isOpen)?.[0];
+    if (!openFieldId) return;
+
+    const field = category.fields.find((item) => item.id === openFieldId);
+    if (!field || (field.type !== 'select' && field.type !== 'relation')) return;
+
+    const handlePaste = (event: ClipboardEvent) => {
+      if (isCommandSearchFocused()) return;
+
+      const pastedText = event.clipboardData?.getData('text');
+      if (!pastedText) return;
+
+      event.preventDefault();
+      const currentValue = formData[field.id];
+      if (field.type === 'select') {
+        handleSelectPaste(field, pastedText, currentValue);
+        return;
+      }
+
+      const relatedRecords = field.relationCategoryId ? getCategoryRecords(field.relationCategoryId) : [];
+      handleRelationPaste(field, pastedText, relatedRecords, currentValue);
+    };
+
+    document.addEventListener('paste', handlePaste);
+    return () => document.removeEventListener('paste', handlePaste);
+  }, [category.fields, formData, getCategoryRecords, openComboboxes]);
 
   const applyFilenameAutofill = async (
     filePath: string,
@@ -1039,50 +1130,15 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                >
                   <Command className="bg-discord-sidebar border-none">
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
+                      autoFocus={false}
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
-                      onPaste={(e) => {
-                        e.preventDefault();
-                        const pastedText = e.clipboardData.getData('text');
-                        const pastedValues = pastedText.split(',').map(v => v.trim()).filter(v => v);
-                        
-                        // 기존 옵션에 있는 값들 찾기
-                        const validOptions = field.options?.filter(opt => 
-                          pastedValues.some(v => opt.toLowerCase() === v.toLowerCase())
-                        ) || [];
-                        
-                        if (validOptions.length > 0) {
-                          const currentValues = Array.isArray(value) ? value : [];
-                          const newValues = [...new Set([...currentValues, ...validOptions])];
-                          updateFieldValue(field.id, newValues);
-                          
-                          // 유효하지 않은 값이 있었다면 상세한 알림
-                          const invalidValues = pastedValues.filter(v => 
-                            !field.options?.some(opt => opt.toLowerCase() === v.toLowerCase())
-                          );
-                          if (invalidValues.length > 0) {
-                            toast({
-                              title: "일부 값이 무시됨",
-                              description: `다음 값들이 유효하지 않아 제외되었습니다: ${invalidValues.join(', ')}`,
-                              variant: "destructive",
-                            });
-                          } else {
-                            toast({
-                              title: "값이 추가됨",
-                              description: `${validOptions.length}개의 값이 추가되었습니다.`,
-                            });
-                          }
-                        } else {
-                          toast({
-                            title: "유효하지 않은 값",
-                            description: `붙여넣은 모든 값이 유효하지 않습니다: ${pastedValues.join(', ')}`,
-                            variant: "destructive",
-                          });
-                        }
-                      }}
                     />
                     <CommandList className="max-h-[200px] overflow-y-auto">
                       <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">옵션을 찾을 수 없습니다.</CommandEmpty>
@@ -1165,36 +1221,15 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                >
                   <Command className="bg-discord-sidebar border-none">
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
+                      autoFocus={false}
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
-                      onPaste={(e) => {
-                        e.preventDefault();
-                        const pastedText = e.clipboardData.getData('text');
-                        const pastedValue = pastedText.trim();
-                        
-                        // 기존 옵션에 있는 값인지 확인
-                        const matchingOption = field.options?.find(opt => 
-                          opt.toLowerCase() === pastedValue.toLowerCase()
-                        );
-                        
-                        if (matchingOption) {
-                          updateFieldValue(field.id, matchingOption);
-                          toggleCombobox(field.id);
-                          toast({
-                            title: "값이 선택됨",
-                            description: `"${matchingOption}"이 선택되었습니다.`,
-                          });
-                        } else {
-                          toast({
-                            title: "유효하지 않은 값",
-                            description: `"${pastedValue}"는 유효한 옵션이 아닙니다.`,
-                            variant: "destructive",
-                          });
-                        }
-                      }}
                     />
                     <CommandList className="text-discord-text">
                       <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">옵션을 찾을 수 없습니다.</CommandEmpty>
@@ -1268,15 +1303,15 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                >
                   <Command className="bg-discord-sidebar border-none">
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
+                      autoFocus={false}
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
-                      onPaste={(e) => {
-                        e.preventDefault();
-                        handleRelationPaste(field, e.clipboardData.getData('text'), relatedRecords, value);
-                      }}
                     />
                     <CommandList className="max-h-[200px] overflow-y-auto">
                       <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">레코드를 찾을 수 없습니다.</CommandEmpty>
@@ -1369,15 +1404,15 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                     <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
                   </Button>
                 </PopoverTrigger>
-                <PopoverContent className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600">
+                <PopoverContent
+                  className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
+                  onOpenAutoFocus={(event) => event.preventDefault()}
+                >
                   <Command className="bg-discord-sidebar border-none">
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
+                      autoFocus={false}
                       className="h-9 bg-discord-sidebar text-discord-text border-b border-gray-600"
-                      onPaste={(e) => {
-                        e.preventDefault();
-                        handleRelationPaste(field, e.clipboardData.getData('text'), relatedRecords, value);
-                      }}
                     />
                     <CommandList className="text-discord-text">
                       <CommandEmpty className="py-2 pl-3 text-sm text-discord-muted">레코드를 찾을 수 없습니다.</CommandEmpty>
