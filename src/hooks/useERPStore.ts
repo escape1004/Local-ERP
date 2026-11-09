@@ -218,7 +218,7 @@ export const useERPStore = create<ERPStore>((set, get) => ({
   },
 
   addRecord: async (recordData: NewRecord) => {
-    const id = Math.random().toString(36).substring(2);
+    const id = recordData.id || Math.random().toString(36).substring(2);
     const record = {
       ...recordData,
       id

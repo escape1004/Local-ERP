@@ -519,6 +519,7 @@ export interface ElectronAPI {
   openImageFileDialog: (defaultPath?: string) => Promise<Electron.OpenDialogReturnValue>;
   getFileType: (filePath: string) => Promise<'image' | 'video' | 'archive' | 'other'>;
   getAppRoot: () => Promise<string>;
+  getPathForFile: (file: File) => string;
   getVideoBlobUrl: (filePath: string) => Promise<{ base64: string; mimeType: string } | null>;
   getVideoServerPort: () => Promise<number>;
   getFileSize: (filePath: string) => Promise<{ success: boolean; size?: string; error?: string }>;

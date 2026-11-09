@@ -13,8 +13,8 @@
     "source": "src/main/preload.ts",
     "output": "dist-electron-app/preload.js",
     "browserWindowPath": "path.join(electronDistDir, 'preload.js')",
-    "apiCount": 153,
-    "apiAndChannelsSha256": "4dc7b06683209d9f754ab791d2f92141894d6d683403a1a34f443813d1b9a222"
+    "apiCount": 154,
+    "apiAndChannelsSha256": "ce1d97ac250722abaa9cf486ae42d6873d2caeb372d4710c0a7b56347321e997"
   },
   "ipcAudit": {
     "preloadWithoutMainHandler": [
@@ -29,8 +29,8 @@
       "updateRecord"
     ]
   },
-  "rendererApiUsageCount": 141,
-  "rendererApiUsageSha256": "72bff969f9f40cd9fe6c1479e821b5babf4f8992ded6d91aff2980d368b6d180",
+  "rendererApiUsageCount": 143,
+  "rendererApiUsageSha256": "b92df0131952eacc73837b4fa5860f6d3ad586d64b811268e37c9db69f306fea",
   "rendererSendChannels": [
     "window-control"
   ]

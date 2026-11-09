@@ -84,7 +84,7 @@ export function Toaster() {
                 )}
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
+            <div className={`flex shrink-0 items-center gap-2 ${hasDescription ? "self-start pt-0.5" : "min-h-9"}`}>
               {action}
             </div>
             <ToastClose />

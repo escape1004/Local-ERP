@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { NewCategory, CategoryUpdate, NewRecord, ElectronAPI } from '../types';
 
 const allowedSendChannels = new Set(['window-control']);
@@ -141,6 +141,7 @@ const api: ElectronAPI = {
   setVideoHoverPreviewEnabled: (enabled: boolean) => ipcRenderer.invoke('setVideoHoverPreviewEnabled', enabled),
   checkDuplicate: (categoryId: string, fieldId: string, value: any, recordId?: string) => ipcRenderer.invoke('db:checkDuplicate', categoryId, fieldId, value, recordId),
   getAppRoot: () => ipcRenderer.invoke('getAppRoot'),
+  getPathForFile: (file) => webUtils.getPathForFile(file),
   getFileType: (filePath: string) => ipcRenderer.invoke('db:getFileType', filePath),
   getFileSize: (filePath: string) => ipcRenderer.invoke('getFileSize', filePath),
   getVideoServerPort: () => ipcRenderer.invoke('getVideoServerPort'),

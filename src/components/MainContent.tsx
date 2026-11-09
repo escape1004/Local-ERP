@@ -13,6 +13,11 @@ import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, Command
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
 import { DatabaseViewer } from './DatabaseViewer';
 import { toast } from './ui/use-toast';
+import { ToastAction } from './ui/toast';
+import {
+  isOsFileDrag,
+  pickDroppedRecordFile,
+} from '../lib/recordFileDrop';
 import {
   Tooltip,
   TooltipContent,
@@ -73,6 +78,7 @@ export const MainContent: React.FC = () => {
     currentPage,
     setCurrentPage,
     itemsPerPage,
+    addRecord,
     deleteRecord,
     getCategoryRecords,
     loadRecords,
@@ -597,6 +603,12 @@ export const MainContent: React.FC = () => {
   const [isRecordModalOpen, setIsRecordModalOpen] = useState(false);
   const [isViewModalOpen, setIsViewModalOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<DataRecord | null>(null);
+  const [droppedFilePath, setDroppedFilePath] = useState<string | null>(null);
+  const [fileDropActive, setFileDropActive] = useState(false);
+  const pendingDeletedRecordRef = useRef<{
+    record: DataRecord;
+    relatedRecordIds: string[];
+  } | null>(null);
   const [viewingRecord, setViewingRecord] = useState<DataRecord | null>(null);
   const [viewingCategory, setViewingCategory] = useState<string>('');
   const [expandedTags, setExpandedTags] = useState<{[key: string]: boolean}>({});
@@ -822,6 +834,7 @@ export const MainContent: React.FC = () => {
   }, []);
 
   const handleEdit = (record: DataRecord) => {
+    setDroppedFilePath(null);
     setEditingRecord(record);
     setIsRecordModalOpen(true);
   };
@@ -848,7 +861,7 @@ export const MainContent: React.FC = () => {
     setSelectedRecordId(record.id);
 
     if ('shiftKey' in event && event.shiftKey) {
-      await deleteRecord(record.id);
+      await deleteRecordWithUndo(record);
       return;
     }
 
@@ -856,6 +869,7 @@ export const MainContent: React.FC = () => {
   };
 
   const handleNewRecord = () => {
+    setDroppedFilePath(null);
     setEditingRecord(null);
     setIsRecordModalOpen(true);
   };
@@ -963,10 +977,141 @@ export const MainContent: React.FC = () => {
     return String(value);
   }, [categoryById, recordsByIdByCategory, getRecordFieldValue]);
 
+  const restoreDeletedRecord = async () => {
+    const snapshot = pendingDeletedRecordRef.current;
+    if (!snapshot) return;
+    pendingDeletedRecordRef.current = null;
+    try {
+      await addRecord({
+        id: snapshot.record.id,
+        categoryId: snapshot.record.categoryId,
+        data: snapshot.record.data,
+        createdAt: snapshot.record.createdAt,
+        updatedAt: snapshot.record.updatedAt,
+        relatedRecordIds: snapshot.relatedRecordIds,
+      });
+      toast({ title: '삭제를 취소했습니다.' });
+    } catch (error) {
+      pendingDeletedRecordRef.current = snapshot;
+      console.error('Failed to restore deleted record:', error);
+      toast({
+        title: '삭제를 취소하지 못했습니다.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const deleteRecordWithUndo = async (record: DataRecord) => {
+    let relatedRecordIds: string[] = [];
+    try {
+      relatedRecordIds = (await window.electronAPI.listRelatedRecords(record.id)).map((row) => row.id);
+    } catch (error) {
+      console.error('Failed to snapshot related records before delete:', error);
+    }
+
+    pendingDeletedRecordRef.current = {
+      record: {
+        ...record,
+        data: { ...record.data },
+      },
+      relatedRecordIds,
+    };
+
+    try {
+      await deleteRecord(record.id);
+    } catch (error) {
+      pendingDeletedRecordRef.current = null;
+      console.error('Failed to delete record:', error);
+      toast({
+        title: '레코드를 삭제하지 못했습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    toast({
+      title: '레코드를 삭제했습니다.',
+      duration: 10000,
+      action: (
+        <ToastAction
+          altText="실행 취소"
+          className="h-auto border-0 bg-transparent px-0 text-[13px] font-medium leading-5 text-discord-accent shadow-none hover:bg-transparent hover:underline focus:ring-0 focus:ring-offset-0 group-[.destructive]:border-0 group-[.destructive]:bg-transparent group-[.destructive]:hover:bg-transparent"
+          onClick={() => void restoreDeletedRecord()}
+        >
+          실행 취소
+        </ToastAction>
+      ),
+    });
+  };
+
   const confirmDelete = () => {
-    if (recordToDelete) {
-      deleteRecord(recordToDelete.id);
-      setRecordToDelete(null);
+    if (!recordToDelete) return;
+    void deleteRecordWithUndo(recordToDelete);
+    setRecordToDelete(null);
+  };
+
+  const openRecordModalForDroppedFile = (filePath: string) => {
+    setDroppedFilePath(filePath);
+    setEditingRecord(null);
+    setIsRecordModalOpen(true);
+  };
+
+  const handleRecordFileDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!isOsFileDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+    if (!fileDropActive) setFileDropActive(true);
+  };
+
+  const handleRecordFileDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!isOsFileDrag(event.dataTransfer)) return;
+    const nextTarget = event.relatedTarget;
+    if (nextTarget instanceof Node && event.currentTarget.contains(nextTarget)) return;
+    setFileDropActive(false);
+  };
+
+  const handleRecordFileDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    if (!isOsFileDrag(event.dataTransfer)) return;
+    event.preventDefault();
+    setFileDropActive(false);
+
+    if (!selectedCategorySafe) return;
+    if (!fileField) {
+      toast({
+        title: '이 카테고리에는 파일 항목이 없습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+    if (isRecordModalOpen || isViewModalOpen || viewerModalOpen || isConfirmDialogOpen) {
+      return;
+    }
+
+    const files = Array.from(event.dataTransfer.files || []);
+    const droppedFile = pickDroppedRecordFile(files);
+    if (!droppedFile) {
+      toast({
+        title: '파일을 놓아 주세요.',
+        description: '폴더는 등록할 수 없습니다.',
+      });
+      return;
+    }
+
+    const filePath = window.electronAPI.getPathForFile(droppedFile);
+    if (!filePath) {
+      toast({
+        title: '파일 경로를 읽지 못했습니다.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    openRecordModalForDroppedFile(filePath);
+
+    if (files.filter((file) => pickDroppedRecordFile([file])).length > 1) {
+      toast({
+        title: '첫 번째 파일만 열었습니다.',
+      });
     }
   };
 
@@ -1566,7 +1711,20 @@ export const MainContent: React.FC = () => {
           </div>
 
           {/* Content */}
-          <div className="flex-1 flex flex-col min-h-0">
+          <div
+            className="relative flex-1 flex flex-col min-h-0"
+            onDragEnter={handleRecordFileDragOver}
+            onDragOver={handleRecordFileDragOver}
+            onDragLeave={handleRecordFileDragLeave}
+            onDrop={handleRecordFileDrop}
+          >
+            {fileDropActive && (
+              <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center rounded-md border-2 border-dashed border-discord-accent bg-discord-accent/10">
+                <p className="rounded-md bg-discord-sidebar/90 px-3 py-1.5 text-sm text-discord-text">
+                  파일을 놓으면 새 레코드 등록 창이 열립니다
+                </p>
+              </div>
+            )}
             {sortedRecords.length === 0 ? (
               <div className="flex-1 flex items-center justify-center">
                 <div className="text-center">
@@ -1579,6 +1737,7 @@ export const MainContent: React.FC = () => {
                   {!hasActiveSearch && (
                     <Button
                       onClick={() => {
+                        setDroppedFilePath(null);
                         setEditingRecord(null);
                         setIsRecordModalOpen(true);
                       }}
@@ -1800,9 +1959,11 @@ export const MainContent: React.FC = () => {
               onClose={() => {
                 setIsRecordModalOpen(false);
                 setEditingRecord(null);
+                setDroppedFilePath(null);
               }}
               category={selectedCategorySafe}
               record={editingRecord}
+              initialFilePath={droppedFilePath}
             />
           )}
 

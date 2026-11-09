@@ -17,6 +17,7 @@ import { AnimatedModal } from './ui/animated-modal';
 import { formatFieldDisplayValue, hasTextAffixes } from '../lib/fieldFormat';
 import { isStoredDateValue } from '../lib/dateParse';
 import { applyFilenamePatternToFields } from '../lib/filenamePattern';
+import { toStoredRecordFilePath } from '../lib/recordFileDrop';
 import {
   clampPercentageValue,
   getEditablePercentageValue,
@@ -58,6 +59,7 @@ interface RecordModalProps {
   onClose: () => void;
   category: Category;
   record?: DataRecord | null;
+  initialFilePath?: string | null;
 }
 
 export const RecordModal: React.FC<RecordModalProps> = ({
@@ -65,6 +67,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   onClose,
   category,
   record,
+  initialFilePath = null,
 }) => {
   const { addRecord, updateRecord, categories, getCategoryRecords, checkDuplicate, selectCategory, loadRecords } = useERPStore();
   const [formData, setFormData] = useState<Record<string, unknown>>({});
@@ -710,12 +713,14 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     });
     await Promise.all([...relationCategoryIds].map((categoryId) => loadRecords(categoryId)));
 
+    const dateFormats = config?.dateParseFormats
+      ?? (await window.electronAPI.getConfig().catch(() => null))?.dateParseFormats;
     const filledValues = applyFilenamePatternToFields({
       filePath,
       fileField,
       fields: category.fields,
       currentValues,
-      dateFormats: config?.dateParseFormats,
+      dateFormats,
       findRelationMatches: (targetField, tokenValue) => {
         if (!targetField.relationCategoryId) return [];
         return findMatchingRelationRecords(
@@ -737,6 +742,37 @@ export const RecordModal: React.FC<RecordModalProps> = ({
       });
     }
   };
+
+  useEffect(() => {
+    if (!isOpen || !initialFilePath || !category) return;
+    const fileField = category.fields.find((field) => field.type === 'file');
+    if (!fileField) return;
+
+    let cancelled = false;
+    const baseValues = record
+      ? { ...record.data }
+      : category.fields.reduce<Record<string, unknown>>((values, field) => {
+        values[field.id] = field.type === 'checkbox'
+          ? false
+          : field.type === 'percentage'
+            ? { value: 0, max: 0 }
+            : '';
+        return values;
+      }, {});
+
+    void (async () => {
+      const appRoot = await window.electronAPI.getAppRoot();
+      if (cancelled) return;
+      const storedPath = toStoredRecordFilePath(initialFilePath, appRoot);
+      const nextValues = { ...baseValues, [fileField.id]: storedPath };
+      setFormData(nextValues);
+      await applyFilenameAutofill(storedPath, fileField, nextValues);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [category, initialFilePath, isOpen, record]);
 
   const renderField = (field: FieldDefinition, isFirstField: boolean = false) => {
     const value =
@@ -1422,17 +1458,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   }
                   
                   const selectedPath = result.filePaths[0];
-                  
-                  // 절대 경로를 상대 경로로 변환
-                  // 앱 루트 디렉토리를 기준으로 상대 경로 계산
                   const appRoot = await window.electronAPI.getAppRoot();
-                  let relativePath = selectedPath;
-                  
-                  // 앱 루트 디렉토리 내부의 파일인 경우 상대 경로로 변환
-                  if (selectedPath.startsWith(appRoot)) {
-                    relativePath = selectedPath.substring(appRoot.length + 1); // +1 for path separator
-                  }
-                  
+                  const relativePath = toStoredRecordFilePath(selectedPath, appRoot);
                   updateFieldValue(field.id, relativePath);
                   void applyFilenameAutofill(relativePath, field, { ...formData, [field.id]: relativePath });
                 } catch (error) {
