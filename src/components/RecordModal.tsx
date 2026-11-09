@@ -39,6 +39,7 @@ import {
   classifyRelationPasteValues,
   splitRelationPasteValues,
 } from '../lib/relationPaste';
+import { commaAwareCommandFilter } from '../lib/commaSearchFilter';
 import type { Config } from '../types';
 import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId, isTranslationEnabledField } from '../lib/translation';
 import {
@@ -1134,7 +1135,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
                   onOpenAutoFocus={(event) => event.preventDefault()}
                 >
-                  <Command className="bg-discord-sidebar border-none">
+                  <Command className="bg-discord-sidebar border-none" filter={commaAwareCommandFilter}>
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
                       autoFocus={false}
@@ -1225,7 +1226,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
                   onOpenAutoFocus={(event) => event.preventDefault()}
                 >
-                  <Command className="bg-discord-sidebar border-none">
+                  <Command className="bg-discord-sidebar border-none" filter={commaAwareCommandFilter}>
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
                       autoFocus={false}
@@ -1307,7 +1308,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
                   onOpenAutoFocus={(event) => event.preventDefault()}
                 >
-                  <Command className="bg-discord-sidebar border-none">
+                  <Command className="bg-discord-sidebar border-none" filter={commaAwareCommandFilter}>
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
                       autoFocus={false}
@@ -1408,7 +1409,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                   className="w-[--radix-popover-trigger-width] p-0 bg-discord-sidebar border-gray-600"
                   onOpenAutoFocus={(event) => event.preventDefault()}
                 >
-                  <Command className="bg-discord-sidebar border-none">
+                  <Command className="bg-discord-sidebar border-none" filter={commaAwareCommandFilter}>
                     <CommandInput 
                       placeholder={`${field.name} 검색...`} 
                       autoFocus={false}
