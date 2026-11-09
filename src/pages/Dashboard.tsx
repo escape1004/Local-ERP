@@ -36,6 +36,7 @@ import { isSeparatorCategory } from '../lib/category';
 import { getDashboardSummaryGridClass, hasDashboardRecords } from '../lib/dashboardLayout';
 import {
   ALL_ROOT_CATEGORIES_VALUE,
+  DASHBOARD_WARNING_PREVIEW_LIMIT,
   buildDashboardCategoryStats,
   collectCategoryTreeIds,
   formatNumber,
@@ -50,7 +51,6 @@ import {
   getVisibleDashboardCategories,
   groupChildrenByParentId,
   mapRecordViewCounts,
-  summarizeWarningCounts,
   type CategoryStats,
 } from '../lib/dashboardStats';
 import { isProfileHydrationPending } from '../lib/profileHydration';
@@ -144,6 +144,7 @@ export default function Dashboard() {
   }, [categories, recordsByCategory]);
   const [warningTotalCount, setWarningTotalCount] = useState(0);
   const [warningCounts, setWarningCounts] = useState({ missingFiles: 0, brokenRelations: 0 });
+  const [dashboardStatsReady, setDashboardStatsReady] = useState(false);
   const [recordViewCounts, setRecordViewCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -153,6 +154,7 @@ export default function Dashboard() {
       const storeState = useERPStore.getState();
       const showProfileLoading = isProfileHydrationPending(storeState.currentProfile, storeState.isProfileReady);
       setLoading(true);
+      setDashboardStatsReady(false);
       if (showProfileLoading) {
         setGlobalLoading(true, '데이터를 불러오는 중...');
       }
@@ -164,6 +166,7 @@ export default function Dashboard() {
         if (showProfileLoading) {
           hideLoading();
         }
+        setDashboardStatsReady(true);
       };
 
       try {
@@ -195,13 +198,6 @@ export default function Dashboard() {
           (categoryId) => store.getCategoryRecords(categoryId),
         ));
         setRecordViewCounts(mapRecordViewCounts(viewCounts));
-        revealDashboard();
-
-        const warningResult = await window.electronAPI.getDashboardWarnings(8);
-        if (cancelled) return;
-        setWarningItems(warningResult.items);
-        setWarningTotalCount(warningResult.totalCount);
-        setWarningCounts(warningResult.counts);
       } finally {
         revealDashboard();
       }
@@ -266,6 +262,53 @@ export default function Dashboard() {
     [childrenByParentId, selectedRootCategory, visibleCategories]
   );
 
+  const warningCategoryIds = useMemo(
+    () => (selectedRootCategory ? Array.from(selectedCategoryIds) : undefined),
+    [selectedCategoryIds, selectedRootCategory],
+  );
+
+  useEffect(() => {
+    if (!dashboardStatsReady) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const resetWarnings = () => {
+      setWarningItems([]);
+      setWarningTotalCount(0);
+      setWarningCounts({ missingFiles: 0, brokenRelations: 0 });
+    };
+
+    if (visibleCategories.length === 0) {
+      resetWarnings();
+      return;
+    }
+
+    resetWarnings();
+
+    const loadWarnings = async () => {
+      try {
+        const warningResult = await window.electronAPI.getDashboardWarnings(
+          DASHBOARD_WARNING_PREVIEW_LIMIT,
+          warningCategoryIds,
+        );
+        if (cancelled) return;
+        setWarningItems(warningResult.items);
+        setWarningTotalCount(warningResult.totalCount);
+        setWarningCounts(warningResult.counts);
+      } catch {
+        if (cancelled) return;
+        resetWarnings();
+      }
+    };
+
+    void loadWarnings();
+    return () => {
+      cancelled = true;
+    };
+  }, [dashboardStatsReady, visibleCategories.length, warningCategoryIds]);
+
   const scopedCategoryStats = useMemo(
     () => categoryStats.filter((stat) => selectedCategoryIds.has(stat.category.id)),
     [categoryStats, selectedCategoryIds]
@@ -285,14 +328,6 @@ export default function Dashboard() {
     () => warningItems.filter((item) => selectedCategoryIds.has(item.categoryId)),
     [selectedCategoryIds, warningItems]
   );
-
-  const filteredWarningCounts = useMemo(
-    () => summarizeWarningCounts(filteredWarnings),
-    [filteredWarnings]
-  );
-
-  const selectedWarningTotalCount = selectedRootCategory ? filteredWarnings.length : warningTotalCount;
-  const selectedWarningCounts = selectedRootCategory ? filteredWarningCounts : warningCounts;
 
   const totalStats = useMemo(
     () => getDashboardTotalStats({
@@ -731,63 +766,6 @@ export default function Dashboard() {
               </div>
             )}
 
-            {selectedWarningTotalCount > 0 && (
-              <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700 mb-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg bg-amber-500/15 text-amber-300">
-                      <AlertTriangle size={18} />
-                    </div>
-                    <div>
-                      <h2 className="text-lg font-semibold text-discord-text">주의 레코드</h2>
-                      <p className="text-sm text-discord-muted">{`확인이 필요한 레코드 ${formatNumber(selectedWarningTotalCount)}개`}</p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 text-xs text-discord-muted">
-                    {selectedWarningCounts.missingFiles > 0 && <span>파일 누락 {formatNumber(selectedWarningCounts.missingFiles)}</span>}
-                    {selectedWarningCounts.brokenRelations > 0 && <span>참조 깨짐 {formatNumber(selectedWarningCounts.brokenRelations)}</span>}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-                  {filteredWarnings.map((item) => (
-                    <ContextMenu key={item.id}>
-                      <ContextMenuTrigger asChild>
-                        <button
-                          type="button"
-                          className="text-left bg-discord-bg rounded-lg border border-gray-700 px-4 py-3 hover:bg-discord-hover transition-colors"
-                          onClick={() => openWarningRecordView(item)}
-                        >
-                          <div className="flex items-center gap-2 mb-1">
-                            {item.type === 'missing-file' ? (
-                              <AlertTriangle size={14} className="text-amber-300" />
-                            ) : (
-                              <Link2Off size={14} className="text-rose-300" />
-                            )}
-                            <span className="text-sm font-medium text-discord-text">{item.title}</span>
-                          </div>
-                          <p className="text-sm text-discord-muted">{item.description}</p>
-                        </button>
-                      </ContextMenuTrigger>
-                      <ContextMenuContent>
-                        <ContextMenuItem onClick={() => openWarningRecordEdit(item)}>
-                          수정하기
-                        </ContextMenuItem>
-                        <ContextMenuItem onClick={() => void moveToWarningRecord(item)}>
-                          해당 위치로 이동
-                        </ContextMenuItem>
-                      </ContextMenuContent>
-                    </ContextMenu>
-                  ))}
-                </div>
-                {!selectedRootCategory && warningTotalCount > warningItems.length && (
-                  <p className="mt-4 text-xs text-discord-muted">
-                    상위 {formatNumber(warningItems.length)}개만 표시 중입니다. 전체 경고는 {formatNumber(warningTotalCount)}개입니다.
-                  </p>
-                )}
-              </div>
-            )}
-
             {(hasAnyAttachments || (!selectedRootCategory && categoryRecordData.length > 0) || (selectedRootCategory && childCategoryRecordData.length > 0)) && (
               <div
                 className={`grid grid-cols-1 gap-6 mb-6 ${
@@ -909,6 +887,63 @@ export default function Dashboard() {
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
+                )}
+              </div>
+            )}
+
+            {warningTotalCount > 0 && (
+              <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-amber-500/15 text-amber-300">
+                      <AlertTriangle size={18} />
+                    </div>
+                    <div>
+                      <h2 className="text-lg font-semibold text-discord-text">주의 레코드</h2>
+                      <p className="text-sm text-discord-muted">{`확인이 필요한 레코드 ${formatNumber(warningTotalCount)}개`}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2 text-xs text-discord-muted">
+                    {warningCounts.missingFiles > 0 && <span>파일 누락 {formatNumber(warningCounts.missingFiles)}</span>}
+                    {warningCounts.brokenRelations > 0 && <span>참조 깨짐 {formatNumber(warningCounts.brokenRelations)}</span>}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+                  {filteredWarnings.map((item) => (
+                    <ContextMenu key={item.id}>
+                      <ContextMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-left bg-discord-bg rounded-lg border border-gray-700 px-4 py-3 hover:bg-discord-hover transition-colors"
+                          onClick={() => openWarningRecordView(item)}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            {item.type === 'missing-file' ? (
+                              <AlertTriangle size={14} className="text-amber-300" />
+                            ) : (
+                              <Link2Off size={14} className="text-rose-300" />
+                            )}
+                            <span className="text-sm font-medium text-discord-text">{item.title}</span>
+                          </div>
+                          <p className="text-sm text-discord-muted">{item.description}</p>
+                        </button>
+                      </ContextMenuTrigger>
+                      <ContextMenuContent>
+                        <ContextMenuItem onClick={() => openWarningRecordEdit(item)}>
+                          수정하기
+                        </ContextMenuItem>
+                        <ContextMenuItem onClick={() => void moveToWarningRecord(item)}>
+                          해당 위치로 이동
+                        </ContextMenuItem>
+                      </ContextMenuContent>
+                    </ContextMenu>
+                  ))}
+                </div>
+                {warningTotalCount > filteredWarnings.length && (
+                  <p className="mt-4 text-xs text-discord-muted">
+                    상위 {formatNumber(filteredWarnings.length)}개만 표시 중입니다. 전체 경고는 {formatNumber(warningTotalCount)}개입니다.
+                  </p>
                 )}
               </div>
             )}

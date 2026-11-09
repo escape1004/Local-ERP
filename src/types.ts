@@ -425,7 +425,7 @@ export interface ElectronAPI {
   clearOpenAiApiKey: () => Promise<{ success: boolean; hasOpenAiApiKey?: boolean; error?: string }>;
   openExternal: (url: string) => Promise<{ success: boolean; error?: string }>;
   checkFileExists: (filePath: string) => Promise<boolean>;
-  getDashboardWarnings: (previewLimit?: number) => Promise<DashboardWarningsResult>;
+  getDashboardWarnings: (previewLimit?: number, categoryIds?: string[]) => Promise<DashboardWarningsResult>;
   incrementRecordViewCount: (categoryId: string, recordId: string) => Promise<{ success: boolean; error?: string }>;
   getRecordViewCounts: () => Promise<Array<{ recordId: string; categoryId: string; viewCount: number }>>;
   checkDuplicate: (categoryId: string, fieldId: string, value: any, recordId?: string) => Promise<{ isDuplicate: boolean }>;

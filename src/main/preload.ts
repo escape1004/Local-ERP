@@ -77,7 +77,7 @@ const api: ElectronAPI = {
   },
   openFile: (filePath: string) => ipcRenderer.invoke('openFile', filePath),
   checkFileExists: (filePath: string) => ipcRenderer.invoke('checkFileExists', filePath),
-  getDashboardWarnings: (previewLimit?: number) => ipcRenderer.invoke('dashboard:getWarnings', previewLimit),
+  getDashboardWarnings: (previewLimit?: number, categoryIds?: string[]) => ipcRenderer.invoke('dashboard:getWarnings', previewLimit, categoryIds),
   incrementRecordViewCount: (categoryId: string, recordId: string) => ipcRenderer.invoke('record:incrementViewCount', categoryId, recordId),
   getRecordViewCounts: () => ipcRenderer.invoke('dashboard:getRecordViewCounts'),
   generateThumbnail: (filePath: string) => ipcRenderer.invoke('generateThumbnail', filePath),

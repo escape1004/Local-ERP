@@ -2,6 +2,7 @@ import type { Category, DashboardWarningItem, DataRecord } from '../types';
 import { isSeparatorCategory } from './category';
 
 export const ALL_ROOT_CATEGORIES_VALUE = '__all__';
+export const DASHBOARD_WARNING_PREVIEW_LIMIT = 8;
 export const SUPPORTED_THUMBNAIL_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.avi', '.mkv', '.mov', '.zip', '.7z'];
 
 export interface CategoryStats {

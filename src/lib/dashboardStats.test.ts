@@ -76,6 +76,27 @@ test('walks a selected root category tree and ignores separators', () => {
   expect(collectCategoryTreeIds(null, visible, children)).toEqual(new Set(['root', 'child']));
 });
 
+test('collectCategoryTreeIds keeps a selected dashboard scoped to that root and its descendants', () => {
+  const movies = category({ id: 'movies', name: '영화' });
+  const series = category({ id: 'series', name: '시리즈', parentId: 'movies' });
+  const extras = category({ id: 'extras', name: '부가영상', parentId: 'series' });
+  const games = category({ id: 'games', name: '게임' });
+  const visible = [movies, series, extras, games];
+  const childrenByParentId = groupChildrenByParentId(visible);
+
+  expect([...collectCategoryTreeIds(movies, visible, childrenByParentId)].sort()).toEqual([
+    'extras',
+    'movies',
+    'series',
+  ]);
+  expect([...collectCategoryTreeIds(null, visible, childrenByParentId)].sort()).toEqual([
+    'extras',
+    'games',
+    'movies',
+    'series',
+  ]);
+});
+
 test('summarizes warning counts and file-type chart slices without empty values', () => {
   expect(summarizeWarningCounts([
     { type: 'missing-file' },

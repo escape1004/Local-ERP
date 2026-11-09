@@ -175,10 +175,17 @@ export function getCategoryExportSubtree(rootCategoryId, profileId = getCurrentP
   return orderedCategories;
 }
 
-export function getDashboardWarnings(previewLimit = 8, profileId = getCurrentProfileIdOrThrow()) {
+export function getDashboardWarnings(
+  previewLimit = 8,
+  profileId = getCurrentProfileIdOrThrow(),
+  categoryIds?: string[] | null,
+) {
   const normalizedPreviewLimit = Number.isFinite(Number(previewLimit))
     ? Math.max(0, Number(previewLimit))
     : 8;
+  const categoryIdFilter = Array.isArray(categoryIds) && categoryIds.length > 0
+    ? new Set(categoryIds.map(String))
+    : null;
 
   const categories = db.prepare(`
     SELECT id, name, fields, order_num
@@ -225,6 +232,10 @@ export function getDashboardWarnings(previewLimit = 8, profileId = getCurrentPro
   };
 
   categories.forEach((category) => {
+    if (categoryIdFilter && !categoryIdFilter.has(category.id)) {
+      return;
+    }
+
     const categoryRecords = recordsByCategoryId.get(category.id) || [];
     const fileField = category.fields.find((field) => field.type === 'file');
     const relationFields = category.fields.filter((field) => field.type === 'relation' && field.relationCategoryId);

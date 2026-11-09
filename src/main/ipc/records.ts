@@ -622,9 +622,9 @@ export function registerRecordHandlers() {
     }
   });
 
-  ipcMain.handle('dashboard:getWarnings', async (_, previewLimit = 8) => {
+  ipcMain.handle('dashboard:getWarnings', async (_, previewLimit = 8, categoryIds) => {
     try {
-      return getDashboardWarnings(previewLimit);
+      return getDashboardWarnings(previewLimit, getCurrentProfileIdOrThrow(), categoryIds);
     } catch (error) {
       log('Error getting dashboard warnings:', error);
       return {
