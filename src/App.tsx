@@ -1,8 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster } from '@/components/ui/toaster';
-import { Toaster as Sonner } from '@/components/ui/sonner';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HashRouter, Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { Eye, EyeOff, Lock, Plus, X } from 'lucide-react';
 import Index from './pages/Index';
@@ -32,7 +30,6 @@ import { toast } from './components/ui/use-toast';
 import { isStandaloneBrowserWindow } from './lib/browserNavigation';
 import type { AppUpdateState, Profile } from './types';
 
-const queryClient = new QueryClient();
 const PROFILE_COLORS = ['#5865F2', '#3BA55D', '#F97316', '#EC4899', '#0EA5E9', '#EAB308'];
 const RAINBOW_PROFILE_COLOR = 'rainbow';
 const DEFAULT_PROFILE_NAME = '기본 프로필';
@@ -672,27 +669,24 @@ const App = () => {
 
   if (isStandaloneBrowserWindow()) {
     return (
-      <QueryClientProvider client={queryClient}>
-        <TooltipProvider>
-          <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
-            <div className="flex-1 min-h-0">
-              <HashRouter>
-                <Routes>
-                  <Route path="/browser" element={<BrowserPage />} />
-                  <Route path="*" element={<Navigate to="/browser" replace />} />
-                </Routes>
-              </HashRouter>
-              <Toaster />
-            </div>
+      <TooltipProvider>
+        <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
+          <div className="flex-1 min-h-0">
+            <HashRouter>
+              <Routes>
+                <Route path="/browser" element={<BrowserPage />} />
+                <Route path="*" element={<Navigate to="/browser" replace />} />
+              </Routes>
+            </HashRouter>
+            <Toaster />
           </div>
-        </TooltipProvider>
-      </QueryClientProvider>
+        </div>
+      </TooltipProvider>
     );
   }
 
   return (
-    <QueryClientProvider client={queryClient}>
-      <TooltipProvider>
+    <TooltipProvider>
         <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
           <TitleBar
             onOpenSettings={() => currentProfile && !requiresPassword && setIsAppSettingsOpen(true)}
@@ -712,7 +706,6 @@ const App = () => {
                       <RouterContent />
                     </HashRouter>
                     <Toaster />
-                    <Sonner />
                   </div>
                 ) : requiresPassword ? null : (
                   <div className="h-full flex items-center justify-center bg-discord-bg p-6">
@@ -1072,7 +1065,6 @@ const App = () => {
           <LoadingOverlay />
         </div>
       </TooltipProvider>
-    </QueryClientProvider>
   );
 };
 
