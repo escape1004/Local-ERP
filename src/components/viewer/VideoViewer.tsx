@@ -190,6 +190,7 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
     onMouseLeave={onContainerMouseLeave}
     tabIndex={0}
     data-video-container
+    data-viewer-zoom
   >
     {layout === 'page' ? (
     <div

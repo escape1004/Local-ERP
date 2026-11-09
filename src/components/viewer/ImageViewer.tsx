@@ -78,7 +78,7 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   };
 
   return (
-    <div ref={containerRef} className={wrapperClassName} style={containerStyle}>
+    <div ref={containerRef} className={wrapperClassName} style={containerStyle} data-viewer-zoom>
       {isGif ? (
         <AnimatedGif
           ref={gifCanvasRef}

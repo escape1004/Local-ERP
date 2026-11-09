@@ -495,77 +495,65 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   }, []);
 
   useEffect(() => {
-    const effectiveType = fileType || detectedFileType;
-    if (effectiveType !== 'video' || !dataUrl) return;
-    const video = videoRef.current;
-    if (!video) return;
-    const wheelHandler = (event: WheelEvent) => {
-      event.preventDefault();
-      const nextScale = nextWheelScale(videoScaleRef.current, event.deltaY);
-      setVideoScale(nextScale);
-      setVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-    };
-    video.addEventListener('wheel', wheelHandler, { passive: false });
-    return () => video.removeEventListener('wheel', wheelHandler);
-  }, [clampToContainer, dataUrl, detectedFileType, fileType]);
+    if (!isOpen) return;
 
-  useEffect(() => {
-    const effectiveType = fileType || detectedFileType;
-    if (effectiveType !== 'image' || !dataUrl) return;
-    const img = /\.gif$/i.test(displayFilePath) ? imageGifCanvasRef.current : imgRef.current;
-    const container = imgContainerRef.current;
-    if (!img || !container) return;
-    const wheelHandler = (event: WheelEvent) => {
-      event.preventDefault();
-      const nextScale = nextWheelScale(imgScaleRef.current, event.deltaY);
-      setImgScale(nextScale);
-      setImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-    };
-    img.addEventListener('wheel', wheelHandler, { passive: false });
-    container.addEventListener('wheel', wheelHandler, { passive: false });
-    return () => {
-      img.removeEventListener('wheel', wheelHandler);
-      container.removeEventListener('wheel', wheelHandler);
-    };
-  }, [clampToContainer, dataUrl, detectedFileType, displayFilePath, fileType]);
+    const handleWheel = (event: WheelEvent) => {
+      const target = event.target;
+      if (!(target instanceof Element) || !target.closest('[data-viewer-zoom]')) return;
+      if (target.closest('#volume-slider')) return;
 
-  useEffect(() => {
-    const effectiveType = fileType || detectedFileType;
-    const currentFile = archive.archiveFiles[archive.currentArchiveIndex];
-    const isArchiveImage = !!currentFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(currentFile.name);
-    if (effectiveType !== 'archive' || !archive.currentArchiveDataUrl || !isArchiveImage) return;
-    const img = /\.gif$/i.test(currentFile.name) ? archiveGifCanvasRef.current : archiveImgRef.current;
-    const container = imgContainerRef.current;
-    if (!img || !container) return;
-    const wheelHandler = (event: WheelEvent) => {
-      event.preventDefault();
-      const nextScale = nextWheelScale(archiveImgScaleRef.current, event.deltaY);
-      setArchiveImgScale(nextScale);
-      setArchiveImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-    };
-    img.addEventListener('wheel', wheelHandler, { passive: false });
-    container.addEventListener('wheel', wheelHandler, { passive: false });
-    return () => {
-      img.removeEventListener('wheel', wheelHandler);
-      container.removeEventListener('wheel', wheelHandler);
-    };
-  }, [archive.archiveFiles, archive.currentArchiveDataUrl, archive.currentArchiveIndex, clampToContainer, detectedFileType, fileType]);
+      const effectiveType = fileType || detectedFileType;
+      const currentArchiveFile = archive.archiveFiles[archive.currentArchiveIndex];
+      const isArchiveImage = Boolean(currentArchiveFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(currentArchiveFile.name));
+      const isArchiveVideo = isVideoFileName(currentArchiveFile?.name);
 
-  useEffect(() => {
-    const effectiveType = fileType || detectedFileType;
-    const currentFile = archive.archiveFiles[archive.currentArchiveIndex];
-    if (effectiveType !== 'archive' || !archive.currentArchiveDataUrl || !isVideoFileName(currentFile?.name)) return;
-    const video = archiveVideoRef.current;
-    if (!video) return;
-    const wheelHandler = (event: WheelEvent) => {
+      let currentScale = 0;
+      let applyScale: ((nextScale: number) => void) | null = null;
+
+      if (effectiveType === 'image' && dataUrl) {
+        currentScale = imgScaleRef.current;
+        applyScale = (nextScale) => {
+          setImgScale(nextScale);
+          setImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
+        };
+      } else if (effectiveType === 'video' && dataUrl) {
+        currentScale = videoScaleRef.current;
+        applyScale = (nextScale) => {
+          setVideoScale(nextScale);
+          setVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
+        };
+      } else if (effectiveType === 'archive' && archive.currentArchiveDataUrl && isArchiveImage) {
+        currentScale = archiveImgScaleRef.current;
+        applyScale = (nextScale) => {
+          setArchiveImgScale(nextScale);
+          setArchiveImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
+        };
+      } else if (effectiveType === 'archive' && archive.currentArchiveDataUrl && isArchiveVideo) {
+        currentScale = archiveVideoScaleRef.current;
+        applyScale = (nextScale) => {
+          setArchiveVideoScale(nextScale);
+          setArchiveVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
+        };
+      }
+
+      if (!applyScale) return;
+
       event.preventDefault();
-      const nextScale = nextWheelScale(archiveVideoScaleRef.current, event.deltaY);
-      setArchiveVideoScale(nextScale);
-      setArchiveVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
+      applyScale(nextWheelScale(currentScale, event.deltaY));
     };
-    video.addEventListener('wheel', wheelHandler, { passive: false });
-    return () => video.removeEventListener('wheel', wheelHandler);
-  }, [archive.archiveFiles, archive.currentArchiveDataUrl, archive.currentArchiveIndex, clampToContainer, detectedFileType, fileType]);
+
+    document.addEventListener('wheel', handleWheel, { capture: true, passive: false });
+    return () => document.removeEventListener('wheel', handleWheel, { capture: true });
+  }, [
+    archive.archiveFiles,
+    archive.currentArchiveDataUrl,
+    archive.currentArchiveIndex,
+    clampToContainer,
+    dataUrl,
+    detectedFileType,
+    fileType,
+    isOpen,
+  ]);
 
   useEffect(() => {
     if (!isOpen) return;
