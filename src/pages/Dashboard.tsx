@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Bar,
@@ -20,7 +20,6 @@ import {
   Calendar,
   FileText,
   Folder,
-  ImageOff,
   Image,
   Link2Off,
   Eye,
@@ -35,8 +34,28 @@ import { useLoadingStore } from '../hooks/useLoadingStore';
 import { Category, DashboardWarningItem, DataRecord } from '../types';
 import { isSeparatorCategory } from '../lib/category';
 import { getDashboardSummaryGridClass, hasDashboardRecords } from '../lib/dashboardLayout';
+import {
+  ALL_ROOT_CATEGORIES_VALUE,
+  collectCategoryTreeIds,
+  formatNumber,
+  getChildCategoryRecordChartData,
+  getDashboardTotalStats,
+  getFileTypeChartData,
+  getFileTypeCounts,
+  getRecordDisplayValue,
+  getRecordViewCountKey,
+  getRootCategoryRecordChartData,
+  getRootDashboardCategories,
+  getTrackableFileField,
+  getVisibleDashboardCategories,
+  groupChildrenByParentId,
+  summarizeWarningCounts,
+  type CategoryStats,
+} from '../lib/dashboardStats';
 import { isProfileHydrationPending } from '../lib/profileHydration';
-import { resolveFilePath } from '../lib/pathResolver';
+import { DashboardChartTooltip } from '../components/dashboard/DashboardChartTooltip';
+import { DashboardRecordThumbnail } from '../components/dashboard/DashboardRecordThumbnail';
+import { DashboardStatCard } from '../components/dashboard/DashboardStatCard';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { RecordModal } from '../components/RecordModal';
 import { ViewRecordModal } from '../components/ViewRecordModal';
@@ -44,15 +63,6 @@ import { DatabaseViewer } from '../components/DatabaseViewer';
 import { Button } from '../components/ui/button';
 import { CategoryModal } from '../components/CategoryModal';
 import { ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger } from '../components/ui/context-menu';
-
-interface CategoryStats {
-  category: Category;
-  recordCount: number;
-  imageCount: number;
-  videoCount: number;
-  archiveCount: number;
-  recentRecords: DataRecord[];
-}
 
 interface RankedRecord {
   record: DataRecord;
@@ -80,174 +90,6 @@ interface ChildCategoryDashboardSection {
     category: Category;
   }>;
 }
-
-const ALL_ROOT_CATEGORIES_VALUE = '__all__';
-const SUPPORTED_THUMBNAIL_EXTS = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.avi', '.mkv', '.mov', '.zip', '.7z'];
-
-const formatNumber = (num: number): string => num.toLocaleString('ko-KR');
-const getRecordViewCountKey = (categoryId: string, recordId: string) => `${categoryId}:${recordId}`;
-const getTrackableFileField = (category: Category) => category.fields.find(
-  (field) => field.type === 'file' && !field.thumbnailOnly
-);
-
-const getFileTypeCounts = (category: Category, records: DataRecord[]) => {
-  const fileField = category.fields.find((field) => field.type === 'file');
-  let imageCount = 0;
-  let videoCount = 0;
-  let archiveCount = 0;
-
-  records.forEach((record) => {
-    if (!fileField || !record.data[fileField.id]) {
-      return;
-    }
-
-    const filePath = String(record.data[fileField.id] || '');
-    const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase();
-
-    if (/\.(jpg|jpeg|png|gif|webp)$/i.test(ext)) {
-      imageCount += 1;
-    } else if (/\.(mp4|avi|mkv|mov|wmv|flv|webm)$/i.test(ext)) {
-      videoCount += 1;
-    } else if (/\.(zip|7z|rar)$/i.test(ext)) {
-      archiveCount += 1;
-    }
-  });
-
-  return { imageCount, videoCount, archiveCount };
-};
-
-const getCategoryDisplayField = (category: Category) => category.fields.find((field) => field.type === 'text') || category.fields[0];
-
-const getRecordDisplayValue = (category: Category, record: DataRecord) => {
-  const displayField = getCategoryDisplayField(category);
-  return displayField && record.data[displayField.id]
-    ? String(record.data[displayField.id])
-    : new Date(record.createdAt).toLocaleDateString('ko-KR');
-};
-
-const CustomTooltip = ({ active, payload, label, labelFormatter }: any) => {
-  if (!active || !payload || payload.length === 0) {
-    return null;
-  }
-
-  const data = payload[0].payload;
-  const value = payload[0].value;
-  const displayLabel = labelFormatter ? labelFormatter(label, payload) : (data?.fullName || data?.name || label);
-
-  return (
-    <div
-      style={{
-        backgroundColor: '#2F3136',
-        border: '1px solid #40444B',
-        borderRadius: '4px',
-        padding: '8px 12px',
-        color: '#FFFFFF',
-      }}
-    >
-      {displayLabel && (
-        <div style={{ marginBottom: '4px', color: '#FFFFFF', fontWeight: 500 }}>
-          {displayLabel}
-        </div>
-      )}
-      <div style={{ color: '#FFFFFF' }}>개수: {formatNumber(value)}</div>
-    </div>
-  );
-};
-
-const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; color?: string }> = ({
-  title,
-  value,
-  icon,
-  color = 'bg-discord-accent',
-}) => (
-  <div className="bg-discord-sidebar rounded-xl p-4 border border-gray-700">
-    <div className="flex items-center justify-between">
-      <div>
-        <p className="text-sm text-discord-muted mb-1">{title}</p>
-        <p className="text-2xl font-bold text-discord-text">{typeof value === 'number' ? formatNumber(value) : value}</p>
-      </div>
-      <div className={`${color} p-3 rounded-lg`}>
-        {icon}
-      </div>
-    </div>
-  </div>
-);
-
-const RecordThumbnail: React.FC<{ category: Category; record: DataRecord }> = ({ category, record }) => {
-  const fileField = useMemo(
-    () => category.fields.find((field) => field.type === 'file') || null,
-    [category]
-  );
-  const filePath = useMemo(
-    () => (fileField ? resolveFilePath(record.data[fileField.id], fileField) : null),
-    [fileField, record]
-  );
-  const fileExt = useMemo(
-    () => (filePath ? filePath.slice(filePath.lastIndexOf('.')).toLowerCase() : ''),
-    [filePath]
-  );
-  const isArchiveFile = fileExt === '.zip' || fileExt === '.7z';
-  const isSupportedThumbnail = !!filePath && SUPPORTED_THUMBNAIL_EXTS.includes(fileExt);
-  const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    let ignore = false;
-
-    if (!isSupportedThumbnail || !filePath) {
-      setThumbnailDataUrl(null);
-      setLoading(false);
-      return () => {
-        ignore = true;
-      };
-    }
-
-    setLoading(true);
-    window.electronAPI.getThumbnailDataUrlHybrid(record, filePath)
-      .then((result) => {
-        if (!ignore) {
-          setThumbnailDataUrl(result || null);
-          setLoading(false);
-        }
-      })
-      .catch(() => {
-        if (!ignore) {
-          setThumbnailDataUrl(null);
-          setLoading(false);
-        }
-      });
-
-    return () => {
-      ignore = true;
-    };
-  }, [filePath, isSupportedThumbnail, record]);
-
-  if (!fileField) {
-    return null;
-  }
-
-  return (
-    <div className="w-14 h-14 shrink-0 rounded border border-dashed border-[#4f545c] bg-[radial-gradient(circle_at_top,_rgba(88,101,242,0.20),_transparent_58%),linear-gradient(180deg,_#2b2d31_0%,_#1e1f22_100%)] flex items-center justify-center overflow-hidden">
-      {loading ? (
-        <span className="text-[10px] text-discord-muted">로딩</span>
-      ) : thumbnailDataUrl ? (
-        <img src={thumbnailDataUrl} alt="썸네일" className="w-full h-full object-cover" />
-      ) : filePath ? (
-        <div className="w-full h-full flex items-center justify-center text-[#b5bac1]">
-          {isArchiveFile ? (
-            <Archive size={18} className="text-[#f0b232]" />
-          ) : (
-            <ImageOff size={18} className="text-[#b9bbbe]" />
-          )}
-        </div>
-      ) : (
-        <div className="w-full h-full bg-[linear-gradient(180deg,_#232428_0%,_#18191c_100%)] flex items-center justify-center text-[#72767d]">
-          <ImageOff size={18} className="text-[#72767d]" />
-        </div>
-      )}
-    </div>
-  );
-};
 
 export default function Dashboard() {
   const navigate = useNavigate();
@@ -394,12 +236,12 @@ export default function Dashboard() {
   }, [currentProfile?.id]);
 
   const visibleCategories = useMemo(
-    () => categories.filter((cat) => !isSeparatorCategory(cat)).sort((a, b) => (a.order ?? 0) - (b.order ?? 0)),
+    () => getVisibleDashboardCategories(categories),
     [categories]
   );
 
   const rootCategories = useMemo(
-    () => visibleCategories.filter((cat) => !cat.parentId),
+    () => getRootDashboardCategories(visibleCategories),
     [visibleCategories]
   );
 
@@ -423,43 +265,15 @@ export default function Dashboard() {
     [visibleCategories]
   );
 
-  const childrenByParentId = useMemo(() => {
-    const map = new Map<string, Category[]>();
-    visibleCategories.forEach((category) => {
-      if (!category.parentId) {
-        return;
-      }
+  const childrenByParentId = useMemo(
+    () => groupChildrenByParentId(visibleCategories),
+    [visibleCategories]
+  );
 
-      const siblings = map.get(category.parentId) || [];
-      siblings.push(category);
-      map.set(category.parentId, siblings);
-    });
-
-    map.forEach((items) => items.sort((a, b) => (a.order ?? 0) - (b.order ?? 0)));
-    return map;
-  }, [visibleCategories]);
-
-  const selectedCategoryIds = useMemo(() => {
-    if (!selectedRootCategory) {
-      return new Set(visibleCategories.map((category) => category.id));
-    }
-
-    const ids = new Set<string>();
-    const stack = [selectedRootCategory.id];
-
-    while (stack.length > 0) {
-      const currentId = stack.pop();
-      if (!currentId || ids.has(currentId)) {
-        continue;
-      }
-
-      ids.add(currentId);
-      const children = childrenByParentId.get(currentId) || [];
-      children.forEach((child) => stack.push(child.id));
-    }
-
-    return ids;
-  }, [childrenByParentId, selectedRootCategory, visibleCategories]);
+  const selectedCategoryIds = useMemo(
+    () => collectCategoryTreeIds(selectedRootCategory, visibleCategories, childrenByParentId),
+    [childrenByParentId, selectedRootCategory, visibleCategories]
+  );
 
   const scopedCategoryStats = useMemo(
     () => categoryStats.filter((stat) => selectedCategoryIds.has(stat.category.id)),
@@ -481,44 +295,30 @@ export default function Dashboard() {
     [selectedCategoryIds, warningItems]
   );
 
-  const filteredWarningCounts = useMemo(() => {
-    return filteredWarnings.reduce(
-      (acc, item) => {
-        if (item.type === 'missing-file') {
-          acc.missingFiles += 1;
-        } else if (item.type === 'broken-relation') {
-          acc.brokenRelations += 1;
-        }
-        return acc;
-      },
-      { missingFiles: 0, brokenRelations: 0 }
-    );
-  }, [filteredWarnings]);
+  const filteredWarningCounts = useMemo(
+    () => summarizeWarningCounts(filteredWarnings),
+    [filteredWarnings]
+  );
 
   const selectedWarningTotalCount = selectedRootCategory ? filteredWarnings.length : warningTotalCount;
   const selectedWarningCounts = selectedRootCategory ? filteredWarningCounts : warningCounts;
 
-  const totalStats = useMemo(() => {
-    const statsForTotals = selectedRootCategory
-      ? scopedCategoryStats
-      : scopedCategoryStats.filter((stat) => !stat.category.parentId);
-
-    return {
-      totalCategories: rootCategories.length,
-      totalRecords: statsForTotals.reduce((sum, stat) => sum + stat.recordCount, 0),
-      totalImages: statsForTotals.reduce((sum, stat) => sum + stat.imageCount, 0),
-      totalVideos: statsForTotals.reduce((sum, stat) => sum + stat.videoCount, 0),
-      totalArchives: statsForTotals.reduce((sum, stat) => sum + stat.archiveCount, 0),
-      totalChildCategories: descendantCategoryStats.length,
-    };
-  }, [descendantCategoryStats.length, rootCategories.length, scopedCategoryStats, selectedRootCategory]);
+  const totalStats = useMemo(
+    () => getDashboardTotalStats({
+      selectedRootCategory,
+      scopedCategoryStats,
+      descendantCount: descendantCategoryStats.length,
+      rootCategoryCount: rootCategories.length,
+    }),
+    [descendantCategoryStats.length, rootCategories.length, scopedCategoryStats, selectedRootCategory]
+  );
 
   const summaryCards = useMemo(() => {
     const cards: Array<{
       key: string;
       title: string;
       value: number;
-      icon: React.ReactNode;
+      icon: ReactNode;
       color: string;
     }> = [];
 
@@ -581,55 +381,20 @@ export default function Dashboard() {
     return cards;
   }, [selectedRootCategory, totalStats]);
 
-  const categoryRecordData = useMemo(() => {
-    const statsByCategoryId = new Map(
-      categoryStats.map((stat) => [stat.category.id, stat])
-    );
+  const categoryRecordData = useMemo(
+    () => getRootCategoryRecordChartData(rootCategories, categoryStats),
+    [categoryStats, rootCategories]
+  );
 
-    return rootCategories
-      .map((rootCategory) => ({
-        name: rootCategory.name,
-        fullName: rootCategory.name,
-        records: statsByCategoryId.get(rootCategory.id)?.recordCount ?? 0,
-        categoryId: rootCategory.id,
-      }))
-      .filter((item) => item.records > 0)
-      .sort((a, b) => b.records - a.records)
-      .slice(0, 10);
-  }, [categoryStats, rootCategories]);
+  const childCategoryRecordData = useMemo(
+    () => getChildCategoryRecordChartData(descendantCategoryStats),
+    [descendantCategoryStats]
+  );
 
-  const childCategoryRecordData = useMemo(() => {
-    return descendantCategoryStats
-      .filter((stat) => stat.recordCount > 0)
-      .sort((a, b) => b.recordCount - a.recordCount)
-      .slice(0, 10)
-      .map((stat) => ({
-        name: stat.category.name,
-        fullName: stat.category.name,
-        records: stat.recordCount,
-        categoryId: stat.category.id,
-      }));
-  }, [descendantCategoryStats]);
-
-  const fileTypeData = useMemo(() => {
-    const sourceStats = selectedRootCategory
-      ? scopedCategoryStats
-      : scopedCategoryStats.filter((stat) => !stat.category.parentId);
-    const totals = sourceStats.reduce(
-      (acc, stat) => ({
-        images: acc.images + stat.imageCount,
-        videos: acc.videos + stat.videoCount,
-        archives: acc.archives + stat.archiveCount,
-      }),
-      { images: 0, videos: 0, archives: 0 }
-    );
-
-    return [
-      { name: '이미지', value: totals.images, color: '#A855F7' },
-      { name: '동영상', value: totals.videos, color: '#EF4444' },
-      { name: '압축파일', value: totals.archives, color: '#EAB308' },
-    ].filter((item) => item.value > 0);
-  }, [scopedCategoryStats, selectedRootCategory]);
+  const fileTypeData = useMemo(
+    () => getFileTypeChartData(scopedCategoryStats, selectedRootCategory),
+    [scopedCategoryStats, selectedRootCategory]
+  );
 
   const dateTrendData = useMemo(() => {
     const dateMap = new Map<string, number>();
@@ -948,7 +713,7 @@ export default function Dashboard() {
 
             <div className={`grid grid-cols-1 gap-4 mb-6 ${getDashboardSummaryGridClass(summaryCards.length)}`}>
               {summaryCards.map((card) => (
-                <StatCard key={card.key} title={card.title} value={card.value} icon={card.icon} color={card.color} />
+                <DashboardStatCard key={card.key} title={card.title} value={card.value} icon={card.icon} color={card.color} />
               ))}
             </div>
 
@@ -1086,7 +851,7 @@ export default function Dashboard() {
                         />
                         <YAxis stroke="#9CA3AF" fontSize={12} />
                         <Tooltip
-                          content={<CustomTooltip />}
+                          content={<DashboardChartTooltip />}
                           labelFormatter={(label: any, payload: any) => {
                             if (payload?.length) {
                               const data = payload[0].payload;
@@ -1120,7 +885,7 @@ export default function Dashboard() {
                         <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                         <XAxis dataKey="name" stroke="#9CA3AF" fontSize={12} interval={0} />
                         <YAxis stroke="#9CA3AF" fontSize={12} />
-                        <Tooltip content={<CustomTooltip />} />
+                        <Tooltip content={<DashboardChartTooltip />} />
                         <Bar dataKey="records" fill="#5865F2" style={{ cursor: 'pointer' }} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1147,7 +912,7 @@ export default function Dashboard() {
                           ))}
                         </Pie>
                         <Tooltip
-                          content={<CustomTooltip />}
+                          content={<DashboardChartTooltip />}
                           labelFormatter={(label: any, payload: any) => (payload?.length ? payload[0].name || label || '' : label || '')}
                         />
                       </PieChart>
@@ -1177,7 +942,7 @@ export default function Dashboard() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="date" stroke="#9CA3AF" fontSize={12} />
                     <YAxis stroke="#9CA3AF" fontSize={12} />
-                    <Tooltip content={<CustomTooltip />} />
+                    <Tooltip content={<DashboardChartTooltip />} />
                     <Line type="monotone" dataKey="count" stroke="#5865F2" strokeWidth={2} />
                   </LineChart>
                 </ResponsiveContainer>
@@ -1231,7 +996,7 @@ export default function Dashboard() {
                                 <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-xs font-bold ${index === 0 ? 'bg-amber-400/20 text-amber-200' : index === 1 ? 'bg-slate-300/15 text-slate-200' : index === 2 ? 'bg-orange-400/15 text-orange-200' : 'bg-gray-700 text-discord-muted'}`}>
                                   {index + 1}
                                 </span>
-                                <RecordThumbnail category={item.category} record={item.record} />
+                                <DashboardRecordThumbnail category={item.category} record={item.record} />
                                 <div className="min-w-0 flex-1">
                                   <p className="truncate text-sm font-medium text-discord-text group-hover:text-white">{item.displayValue}</p>
                                   <p className="truncate text-xs text-discord-muted">{item.category.name}</p>
@@ -1266,7 +1031,7 @@ export default function Dashboard() {
                           >
                             <div className="flex min-h-[52px] items-center gap-3">
                               <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-700 text-xs font-bold text-discord-muted">{index + 1}</span>
-                              <RecordThumbnail category={item.category} record={item.record} />
+                              <DashboardRecordThumbnail category={item.category} record={item.record} />
                               <div className="min-w-0 flex-1">
                                 <p className="truncate text-sm font-medium text-discord-text group-hover:text-white">{item.displayValue}</p>
                                 <p className="truncate text-xs text-discord-muted">{item.category.name}</p>
@@ -1323,7 +1088,7 @@ export default function Dashboard() {
                               >
                                 <div className="flex min-h-[52px] items-center justify-between gap-3">
                                   <div className="flex items-center gap-3 min-w-0">
-                                    <RecordThumbnail category={item.category} record={item.record} />
+                                    <DashboardRecordThumbnail category={item.category} record={item.record} />
                                     <div className="min-w-0">
                                       <p className="text-sm text-discord-muted mb-1">#{index + 1}</p>
                                       <p className="text-sm font-medium text-discord-text break-all">{item.displayValue}</p>
@@ -1361,7 +1126,7 @@ export default function Dashboard() {
                                 >
                                   <div className="flex min-h-[52px] items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0">
-                                      <RecordThumbnail category={item.category} record={item.record} />
+                                      <DashboardRecordThumbnail category={item.category} record={item.record} />
                                       <div className="min-w-0">
                                         <p className="text-sm text-discord-muted mb-1">#{index + 1}</p>
                                         <p className="text-sm font-medium text-discord-text break-all">{item.displayValue}</p>
@@ -1393,7 +1158,7 @@ export default function Dashboard() {
                                 >
                                   <div className="flex min-h-[52px] items-center justify-between gap-3">
                                     <div className="flex items-center gap-3 min-w-0">
-                                      <RecordThumbnail category={item.category} record={item.record} />
+                                      <DashboardRecordThumbnail category={item.category} record={item.record} />
                                       <div className="min-w-0">
                                         <p className="text-sm text-discord-muted mb-1">#{index + 1}</p>
                                         <p className="text-sm font-medium text-discord-text break-all">{item.displayValue}</p>
@@ -1428,7 +1193,7 @@ export default function Dashboard() {
                                 }}
                               >
                                 <div className="flex min-h-[52px] items-center gap-3 min-w-0">
-                                  <RecordThumbnail category={category} record={record} />
+                                  <DashboardRecordThumbnail category={category} record={record} />
                                   <div className="min-w-0">
                                     <p className="text-sm font-medium text-discord-text break-all">{getRecordDisplayValue(category, record)}</p>
                                     <p className="text-xs text-discord-muted mt-1">{new Date(record.createdAt).toLocaleString('ko-KR')}</p>
@@ -1463,7 +1228,7 @@ export default function Dashboard() {
                       stat.archiveCount > 0
                         ? { key: 'archive', icon: <Archive size={16} className="text-yellow-400" />, label: `압축파일: ${formatNumber(stat.archiveCount)}` }
                         : null,
-                    ].filter(Boolean) as Array<{ key: string; icon: React.ReactNode; label: string }>;
+                    ].filter(Boolean) as Array<{ key: string; icon: ReactNode; label: string }>;
 
                     return (
                       <div key={stat.category.id} className="bg-discord-bg rounded-lg p-4 border border-gray-700">
