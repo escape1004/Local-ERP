@@ -31,6 +31,7 @@ import {
 } from 'lucide-react';
 import { Sidebar } from '../components/Sidebar';
 import { useERPStore } from '../hooks/useERPStore';
+import { useLoadingStore } from '../hooks/useLoadingStore';
 import { Category, DashboardWarningItem, DataRecord } from '../types';
 import { isSeparatorCategory } from '../lib/category';
 import { resolveFilePath } from '../lib/pathResolver';
@@ -259,7 +260,9 @@ export default function Dashboard() {
     currentProfile,
     setPendingRecordFocus,
     setShowDbViewer,
+    markProfileReady,
   } = useERPStore();
+  const { setLoading: setGlobalLoading, hideLoading } = useLoadingStore();
   const [loading, setLoading] = useState(true);
   const [categoryStats, setCategoryStats] = useState<CategoryStats[]>([]);
   const [dateUnit, setDateUnit] = useState<'day' | 'month' | 'year'>('day');
@@ -299,8 +302,14 @@ export default function Dashboard() {
   const [recordViewCounts, setRecordViewCounts] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    let cancelled = false;
+
     const loadAllData = async () => {
+      const showProfileLoading = !useERPStore.getState().isProfileReady;
       setLoading(true);
+      if (showProfileLoading) {
+        setGlobalLoading(true, '데이터를 불러오는 중...');
+      }
       try {
         await loadCategories();
 
@@ -351,12 +360,20 @@ export default function Dashboard() {
           viewCounts.map((item) => [getRecordViewCountKey(item.categoryId, item.recordId), item.viewCount])
         ));
       } finally {
+        if (cancelled) return;
         setLoading(false);
+        markProfileReady();
+        if (showProfileLoading) {
+          hideLoading();
+        }
       }
     };
 
     void loadAllData();
-  }, [loadCategories, loadRecords, currentProfile?.id]);
+    return () => {
+      cancelled = true;
+    };
+  }, [hideLoading, loadCategories, loadRecords, markProfileReady, setGlobalLoading, currentProfile?.id]);
 
   useEffect(() => {
     const refreshRecordViewCounts = () => {

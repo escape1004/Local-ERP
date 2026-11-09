@@ -171,8 +171,8 @@ async function silenceAppForLock() {
 }
 
 const App = () => {
-  const { currentProfile, setCurrentProfile, resetForProfile, setShowDbViewer, selectCategory } = useERPStore();
-  const { showLoading, hideLoading } = useLoadingStore();
+  const { currentProfile, isProfileReady, setCurrentProfile, resetForProfile, setShowDbViewer, selectCategory } = useERPStore();
+  const { showLoading, hideLoading, setLoading } = useLoadingStore();
   const [isAppSettingsOpen, setIsAppSettingsOpen] = useState(false);
   const [isAppUpdateOpen, setIsAppUpdateOpen] = useState(false);
   const [appUpdateState, setAppUpdateState] = useState<AppUpdateState>(INITIAL_UPDATE_STATE);
@@ -442,6 +442,12 @@ const App = () => {
     };
   }, [resetForProfile, setCurrentProfile]);
 
+  useEffect(() => {
+    if (currentProfile && !isProfileReady) {
+      setLoading(true, '데이터를 불러오는 중...');
+    }
+  }, [currentProfile, isProfileReady, setLoading]);
+
   const handleUnlock = async () => {
     if (isPasswordLocked) return;
 
@@ -471,25 +477,29 @@ const App = () => {
   const handleSelectProfile = async (profile: Profile) => {
     setIsProfileBusy(true);
     setProfileError('');
+    setLoading(true, '데이터를 불러오는 중...');
 
     try {
       if (!window.electronAPI?.selectProfile) {
         setProfileError('프로필 선택 API를 찾을 수 없습니다. 앱을 완전히 종료 후 다시 실행하세요.');
+        hideLoading();
         return;
       }
 
       const result = await window.electronAPI.selectProfile(profile.id);
       if (!result.success || !result.profile) {
         setProfileError(result.error || '프로필을 선택할 수 없습니다.');
+        hideLoading();
         return;
       }
 
+      window.location.hash = '#/dashboard';
       resetForProfile();
       setCurrentProfile(result.profile);
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : '프로필 선택 중 오류가 발생했습니다.');
-    } finally {
       hideLoading();
+    } finally {
       setIsProfileBusy(false);
     }
   };
@@ -528,8 +538,8 @@ const App = () => {
       await handleSelectProfile(result.profile);
     } catch (error) {
       setProfileError(error instanceof Error ? error.message : '프로필 생성 중 오류가 발생했습니다.');
-    } finally {
       hideLoading();
+    } finally {
       setIsProfileBusy(false);
     }
   };
@@ -694,7 +704,10 @@ const App = () => {
             {isCheckingPassword ? null : (
               <>
                 {currentProfile ? (
-                  <div className={`h-full ${requiresPassword ? 'pointer-events-none invisible' : ''}`} aria-hidden={requiresPassword}>
+                  <div
+                    className={`h-full ${requiresPassword || !isProfileReady ? 'pointer-events-none invisible' : ''}`}
+                    aria-hidden={requiresPassword || !isProfileReady}
+                  >
                     <HashRouter>
                       <RouterContent />
                     </HashRouter>

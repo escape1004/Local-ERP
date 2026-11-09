@@ -14,7 +14,7 @@ export const useLoadingStore = create<LoadingState>((set, get) => ({
   isLoading: false,
   message: '',
   showCancelButton: false,
-  setLoading: (loading: boolean, message: string = '') => set({ isLoading: loading, message }),
+  setLoading: (loading: boolean, message: string = '') => set({ isLoading: loading, message, showCancelButton: false }),
   showLoading: (message: string = '로딩 중...', timeout?: number, showCancel: boolean = false) => {
     // 이미 로딩 중이면 메시지만 업데이트
     if (get().isLoading) {

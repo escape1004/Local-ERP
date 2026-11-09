@@ -119,6 +119,7 @@ export const Sidebar: React.FC = () => {
   }, [currentProfile?.id]);
 
   const handleProfileManage = async () => {
+    hideLoading();
     await window.electronAPI.clearCurrentProfile();
     resetForProfile();
     setCurrentProfile(null);
@@ -128,9 +129,11 @@ export const Sidebar: React.FC = () => {
   };
 
   const handleQuickProfileSwitch = async (profile: Profile) => {
+    setGlobalLoading(true, '데이터를 불러오는 중...');
     const result = await window.electronAPI.selectProfile(profile.id);
 
     if (!result.success || !result.profile) {
+      hideLoading();
       toast({ title: result.error || '프로필을 전환할 수 없습니다.', variant: 'destructive' });
       return;
     }
@@ -140,7 +143,6 @@ export const Sidebar: React.FC = () => {
     setShowDbViewer(false);
     selectCategory(null);
     navigate('/dashboard', { replace: true });
-    await loadCategories();
   };
 
   const { rootCategories, subCategoriesByParentId } = useMemo(() => {

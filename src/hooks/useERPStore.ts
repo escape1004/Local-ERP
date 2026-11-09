@@ -11,6 +11,7 @@ interface ERPStore {
   itemsPerPage: number;
   showDbViewer: boolean;
   currentProfile: Profile | null;
+  isProfileReady: boolean;
 
   loadCategories: () => Promise<void>;
   loadRecords: (categoryId: string, options?: { force?: boolean }) => Promise<void>;
@@ -34,6 +35,7 @@ interface ERPStore {
   invalidateCache: (categoryId?: string) => void;
   setCurrentProfile: (profile: Profile | null) => void;
   resetForProfile: () => void;
+  markProfileReady: () => void;
 }
 
 export const useERPStore = create<ERPStore>((set, get) => ({
@@ -46,6 +48,7 @@ export const useERPStore = create<ERPStore>((set, get) => ({
   itemsPerPage: 20,
   showDbViewer: false,
   currentProfile: null,
+  isProfileReady: false,
 
   loadCategories: async () => {
     if (!get().currentProfile) {
@@ -353,7 +356,10 @@ export const useERPStore = create<ERPStore>((set, get) => ({
       selectedCategoryId: null,
       searchTerm: '',
       currentPage: 1,
-      showDbViewer: false
+      showDbViewer: false,
+      isProfileReady: false,
     });
   },
+
+  markProfileReady: () => set({ isProfileReady: true }),
 }));
