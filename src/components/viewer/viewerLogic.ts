@@ -157,6 +157,16 @@ export function isViewerWheelZoomTarget(target: EventTarget | null | undefined):
   return !element.closest('#volume-slider');
 }
 
+export function isViewerVolumeSliderTarget(target: EventTarget | null | undefined): boolean {
+  if (!target || typeof (target as Element).closest !== 'function') return false;
+  return Boolean((target as Element).closest('#volume-slider'));
+}
+
+export function nextVolumeFromWheel(volume: number, isMuted: boolean, deltaY: number) {
+  const delta = deltaY > 0 ? -0.05 : 0.05;
+  return (isMuted ? 0 : volume) + delta;
+}
+
 export function getSeekTimeFromPointer(clientX: number, width: number, left: number, duration: number) {
   const ratio = width <= 0 ? 0 : Math.min(1, Math.max(0, (clientX - left) / width));
   return ratio * duration;

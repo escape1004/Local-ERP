@@ -1,123 +1,97 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Archive, FileImage, FileVideo, Minimize, RotateCcw, RotateCw, X } from 'lucide-react';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatedModal } from './ui/animated-modal';
 import { ArchiveViewer } from './viewer/ArchiveViewer';
 import { ImageViewer } from './viewer/ImageViewer';
 import { VideoViewer } from './viewer/VideoViewer';
-import type { ViewerFileType, ViewerModalProps } from './viewer/types';
+import { ViewerModalHeader, ViewerRotateOverlay } from './viewer/ViewerModalChrome';
+import type { ViewerModalProps } from './viewer/types';
 import {
-  clampPanOffset,
-  findArchiveSubtitles,
   formatMediaTime,
-  getOpenViewerSourceKey,
   hasBookmarkAtTime,
-  isImageFileName,
   isVideoFileName,
-  isViewerWheelZoomTarget,
-  nextWheelScale,
-  shouldBindViewerWheelZoom,
-  toViewerFileType,
 } from './viewer/viewerLogic';
-import { parseSubtitle } from '../lib/subtitle';
-import { getLocalVideoHttpUrl } from '../lib/local-media';
 import { useArchiveViewer } from '../hooks/useArchiveViewer';
 import { useMediaKeyboard } from '../hooks/useMediaKeyboard';
 import { exitPictureInPicture } from '../hooks/pictureInPicture';
 import { useVideoPlayback } from '../hooks/useVideoPlayback';
+import { useViewerFileLoad } from '../hooks/useViewerFileLoad';
+import { useViewerSession } from '../hooks/useViewerSession';
+import { useViewerSubtitles } from '../hooks/useViewerSubtitles';
+import { useViewerVolumeWheel, useViewerWheelZoom } from '../hooks/useViewerWheelZoom';
 
 export type { ViewerModalProps };
 
-const tooltipClassName = "relative bg-[#23272a] bg-opacity-95 text-white border border-gray-700 rounded shadow-2xl px-3 py-2 text-xs after:content-[''] after:absolute after:left-1/2 after:top-full after:-translate-x-1/2 after:border-8 after:border-x-transparent after:border-b-transparent after:border-t-[#23272a] after:mt-0.5 max-w-xs break-words";
-
 export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, fileType, categoryId = '', recordId = '', onClose }) => {
-  const [displayFilePath, setDisplayFilePath] = useState(filePath);
-  const [displayFileType, setDisplayFileType] = useState(fileType);
-  const [displayCategoryId, setDisplayCategoryId] = useState(categoryId);
-  const [displayRecordId, setDisplayRecordId] = useState(recordId);
-  const [displaySourceKey, setDisplaySourceKey] = useState(() => (
-    getOpenViewerSourceKey(isOpen, categoryId, recordId, filePath)
-  ));
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [detectedFileType, setDetectedFileType] = useState<ViewerFileType | null>(null);
-  const [fileNotFound, setFileNotFound] = useState(false);
-  const [imgScale, setImgScale] = useState(1);
-  const [imgOffset, setImgOffset] = useState({ x: 0, y: 0 });
-  const [isPanning, setIsPanning] = useState(false);
-  const [archiveImgScale, setArchiveImgScale] = useState(1);
-  const [archiveImgOffset, setArchiveImgOffset] = useState({ x: 0, y: 0 });
-  const [archiveIsPanning, setArchiveIsPanning] = useState(false);
-  const [archiveVideoScale, setArchiveVideoScale] = useState(1);
-  const [archiveVideoOffset, setArchiveVideoOffset] = useState({ x: 0, y: 0 });
-  const [archiveVideoIsPanning, setArchiveVideoIsPanning] = useState(false);
-  const [videoScale, setVideoScale] = useState(1);
-  const [videoOffset, setVideoOffset] = useState({ x: 0, y: 0 });
-  const [videoIsPanning, setVideoIsPanning] = useState(false);
-  const [imgRotation, setImgRotation] = useState(0);
-  const [videoRotation, setVideoRotation] = useState(0);
-  const [archiveImgRotation, setArchiveImgRotation] = useState(0);
+  const session = useViewerSession({ isOpen, filePath, fileType, categoryId, recordId });
+  const {
+    displayFilePath,
+    displayFileType,
+    dataUrl,
+    setDataUrl,
+    loading,
+    setLoading,
+    detectedFileType,
+    setDetectedFileType,
+    fileNotFound,
+    setFileNotFound,
+    imgScale,
+    setImgScale,
+    imgOffset,
+    setImgOffset,
+    isPanning,
+    setIsPanning,
+    archiveImgScale,
+    setArchiveImgScale,
+    archiveImgOffset,
+    setArchiveImgOffset,
+    archiveIsPanning,
+    setArchiveIsPanning,
+    archiveVideoScale,
+    setArchiveVideoScale,
+    archiveVideoOffset,
+    setArchiveVideoOffset,
+    archiveVideoIsPanning,
+    setArchiveVideoIsPanning,
+    videoScale,
+    setVideoScale,
+    videoOffset,
+    setVideoOffset,
+    videoIsPanning,
+    setVideoIsPanning,
+    imgRotation,
+    setImgRotation,
+    videoRotation,
+    setVideoRotation,
+    archiveImgRotation,
+    setArchiveImgRotation,
+    modalContainerRef,
+    imgContainerRef,
+    imgRef,
+    imageGifCanvasRef,
+    archiveImgRef,
+    archiveGifCanvasRef,
+    panStart,
+    archivePanStart,
+    archiveVideoPanStart,
+    videoPanStart,
+    imgScaleRef,
+    videoScaleRef,
+    archiveImgScaleRef,
+    archiveVideoScaleRef,
+    resetTransforms,
+    clampToContainer,
+  } = session;
+
   const [isImageGifPaused, setIsImageGifPaused] = useState(false);
   const [isArchiveGifPaused, setIsArchiveGifPaused] = useState(false);
-  const [subtitles, setSubtitles] = useState<import('./viewer/types').SubtitleSource[]>([]);
-  const [activeSubtitleId, setActiveSubtitleId] = useState<string | null>(null);
-  const [subtitleOffset, setSubtitleOffset] = useState(0);
-  const [subtitleSize, setSubtitleSize] = useState<import('./viewer/types').SubtitleSize>(() => {
-    const saved = localStorage.getItem('subtitleSize');
-    return saved === 'small' || saved === 'large' ? saved : 'medium';
-  });
-  const [subtitleColor, setSubtitleColor] = useState<import('./viewer/types').SubtitleColor>(() => (
-    localStorage.getItem('subtitleColor') === 'yellow' ? 'yellow' : 'white'
-  ));
-  const [subtitleBackground, setSubtitleBackground] = useState<import('./viewer/types').SubtitleBackground>(() => {
-    const saved = localStorage.getItem('subtitleBackground');
-    return saved === 'none' || saved === 'dark' ? saved : 'translucent';
-  });
   const [bookmarks, setBookmarks] = useState<{ time: number; createdAt: string }[]>([]);
   const [timelinePreview, setTimelinePreview] = useState<{ time: number; left: number } | null>(null);
   const [timelinePreviewSeeking, setTimelinePreviewSeeking] = useState(false);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const archiveVideoRef = useRef<HTMLVideoElement>(null);
-  const modalContainerRef = useRef<HTMLDivElement>(null);
-  const imgContainerRef = useRef<HTMLDivElement>(null);
-  const imgRef = useRef<HTMLImageElement>(null);
-  const imageGifCanvasRef = useRef<HTMLCanvasElement>(null);
-  const archiveImgRef = useRef<HTMLImageElement>(null);
-  const archiveGifCanvasRef = useRef<HTMLCanvasElement>(null);
   const timelinePreviewVideoRef = useRef<HTMLVideoElement>(null);
-  const panStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const archivePanStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const archiveVideoPanStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const videoPanStart = useRef<{ x: number; y: number; offsetX: number; offsetY: number } | null>(null);
-  const imgScaleRef = useRef(1);
-  const videoScaleRef = useRef(1);
-  const archiveImgScaleRef = useRef(1);
-  const archiveVideoScaleRef = useRef(1);
   const countedViewKeyRef = useRef<string | null>(null);
-  const incomingSourceKey = getOpenViewerSourceKey(isOpen, categoryId, recordId, filePath);
-  if (incomingSourceKey && incomingSourceKey !== displaySourceKey) {
-    setDisplaySourceKey(incomingSourceKey);
-    setDisplayFilePath(filePath);
-    setDisplayFileType(fileType);
-    setDisplayCategoryId(categoryId);
-    setDisplayRecordId(recordId);
-    setDataUrl(null);
-    setDetectedFileType(fileType);
-    setFileNotFound(false);
-    setLoading(true);
-    setImgScale(1);
-    setImgOffset({ x: 0, y: 0 });
-    setVideoScale(1);
-    setVideoOffset({ x: 0, y: 0 });
-    setArchiveImgScale(1);
-    setArchiveImgOffset({ x: 0, y: 0 });
-    setArchiveVideoScale(1);
-    setArchiveVideoOffset({ x: 0, y: 0 });
-    setImgRotation(0);
-    setVideoRotation(0);
-    setArchiveImgRotation(0);
-  }
 
   const archive = useArchiveViewer({
     isOpen,
@@ -136,6 +110,59 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     currentArchiveIndex: archive.currentArchiveIndex,
     videoRef,
     archiveVideoRef,
+  });
+
+  const subtitles = useViewerSubtitles({
+    isOpen,
+    displayFilePath,
+    displayFileType,
+    detectedFileType,
+    archiveFiles: archive.archiveFiles,
+    currentArchiveIndex: archive.currentArchiveIndex,
+  });
+
+  useViewerFileLoad({
+    displayFilePath,
+    displayFileType,
+    setDataUrl,
+    setLoading,
+    setFileNotFound,
+    setDetectedFileType,
+    loadArchiveFiles: archive.loadArchiveFiles,
+    resetArchiveState: archive.resetArchiveState,
+    setIsPlaying: playback.setIsPlaying,
+    setVideoError: playback.setVideoError,
+    setPlaybackSpeed: playback.setPlaybackSpeed,
+  });
+
+  useViewerVolumeWheel({
+    isOpen,
+    volume: playback.volume,
+    isMuted: playback.isMuted,
+    onVolumeChange: playback.handleVolumeChange,
+  });
+
+  useViewerWheelZoom({
+    isOpen,
+    fileType,
+    detectedFileType,
+    dataUrl,
+    archiveFiles: archive.archiveFiles,
+    currentArchiveIndex: archive.currentArchiveIndex,
+    currentArchiveDataUrl: archive.currentArchiveDataUrl,
+    imgScaleRef,
+    videoScaleRef,
+    archiveImgScaleRef,
+    archiveVideoScaleRef,
+    setImgScale,
+    setImgOffset,
+    setVideoScale,
+    setVideoOffset,
+    setArchiveImgScale,
+    setArchiveImgOffset,
+    setArchiveVideoScale,
+    setArchiveVideoOffset,
+    clampToContainer,
   });
 
   const handleClose = useCallback(() => {
@@ -180,11 +207,6 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     onPreviousArchive: () => void archive.handlePrevious(),
     onNextArchive: () => void archive.handleNext(),
   });
-
-  const activeSubtitleCues = useMemo(() => {
-    const activeSubtitle = subtitles.find((subtitle) => subtitle.id === activeSubtitleId);
-    return activeSubtitle?.cues || [];
-  }, [activeSubtitleId, subtitles]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -250,73 +272,6 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   }, [isOpen, playback.setVideoAutoPlay, playback.setVideoSeekSeconds]);
 
   useEffect(() => {
-    localStorage.setItem('subtitleSize', subtitleSize);
-  }, [subtitleSize]);
-  useEffect(() => {
-    localStorage.setItem('subtitleColor', subtitleColor);
-  }, [subtitleColor]);
-  useEffect(() => {
-    localStorage.setItem('subtitleBackground', subtitleBackground);
-  }, [subtitleBackground]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setSubtitles([]);
-      setActiveSubtitleId(null);
-      return;
-    }
-
-    let cancelled = false;
-    const loadSubtitles = async () => {
-      const effectiveType = displayFileType || detectedFileType;
-      let loadedSubtitles: typeof subtitles = [];
-      try {
-        if (effectiveType === 'video' && displayFilePath) {
-          const sources = await window.electronAPI.getVideoSubtitles(displayFilePath);
-          loadedSubtitles = sources
-            .map((source) => ({
-              id: source.id,
-              name: source.name,
-              cues: parseSubtitle(source.content, source.name),
-            }))
-            .filter((source) => source.cues.length > 0);
-        } else if (effectiveType === 'archive' && archive.currentArchiveIndex >= 0) {
-          const currentFile = archive.archiveFiles[archive.currentArchiveIndex];
-          if (currentFile && isVideoFileName(currentFile.name)) {
-            const matches = findArchiveSubtitles(archive.archiveFiles, currentFile.name);
-            const sources = await Promise.all(matches.map(async (subtitle) => ({
-              id: `archive:${subtitle.name}`,
-              name: subtitle.name.replace(/\\/g, '/').split('/').pop() || subtitle.name,
-              content: await window.electronAPI.getArchiveFileText(displayFilePath, subtitle.name),
-            })));
-            loadedSubtitles = sources
-              .filter((source): source is typeof source & { content: string } => typeof source.content === 'string')
-              .map((source) => ({
-                id: source.id,
-                name: source.name,
-                cues: parseSubtitle(source.content, source.name),
-              }))
-              .filter((source) => source.cues.length > 0);
-          }
-        }
-      } catch (error) {
-        console.error('자막 로드 실패:', error);
-      }
-
-      if (!cancelled) {
-        setSubtitles(loadedSubtitles);
-        setActiveSubtitleId(loadedSubtitles[0]?.id ?? null);
-        setSubtitleOffset(0);
-      }
-    };
-
-    void loadSubtitles();
-    return () => {
-      cancelled = true;
-    };
-  }, [archive.archiveFiles, archive.currentArchiveIndex, detectedFileType, displayFilePath, displayFileType, isOpen]);
-
-  useEffect(() => {
     playback.clearLoopSelection();
   }, [archive.currentArchiveIndex, displayFilePath, displayFileType, isOpen, playback.clearLoopSelection]);
 
@@ -355,112 +310,9 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     }
   }, [categoryId, detectedFileType, filePath, fileType, isOpen, recordId]);
 
-  useEffect(() => { videoScaleRef.current = videoScale; }, [videoScale]);
-  useEffect(() => { imgScaleRef.current = imgScale; }, [imgScale]);
-  useEffect(() => { archiveImgScaleRef.current = archiveImgScale; }, [archiveImgScale]);
-  useEffect(() => { archiveVideoScaleRef.current = archiveVideoScale; }, [archiveVideoScale]);
-
   useEffect(() => {
-    if (!displayFilePath) {
-      setDataUrl(null);
-      archive.resetArchiveState();
-      playback.setIsPlaying(false);
-      playback.setVideoError(null);
-      setFileNotFound(false);
-      playback.setPlaybackSpeed(1.0);
-      setDetectedFileType(null);
-      return;
-    }
-
-    let cancelled = false;
-    const applyDataUrl = (url: string | null) => {
-      if (cancelled) return;
-      if (url === null || url === 'error') {
-        setFileNotFound(true);
-        setDataUrl(null);
-      } else {
-        setDataUrl(url);
-      }
-      setLoading(false);
-    };
-
-    if (!displayFileType) {
-      setLoading(true);
-      setFileNotFound(false);
-      setDetectedFileType(null);
-      window.electronAPI.getFileType(displayFilePath).then((detectedType) => {
-        if (cancelled) return;
-        setDetectedFileType(toViewerFileType(detectedType));
-        if (detectedType === 'image' || detectedType === 'video') {
-          playback.setPlaybackSpeed(1.0);
-          window.electronAPI.getFileDataUrl(displayFilePath).then(async (url) => {
-            if (cancelled) return;
-            if (detectedType === 'video' && url === 'stream') {
-              applyDataUrl(await getLocalVideoHttpUrl(displayFilePath));
-              return;
-            }
-            applyDataUrl(url);
-          }).catch((error) => {
-            if (cancelled) return;
-            console.error('파일 로드 실패:', error);
-            setFileNotFound(true);
-            setDataUrl(null);
-            setLoading(false);
-          });
-        } else if (detectedType === 'archive') {
-          archive.loadArchiveFiles().catch((error) => {
-            if (cancelled) return;
-            console.error('압축파일 로드 실패:', error);
-            setFileNotFound(true);
-            setLoading(false);
-          });
-        } else {
-          setFileNotFound(true);
-          setDataUrl(null);
-          setLoading(false);
-        }
-      }).catch((error) => {
-        if (cancelled) return;
-        console.error('파일 타입 확인 실패:', error);
-        setFileNotFound(true);
-        setDataUrl(null);
-        setLoading(false);
-      });
-      return () => {
-        cancelled = true;
-      };
-    }
-
-    if (displayFileType === 'image' || displayFileType === 'video') {
-      playback.setPlaybackSpeed(1.0);
-      setLoading(true);
-      setFileNotFound(false);
-      window.electronAPI.getFileDataUrl(displayFilePath).then(async (url) => {
-        if (cancelled) return;
-        if (displayFileType === 'video' && url === 'stream') {
-          applyDataUrl(await getLocalVideoHttpUrl(displayFilePath));
-          return;
-        }
-        applyDataUrl(url);
-      }).catch((error) => {
-        if (cancelled) return;
-        console.error('파일 로드 실패:', error);
-        setFileNotFound(true);
-        setDataUrl(null);
-        setLoading(false);
-      });
-    } else if (displayFileType === 'archive') {
-      setLoading(true);
-      setFileNotFound(false);
-      void archive.loadArchiveFiles();
-    } else {
-      setDataUrl(null);
-    }
-
-    return () => {
-      cancelled = true;
-    };
-  }, [archive.loadArchiveFiles, archive.resetArchiveState, displayFilePath, displayFileType, playback.setIsPlaying, playback.setPlaybackSpeed, playback.setVideoError]);
+    resetTransforms();
+  }, [filePath, fileType, archive.currentArchiveIndex, resetTransforms]);
 
   useEffect(() => {
     if (!timelinePreview) return;
@@ -478,85 +330,6 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   }, [archive.currentArchiveDataUrl, archive.currentArchiveIndex, dataUrl, isOpen]);
 
   useEffect(() => {
-    setVideoScale(1);
-    setVideoOffset({ x: 0, y: 0 });
-    setImgScale(1);
-    setImgOffset({ x: 0, y: 0 });
-    setImgRotation(0);
-    setVideoRotation(0);
-    setArchiveImgRotation(0);
-    setArchiveImgScale(1);
-    setArchiveImgOffset({ x: 0, y: 0 });
-    setArchiveVideoScale(1);
-    setArchiveVideoOffset({ x: 0, y: 0 });
-  }, [filePath, fileType, archive.currentArchiveIndex]);
-
-  const clampToContainer = useCallback((offset: { x: number; y: number }, scale: number) => {
-    if (!imgContainerRef.current) return offset;
-    const rect = imgContainerRef.current.getBoundingClientRect();
-    return clampPanOffset(offset, scale, rect.width, rect.height);
-  }, []);
-
-  useEffect(() => {
-    if (!shouldBindViewerWheelZoom(isOpen)) return;
-
-    const handleWheel = (event: WheelEvent) => {
-      if (!isViewerWheelZoomTarget(event.target)) return;
-
-      const effectiveType = fileType || detectedFileType;
-      const currentArchiveFile = archive.archiveFiles[archive.currentArchiveIndex];
-      const isArchiveImage = isImageFileName(currentArchiveFile?.name);
-      const isArchiveVideo = isVideoFileName(currentArchiveFile?.name);
-
-      let currentScale = 0;
-      let applyScale: ((nextScale: number) => void) | null = null;
-
-      if (effectiveType === 'image' && dataUrl) {
-        currentScale = imgScaleRef.current;
-        applyScale = (nextScale) => {
-          setImgScale(nextScale);
-          setImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-        };
-      } else if (effectiveType === 'video' && dataUrl) {
-        currentScale = videoScaleRef.current;
-        applyScale = (nextScale) => {
-          setVideoScale(nextScale);
-          setVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-        };
-      } else if (effectiveType === 'archive' && archive.currentArchiveDataUrl && isArchiveImage) {
-        currentScale = archiveImgScaleRef.current;
-        applyScale = (nextScale) => {
-          setArchiveImgScale(nextScale);
-          setArchiveImgOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-        };
-      } else if (effectiveType === 'archive' && archive.currentArchiveDataUrl && isArchiveVideo) {
-        currentScale = archiveVideoScaleRef.current;
-        applyScale = (nextScale) => {
-          setArchiveVideoScale(nextScale);
-          setArchiveVideoOffset((prevOffset) => (nextScale === 1 ? { x: 0, y: 0 } : clampToContainer(prevOffset, nextScale)));
-        };
-      }
-
-      if (!applyScale) return;
-
-      event.preventDefault();
-      applyScale(nextWheelScale(currentScale, event.deltaY));
-    };
-
-    document.addEventListener('wheel', handleWheel, { capture: true, passive: false });
-    return () => document.removeEventListener('wheel', handleWheel, { capture: true });
-  }, [
-    archive.archiveFiles,
-    archive.currentArchiveDataUrl,
-    archive.currentArchiveIndex,
-    clampToContainer,
-    dataUrl,
-    detectedFileType,
-    fileType,
-    isOpen,
-  ]);
-
-  useEffect(() => {
     if (!isOpen) return;
     const focusModal = () => modalContainerRef.current?.focus();
     focusModal();
@@ -567,19 +340,6 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
       window.cancelAnimationFrame(rafId);
     };
   }, [archive.currentArchiveDataUrl, dataUrl, detectedFileType, isOpen]);
-
-  useEffect(() => {
-    const volumeSliders = document.querySelectorAll('#volume-slider');
-    const handleWheel = (event: WheelEvent) => {
-      event.preventDefault();
-      const delta = event.deltaY > 0 ? -0.05 : 0.05;
-      playback.handleVolumeChange((playback.isMuted ? 0 : playback.volume) + delta);
-    };
-    volumeSliders.forEach((slider) => slider.addEventListener('wheel', handleWheel, { passive: false }));
-    return () => {
-      volumeSliders.forEach((slider) => slider.removeEventListener('wheel', handleWheel));
-    };
-  }, [playback.handleVolumeChange, playback.isMuted, playback.volume]);
 
   const handleAddBookmark = () => {
     if ((fileType || detectedFileType) !== 'video') return;
@@ -620,13 +380,13 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
       : null;
 
   const subtitleMenu = {
-    subtitles,
-    activeSubtitleId,
-    onSubtitleChange: setActiveSubtitleId,
-    onSubtitleSizeChange: setSubtitleSize,
-    onSubtitleColorChange: setSubtitleColor,
-    onSubtitleBackgroundChange: setSubtitleBackground,
-    onSubtitleOffsetChange: setSubtitleOffset,
+    subtitles: subtitles.subtitles,
+    activeSubtitleId: subtitles.activeSubtitleId,
+    onSubtitleChange: subtitles.setActiveSubtitleId,
+    onSubtitleSizeChange: subtitles.setSubtitleSize,
+    onSubtitleColorChange: subtitles.setSubtitleColor,
+    onSubtitleBackgroundChange: subtitles.setSubtitleBackground,
+    onSubtitleOffsetChange: subtitles.setSubtitleOffset,
   };
 
   const handleTimelinePreviewMove = (event: React.MouseEvent<HTMLDivElement>) => {
@@ -639,6 +399,12 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
       time: (pointerX / rect.width) * playback.duration,
       left: Math.min(rect.width - 88, Math.max(88, pointerX)),
     });
+  };
+
+  const rotateCurrentFile = (direction: -90 | 90) => {
+    if (effectiveFileType === 'image') setImgRotation((value) => (value + direction) % 360);
+    else if (effectiveFileType === 'video') setVideoRotation((value) => (value + direction) % 360);
+    else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value + direction) % 360);
   };
 
   const renderTimelinePreview = () => (
@@ -701,11 +467,11 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     showSpeedMenu: playback.showSpeedMenu,
     isFullscreen: playback.isFullscreen,
     timelinePreview: renderTimelinePreview(),
-    subtitleCues: activeSubtitleCues,
-    subtitleOffset,
-    subtitleSize,
-    subtitleColor,
-    subtitleBackground,
+    subtitleCues: subtitles.activeSubtitleCues,
+    subtitleOffset: subtitles.subtitleOffset,
+    subtitleSize: subtitles.subtitleSize,
+    subtitleColor: subtitles.subtitleColor,
+    subtitleBackground: subtitles.subtitleBackground,
     subtitleMenu,
     onPlay: () => playback.setIsPlaying(true),
     onPause: () => playback.setIsPlaying(false),
@@ -752,83 +518,23 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
         tabIndex={0}
         data-modal-container
       >
-        {!playback.isFullscreen && <div className="flex-shrink-0 flex items-center justify-between p-4 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            {effectiveFileType === 'image' && <FileImage size={20} className="text-blue-400" />}
-            {effectiveFileType === 'video' && <FileVideo size={20} className="text-green-400" />}
-            {effectiveFileType === 'archive' && <Archive size={20} className="text-orange-400" />}
-            <span className="text-discord-text font-medium truncate max-w-md">{fileName}</span>
-            {effectiveFileType === 'archive' && (
-              <span className="text-discord-muted text-sm">
-                ({Math.max(0, archive.currentArchiveNavigationIndex + 1)} / {archive.navigableArchiveFiles.length})
-              </span>
-            )}
-          </div>
-          <button onClick={handleClose} className="text-discord-muted hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-        </div>}
+        <ViewerModalHeader
+          isFullscreen={playback.isFullscreen}
+          fileName={fileName}
+          effectiveFileType={effectiveFileType}
+          archivePositionLabel={`(${Math.max(0, archive.currentArchiveNavigationIndex + 1)} / ${archive.navigableArchiveFiles.length})`}
+          onClose={handleClose}
+        />
 
         <div className="flex-1 min-h-0 flex items-center justify-center relative" style={{ overflow: 'hidden' }}>
-          {(canRotateCurrentFile || (playback.isFullscreen && !isCurrentVideo)) && (
-            <div className="absolute top-4 right-4 z-20 flex gap-2">
-              {playback.isFullscreen && !isCurrentVideo && (
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => void playback.handleFullscreenToggle()}
-                        aria-label="전체화면 해제"
-                        className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-                      >
-                        <Minimize size={20} />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top" align="center" className={tooltipClassName}>전체화면 해제 (F)</TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              )}
-              {canRotateCurrentFile && (
-                <>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => {
-                            if (effectiveFileType === 'image') setImgRotation((value) => (value - 90) % 360);
-                            else if (effectiveFileType === 'video') setVideoRotation((value) => (value - 90) % 360);
-                            else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value - 90) % 360);
-                          }}
-                          className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-                        >
-                          <RotateCcw size={20} />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="center" className={tooltipClassName}>왼쪽으로 90도 회전</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger asChild>
-                        <button
-                          onClick={() => {
-                            if (effectiveFileType === 'image') setImgRotation((value) => (value + 90) % 360);
-                            else if (effectiveFileType === 'video') setVideoRotation((value) => (value + 90) % 360);
-                            else if (effectiveFileType === 'archive' && currentFileExt !== 'txt') setArchiveImgRotation((value) => (value + 90) % 360);
-                          }}
-                          className="p-2 rounded bg-black/70 text-white hover:bg-black/90 transition-colors backdrop-blur-sm"
-                        >
-                          <RotateCw size={20} />
-                        </button>
-                      </TooltipTrigger>
-                      <TooltipContent side="top" align="center" className={tooltipClassName}>오른쪽으로 90도 회전</TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </>
-              )}
-            </div>
-          )}
+          <ViewerRotateOverlay
+            isFullscreen={playback.isFullscreen}
+            canRotateCurrentFile={Boolean(canRotateCurrentFile)}
+            isCurrentVideo={Boolean(isCurrentVideo)}
+            onExitFullscreen={() => void playback.handleFullscreenToggle()}
+            onRotateLeft={() => rotateCurrentFile(-90)}
+            onRotateRight={() => rotateCurrentFile(90)}
+          />
 
           {loading ? (
             <div className="flex items-center justify-center">

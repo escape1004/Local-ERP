@@ -20,7 +20,9 @@ import {
   nextPlaybackSpeed,
   toViewerFileType,
   nextWheelScale,
+  isViewerVolumeSliderTarget,
   isViewerWheelZoomTarget,
+  nextVolumeFromWheel,
   prepareArchiveEntries,
   shouldBindViewerWheelZoom,
 } from './viewerLogic';
@@ -50,6 +52,18 @@ test('binds wheel zoom only while the viewer is open and the cursor is over the 
       selector === '[data-viewer-zoom]' || selector === '#volume-slider' ? {} : null
     ),
   } as EventTarget)).toBe(false);
+});
+
+test('handles volume-slider wheel without waiting for the slider node to exist first', () => {
+  expect(isViewerVolumeSliderTarget(null)).toBe(false);
+  expect(isViewerVolumeSliderTarget({
+    closest: (selector: string) => (selector === '#volume-slider' ? {} : null),
+  } as EventTarget)).toBe(true);
+  expect(isViewerVolumeSliderTarget({
+    closest: () => null,
+  } as EventTarget)).toBe(false);
+  expect(nextVolumeFromWheel(0.5, false, 100)).toBeCloseTo(0.45);
+  expect(nextVolumeFromWheel(0.5, true, -100)).toBeCloseTo(0.05);
 });
 
 test('formats media time and clamps invalid values', () => {
