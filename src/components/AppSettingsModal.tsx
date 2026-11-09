@@ -2134,7 +2134,7 @@ export function AppSettingsModal({
           <div>
             <div className="text-sm font-medium text-white">자리 비움 시 자동 잠금</div>
             <p className="mt-2 text-sm leading-6 text-discord-muted">
-              마우스나 키보드 입력이 없으면 잠금 화면으로 돌아갑니다. 창이 활성화된 채로 영상을 보고 있으면 잠기지 않습니다.
+              마우스나 키보드 입력이 없으면 잠금 화면으로 돌아갑니다. 본 앱이나 브라우저에서 영상을 보고 있으면 잠기지 않습니다. 브라우저 창이 열려 있는 것만으로는 잠기지 않습니다.
             </p>
           </div>
           <Switch

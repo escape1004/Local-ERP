@@ -1,12 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Toaster } from '@/components/ui/toaster';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
-import { HashRouter, Routes, Route, Navigate, useNavigate, useSearchParams } from 'react-router-dom';
-import { Eye, EyeOff, Lock, Plus, X } from 'lucide-react';
-import Index from './pages/Index';
-import Dashboard from './pages/Dashboard';
-import BrowserPage from './pages/Browser';
-import NotFound from './pages/NotFound';
+import { TooltipProvider } from '@/components/ui/tooltip';
+import { HashRouter } from 'react-router-dom';
+import { X } from 'lucide-react';
 import { TitleBar } from './components/TitleBar';
 import { LoadingOverlay } from './components/ui/loading-overlay';
 import { AppSettingsModal } from './components/AppSettingsModal';
@@ -17,23 +13,26 @@ import {
   DialogContent,
   DialogTitle,
 } from './components/ui/dialog';
-import {
-  ContextMenu,
-  ContextMenuContent,
-  ContextMenuItem,
-  ContextMenuTrigger,
-} from './components/ui/context-menu';
 import { useERPStore } from './hooks/useERPStore';
 import { useLoadingStore } from './hooks/useLoadingStore';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { toast } from './components/ui/use-toast';
 import { isStandaloneBrowserWindow } from './lib/browserNavigation';
 import { isProfileHydrationPending, shouldHideAppUntilReady } from './lib/profileHydration';
+import { hasFocusedMediaPlayback, nextIdleActivityAt, shouldIdleLock, silenceAppForLock } from './lib/appLock';
+import {
+  PROFILE_COLORS,
+  RAINBOW_PROFILE_COLOR,
+  formatPasswordLockRemainingLabel,
+  getProfileSwatchStyle,
+  isDefaultProfile,
+  normalizeProfileColor,
+} from './lib/profileAppearance';
+import { RouterContent, StandaloneBrowserShell } from './components/AppRouter';
+import { AppProfileSelect } from './components/AppProfileSelect';
+import { AppPasswordGate } from './components/AppPasswordGate';
 import type { AppUpdateState, Profile } from './types';
 
-const PROFILE_COLORS = ['#5865F2', '#3BA55D', '#F97316', '#EC4899', '#0EA5E9', '#EAB308'];
-const RAINBOW_PROFILE_COLOR = 'rainbow';
-const DEFAULT_PROFILE_NAME = '기본 프로필';
 const INITIAL_UPDATE_STATE: AppUpdateState = {
   status: 'idle',
   currentVersion: '...',
@@ -45,128 +44,6 @@ const INITIAL_UPDATE_STATE: AppUpdateState = {
   bytesPerSecond: 0,
   error: null,
 };
-
-function normalizeProfileColor(value: string) {
-  if (value === RAINBOW_PROFILE_COLOR) return value;
-
-  const normalized = value.trim();
-  return /^#[0-9a-fA-F]{6}$/.test(normalized) ? normalized.toUpperCase() : PROFILE_COLORS[0];
-}
-
-function getProfileSwatchStyle(color?: string): React.CSSProperties {
-  if (color === RAINBOW_PROFILE_COLOR) {
-    return {
-      backgroundImage: 'linear-gradient(135deg, #ff5f6d 0%, #ffc371 22%, #47cf73 44%, #3b82f6 68%, #a855f7 100%)',
-    };
-  }
-
-  return {
-    backgroundColor: normalizeProfileColor(color || PROFILE_COLORS[0]),
-  };
-}
-
-function isDefaultProfile(profile: Pick<Profile, 'name'>) {
-  return profile.name === DEFAULT_PROFILE_NAME;
-}
-
-function BrowserRoute() {
-  const standalone = isStandaloneBrowserWindow();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-
-  useEffect(() => {
-    if (standalone) return undefined;
-    const url = searchParams.get('url') || '';
-    void window.electronAPI.openBrowserWindow(url || undefined);
-    navigate('/dashboard', { replace: true });
-    return undefined;
-  }, [navigate, searchParams, standalone]);
-
-  if (!standalone) return null;
-  return <BrowserPage />;
-}
-
-const RouterContent = () => {
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    const currentPath = window.location.hash || '#/dashboard';
-
-    window.history.pushState({ preventBack: true }, '', currentPath);
-    window.history.pushState({ preventBack: true }, '', currentPath);
-
-    const handlePopState = () => {
-      const savedPath = window.location.hash || '#/dashboard';
-      window.history.pushState({ preventBack: true }, '', savedPath);
-      window.history.pushState({ preventBack: true }, '', savedPath);
-      navigate(savedPath.replace('#', ''));
-    };
-
-    window.addEventListener('popstate', handlePopState);
-
-    return () => {
-      window.removeEventListener('popstate', handlePopState);
-    };
-  }, [navigate]);
-
-  return (
-    <Routes>
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="/dashboard" element={<Dashboard />} />
-      <Route path="/browser" element={<BrowserRoute />} />
-      <Route path="/category" element={<Index />} />
-      <Route path="*" element={<NotFound />} />
-    </Routes>
-  );
-};
-
-type GateCardProps = {
-  title: string;
-  description: string;
-  children: React.ReactNode;
-  className?: string;
-};
-
-function GateCard({ title, description, children, className = 'max-w-5xl' }: GateCardProps) {
-  return (
-    <div className={`w-full rounded-2xl border border-gray-700 bg-discord-sidebar/95 shadow-2xl ${className}`}>
-      <div className="border-b border-gray-700 px-8 py-6">
-        <h2 className="text-2xl font-semibold text-white">{title}</h2>
-        <p className="mt-2 text-sm text-discord-muted">{description}</p>
-      </div>
-      <div className="p-8">{children}</div>
-    </div>
-  );
-}
-
-function hasFocusedMediaPlayback() {
-  if (!document.hasFocus()) return false;
-
-  return Array.from(document.querySelectorAll('video, audio')).some((element) => {
-    const media = element as HTMLMediaElement;
-    return !media.paused && !media.ended;
-  });
-}
-
-async function silenceAppForLock() {
-  document.querySelectorAll('video, audio').forEach((element) => {
-    (element as HTMLMediaElement).pause();
-  });
-
-  if (document.pictureInPictureElement) {
-    try {
-      await document.exitPictureInPicture();
-    } catch {
-      // Picture-in-picture may already have been closed.
-    }
-  }
-
-  try {
-    await window.electronAPI.setPictureInPictureActive(false);
-  } catch {
-    // Ignore IPC failures while locking.
-  }
-}
 
 const App = () => {
   const { currentProfile, isProfileReady, setCurrentProfile, resetForProfile, setShowDbViewer, selectCategory } = useERPStore();
@@ -207,7 +84,7 @@ const App = () => {
   const passwordLockRemainingSeconds = passwordLockUntil
     ? Math.max(0, Math.ceil((passwordLockUntil - passwordLockNow) / 1000))
     : 0;
-  const passwordLockRemainingLabel = `${Math.floor(passwordLockRemainingSeconds / 60)}\uBD84 ${passwordLockRemainingSeconds % 60}\uCD08`;
+  const passwordLockRemainingLabel = formatPasswordLockRemainingLabel(passwordLockRemainingSeconds);
 
   useEffect(() => {
     let active = true;
@@ -340,21 +217,20 @@ const App = () => {
 
     const intervalId = window.setInterval(() => {
       void (async () => {
-        if (hasFocusedMediaPlayback()) {
-          lastActivityAtRef.current = Date.now();
-          return;
-        }
-
+        let browserIdle = null;
         try {
-          if (await window.electronAPI.isBrowserWindowFocused()) {
-            lastActivityAtRef.current = Date.now();
-            return;
-          }
+          browserIdle = await window.electronAPI.getBrowserIdleState();
         } catch {
           // Ignore IPC failures while checking the browser window.
         }
 
-        if (Date.now() - lastActivityAtRef.current < idleLockMinutes * 60 * 1000) {
+        const now = Date.now();
+        const next = nextIdleActivityAt(lastActivityAtRef.current, now, {
+          hasFocusedMediaPlayback: hasFocusedMediaPlayback(),
+          browser: browserIdle,
+        });
+        lastActivityAtRef.current = next.activityAt;
+        if (next.keepAwake || !shouldIdleLock(next.activityAt, now, idleLockMinutes)) {
           return;
         }
 
@@ -609,6 +485,9 @@ const App = () => {
       setProfileError(error instanceof Error ? error.message : '프로필 저장 중 오류가 발생했습니다.');
     } finally {
       setIsProfileBusy(false);
+      if (editingProfile) {
+        hideLoading();
+      }
     }
   };
 
@@ -669,21 +548,7 @@ const App = () => {
   };
 
   if (isStandaloneBrowserWindow()) {
-    return (
-      <TooltipProvider>
-        <div className="h-screen w-screen flex flex-col bg-discord-bg font-noto">
-          <div className="flex-1 min-h-0">
-            <HashRouter>
-              <Routes>
-                <Route path="/browser" element={<BrowserPage />} />
-                <Route path="*" element={<Navigate to="/browser" replace />} />
-              </Routes>
-            </HashRouter>
-            <Toaster />
-          </div>
-        </div>
-      </TooltipProvider>
-    );
+    return <StandaloneBrowserShell />;
   }
 
   return (
@@ -709,157 +574,40 @@ const App = () => {
                     <Toaster />
                   </div>
                 ) : requiresPassword ? null : (
-                  <div className="h-full flex items-center justify-center bg-discord-bg p-6">
-                    <GateCard
-                      title="프로필 선택"
-                      description="프로필마다 카테고리와 대시보드 통계가 분리됩니다."
-                    >
-                  <div className="flex justify-center">
-                    <div className="w-fit max-w-full">
-                      <div className="flex flex-wrap justify-center gap-x-8 gap-y-10">
-                        {profiles.map((profile) => (
-                          <ContextMenu key={profile.id}>
-                            <ContextMenuTrigger asChild>
-                              <button
-                                type="button"
-                                disabled={isProfileBusy}
-                                onClick={() => void handleSelectProfile(profile)}
-                                className="group flex w-[132px] flex-col items-center text-center disabled:opacity-60"
-                              >
-                                <div
-                                  className="relative flex aspect-square w-full items-center justify-center rounded-xl text-4xl font-semibold text-white transition duration-200 group-hover:scale-[1.03] group-hover:ring-2 group-hover:ring-white/70"
-                                  style={getProfileSwatchStyle(profile.avatarColor)}
-                                >
-                                  {isDefaultProfile(profile) && (
-                                    <Tooltip>
-                                      <TooltipTrigger asChild>
-                                        <div className="absolute left-2 top-2 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 ring-1 ring-white/15">
-                                          <Lock className="h-4 w-4 text-white" />
-                                        </div>
-                                      </TooltipTrigger>
-                                      <TooltipContent className="max-w-[220px] bg-discord-sidebar text-discord-text border-gray-700">
-                                        기본 프로필입니다, 삭제가 불가능합니다.
-                                      </TooltipContent>
-                                    </Tooltip>
-                                  )}
-                                  {profile.name.charAt(0).toUpperCase()}
-                                </div>
-                                <div className="mt-4 text-xl font-medium text-gray-300 transition group-hover:text-white">
-                                  {profile.name}
-                                </div>
-                              </button>
-                            </ContextMenuTrigger>
-                            <ContextMenuContent>
-                              <ContextMenuItem onClick={() => openEditProfileModal(profile)}>
-                                프로필 수정
-                              </ContextMenuItem>
-                              <ContextMenuItem
-                                disabled={isDefaultProfile(profile)}
-                                className="text-red-400 focus:text-red-300 data-[disabled]:pointer-events-none data-[disabled]:opacity-40"
-                                onClick={() => {
-                                  if (isDefaultProfile(profile)) return;
-                                  setDeleteTargetProfile(profile);
-                                  setDeleteInput('');
-                                  setProfileError('');
-                                  setShowDeleteConfirm(true);
-                                }}
-                              >
-                                프로필 삭제
-                              </ContextMenuItem>
-                            </ContextMenuContent>
-                          </ContextMenu>
-                        ))}
-
-                        <button
-                          type="button"
-                          onClick={openCreateProfileModal}
-                          className="group flex w-[132px] flex-col items-center text-center"
-                        >
-                          <div className="flex aspect-square w-full items-center justify-center rounded-full bg-gray-500/80 text-black transition duration-200 group-hover:scale-[1.03] group-hover:bg-gray-400">
-                            <Plus className="h-16 w-16" strokeWidth={2.5} />
-                          </div>
-                          <div className="mt-4 text-xl font-medium text-gray-400 transition group-hover:text-white">
-                            프로필 추가
-                          </div>
-                        </button>
-                      </div>
-
-                      {profileError && <p className="mt-8 text-center text-sm text-red-400">{profileError}</p>}
-                    </div>
-                  </div>
-                </GateCard>
-              </div>
+                  <AppProfileSelect
+                    profiles={profiles}
+                    isProfileBusy={isProfileBusy}
+                    profileError={profileError}
+                    onSelect={(profile) => void handleSelectProfile(profile)}
+                    onEdit={openEditProfileModal}
+                    onDelete={(profile) => {
+                      setDeleteTargetProfile(profile);
+                      setDeleteInput('');
+                      setProfileError('');
+                      setShowDeleteConfirm(true);
+                    }}
+                    onCreate={openCreateProfileModal}
+                  />
                 )}
                 {requiresPassword && (
-                  <div
-                    className={`${currentProfile ? 'absolute inset-0 z-50' : 'h-full'} flex items-center justify-center bg-discord-bg p-6`}
-                    onMouseDownCapture={(e) => {
-                      if (e.target === passwordInputRef.current) return;
-                      if ((e.target as HTMLElement).closest('[data-password-toggle]')) return;
-                      e.preventDefault();
-                      keepPasswordInputFocus();
+                  <AppPasswordGate
+                    currentProfile={currentProfile}
+                    passwordInput={passwordInput}
+                    showPassword={showPassword}
+                    isPasswordLocked={isPasswordLocked}
+                    passwordError={passwordError}
+                    passwordLockRemainingLabel={passwordLockRemainingLabel}
+                    passwordInputRef={passwordInputRef}
+                    onPasswordChange={(value) => {
+                      setPasswordInput(value);
+                      setPasswordError('');
                     }}
-                  >
-                    <GateCard
-                      title="앱 잠금 해제"
-                      description={currentProfile
-                        ? '자리를 비운 동안 앱이 잠겼습니다. 비밀번호를 입력하면 이어서 사용할 수 있습니다.'
-                        : '비밀번호를 입력한 뒤 프로필을 선택할 수 있습니다.'}
-                      className="max-w-md"
-                    >
-                      <div className="max-w-md space-y-3">
-                        <div className="relative">
-                          <Input
-                            ref={passwordInputRef}
-                            type={showPassword ? 'text' : 'password'}
-                            value={passwordInput}
-                            onChange={(e) => {
-                              setPasswordInput(e.target.value);
-                              setPasswordError('');
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') {
-                                void handleUnlock();
-                              }
-                            }}
-                            onBlur={() => {
-                              if (requiresPassword && !isPasswordLocked) {
-                                keepPasswordInputFocus();
-                              }
-                            }}
-                            className="bg-discord-bg border-gray-600 pr-10 text-discord-text"
-                            placeholder="비밀번호"
-                            autoFocus
-                            disabled={isPasswordLocked}
-                          />
-                          <button
-                            type="button"
-                            data-password-toggle
-                            className="absolute inset-y-0 right-0 flex w-10 items-center justify-center text-discord-muted hover:text-discord-text disabled:cursor-not-allowed disabled:opacity-50"
-                            onMouseDown={(e) => e.preventDefault()}
-                            onClick={() => setShowPassword((visible) => !visible)}
-                            disabled={isPasswordLocked}
-                            aria-label={showPassword ? '비밀번호 숨기기' : '비밀번호 보기'}
-                          >
-                            {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                          </button>
-                        </div>
-                        {isPasswordLocked && (
-                          <p className="text-sm text-amber-300">
-                            보안을 위해 비밀번호 입력이 {passwordLockRemainingLabel} 동안 잠겼습니다.
-                          </p>
-                        )}
-                        {passwordError && <p className="text-sm text-red-400">{passwordError}</p>}
-                        <Button
-                          onClick={() => void handleUnlock()}
-                          className="w-full bg-discord-accent hover:bg-blue-600 text-white"
-                          disabled={isPasswordLocked || !passwordInput.trim()}
-                        >
-                          잠금 해제
-                        </Button>
-                      </div>
-                    </GateCard>
-                  </div>
+                    onToggleShowPassword={() => setShowPassword((visible) => !visible)}
+                    onUnlock={handleUnlock}
+                    onKeepFocus={() => {
+                      if (requiresPassword) keepPasswordInputFocus();
+                    }}
+                  />
                 )}
               </>
             )}

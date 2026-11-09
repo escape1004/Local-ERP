@@ -23,7 +23,7 @@ import {
 } from '../store';
 import {
   closeEmbeddedBrowserWindow,
-  isEmbeddedBrowserWindowFocused,
+  getEmbeddedBrowserIdleState,
   openEmbeddedBrowserWindow,
   sendEmbeddedBrowserMessage,
   setRememberEmbeddedBrowserWindowBounds,
@@ -203,7 +203,7 @@ export function registerBrowserHandlers() {
     closeEmbeddedBrowserWindow();
     return { success: true };
   });
-  ipcMain.handle('browser:isWindowFocused', () => isEmbeddedBrowserWindowFocused());
+  ipcMain.handle('browser:getIdleState', () => getEmbeddedBrowserIdleState());
   ipcMain.handle('setRememberBrowserWindowBounds', (_event, enabled) => (
     setRememberEmbeddedBrowserWindowBounds(enabled)
   ));

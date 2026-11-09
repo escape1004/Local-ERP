@@ -1,9 +1,14 @@
-import { BrowserWindow } from 'electron';
+import { BrowserWindow, webContents } from 'electron';
 import path from 'path';
 import { electronDistDir } from '../ffmpeg-paths';
 import { parseExternalHttpUrl } from '../lib/security';
 import { getEmbeddedBrowserHash } from '../lib/browser-window-url';
 import { attachEmbeddedBrowserShortcutGuard } from '../lib/browser-shortcuts';
+import {
+  createBrowserIdleTracker,
+  PLAYING_MEDIA_SCRIPT,
+  raceWithTimeout,
+} from '../lib/browser-idle';
 import {
   appConfig,
   applyWindowZoom,
@@ -21,6 +26,8 @@ import {
 
 let browserWindow = null;
 let saveBoundsTimer = null;
+const browserIdleTracker = createBrowserIdleTracker();
+const BROWSER_MEDIA_PROBE_TIMEOUT_MS = 400;
 
 function saveEmbeddedBrowserWindowBounds() {
   if (!appConfig.rememberBrowserWindowBounds) return;
@@ -68,6 +75,71 @@ export function isEmbeddedBrowserWindowFocused() {
   return Boolean(browserWindow && !browserWindow.isDestroyed() && browserWindow.isFocused());
 }
 
+function attachIdleInputTracking(contents) {
+  if (!contents || contents.isDestroyed()) return;
+  const onInput = (_event, inputEvent) => {
+    browserIdleTracker.handleInputEvent(inputEvent?.type);
+  };
+  contents.on('input-event', onInput);
+  contents.on('before-input-event', onInput);
+}
+
+function attachBrowserIdleTracking(win) {
+  attachIdleInputTracking(win.webContents);
+  win.webContents.on('did-attach-webview', (_event, guestContents) => {
+    attachIdleInputTracking(guestContents);
+  });
+}
+
+function isBrowserOwnedWebContents(contents, host) {
+  if (contents === host) return true;
+  try {
+    if (contents.getType() !== 'webview') return false;
+    if (contents.hostWebContents === host) return true;
+    return BrowserWindow.fromWebContents(contents) === browserWindow;
+  } catch {
+    return false;
+  }
+}
+
+function getBrowserIdleWebContents() {
+  if (!browserWindow || browserWindow.isDestroyed() || browserWindow.webContents.isDestroyed()) {
+    return [];
+  }
+
+  const host = browserWindow.webContents;
+  return webContents.getAllWebContents().filter((contents) => (
+    !contents.isDestroyed() && isBrowserOwnedWebContents(contents, host)
+  ));
+}
+
+async function contentsHasPlayingMedia(contents) {
+  if (!contents || contents.isDestroyed()) return false;
+  try {
+    return await raceWithTimeout(
+      contents.executeJavaScript(PLAYING_MEDIA_SCRIPT, true),
+      BROWSER_MEDIA_PROBE_TIMEOUT_MS,
+      false,
+    ) === true;
+  } catch {
+    return false;
+  }
+}
+
+async function detectBrowserPlayingMedia() {
+  const results = await Promise.all(getBrowserIdleWebContents().map(contentsHasPlayingMedia));
+  return results.some(Boolean);
+}
+
+export async function getEmbeddedBrowserIdleState() {
+  const focused = isEmbeddedBrowserWindowFocused();
+  return {
+    focused,
+    lastActivityAt: browserIdleTracker.getLastActivityAt(),
+    hasPlayingMedia: focused ? await detectBrowserPlayingMedia() : false,
+  };
+}
+
 export function sendEmbeddedBrowserMessage(channel, ...args) {
   if (!browserWindow || browserWindow.isDestroyed()) return;
   browserWindow.webContents.send(channel, ...args);
@@ -78,6 +150,7 @@ export function closeEmbeddedBrowserWindow() {
     clearTimeout(saveBoundsTimer);
     saveBoundsTimer = null;
   }
+  browserIdleTracker.reset();
   if (!browserWindow || browserWindow.isDestroyed()) {
     browserWindow = null;
     return;
@@ -117,6 +190,7 @@ export async function openEmbeddedBrowserWindow(url) {
   ensureRendererSessionGuards(browserWindow.webContents.session);
   attachNavigationGuards(browserWindow.webContents);
   attachWebviewGuards(browserWindow.webContents);
+  attachBrowserIdleTracking(browserWindow);
   applyWindowZoom(browserWindow);
   browserWindow.webContents.on('did-finish-load', () => applyWindowZoom(browserWindow));
   browserWindow.webContents.setVisualZoomLevelLimits(1, 1);
@@ -136,6 +210,7 @@ export async function openEmbeddedBrowserWindow(url) {
       clearTimeout(saveBoundsTimer);
       saveBoundsTimer = null;
     }
+    browserIdleTracker.reset();
     browserWindow = null;
   });
 

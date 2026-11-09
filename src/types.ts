@@ -183,6 +183,12 @@ export interface Config {
   translationDisplayMode?: 'tooltip' | 'inline-hover';
 }
 
+export interface BrowserIdleState {
+  focused: boolean;
+  lastActivityAt: number;
+  hasPlayingMedia: boolean;
+}
+
 export type AppUpdateStatus =
   | 'idle'
   | 'checking'
@@ -429,7 +435,7 @@ export interface ElectronAPI {
   getBrowserPartition: () => Promise<string>;
   openBrowserWindow: (url?: string) => Promise<{ success: boolean; error?: string }>;
   closeBrowserWindow: () => Promise<{ success: boolean; error?: string }>;
-  isBrowserWindowFocused: () => Promise<boolean>;
+  getBrowserIdleState: () => Promise<BrowserIdleState>;
   saveBrowserLastUrl: (payload: string | { urls: string[]; activeIndex: number }) => Promise<{ success: boolean }>;
   onBrowserOpenUrl: (callback: (url: string, options?: { background?: boolean }) => void) => () => void;
   onBrowserShortcut: (callback: (action: string) => void) => () => void;

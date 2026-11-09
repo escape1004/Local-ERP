@@ -170,7 +170,7 @@ const api: ElectronAPI = {
   getBrowserPartition: () => ipcRenderer.invoke('browser:getPartition'),
   openBrowserWindow: (url) => ipcRenderer.invoke('browser:openWindow', url),
   closeBrowserWindow: () => ipcRenderer.invoke('browser:closeWindow'),
-  isBrowserWindowFocused: () => ipcRenderer.invoke('browser:isWindowFocused'),
+  getBrowserIdleState: () => ipcRenderer.invoke('browser:getIdleState'),
   saveBrowserLastUrl: (payload) => ipcRenderer.invoke('browser:saveLastUrl', payload),
   onBrowserOpenUrl: (callback) => {
     const listener = (_event: Electron.IpcRendererEvent, nextUrl: string, options?: { background?: boolean }) => {
