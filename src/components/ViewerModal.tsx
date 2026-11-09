@@ -12,8 +12,11 @@ import {
   formatMediaTime,
   getOpenViewerSourceKey,
   hasBookmarkAtTime,
+  isImageFileName,
   isVideoFileName,
+  isViewerWheelZoomTarget,
   nextWheelScale,
+  shouldBindViewerWheelZoom,
   toViewerFileType,
 } from './viewer/viewerLogic';
 import { parseSubtitle } from '../lib/subtitle';
@@ -495,16 +498,14 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
   }, []);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!shouldBindViewerWheelZoom(isOpen)) return;
 
     const handleWheel = (event: WheelEvent) => {
-      const target = event.target;
-      if (!(target instanceof Element) || !target.closest('[data-viewer-zoom]')) return;
-      if (target.closest('#volume-slider')) return;
+      if (!isViewerWheelZoomTarget(event.target)) return;
 
       const effectiveType = fileType || detectedFileType;
       const currentArchiveFile = archive.archiveFiles[archive.currentArchiveIndex];
-      const isArchiveImage = Boolean(currentArchiveFile && /\.(jpg|jpeg|png|gif|webp)$/i.test(currentArchiveFile.name));
+      const isArchiveImage = isImageFileName(currentArchiveFile?.name);
       const isArchiveVideo = isVideoFileName(currentArchiveFile?.name);
 
       let currentScale = 0;

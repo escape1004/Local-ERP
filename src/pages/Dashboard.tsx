@@ -34,6 +34,8 @@ import { useERPStore } from '../hooks/useERPStore';
 import { useLoadingStore } from '../hooks/useLoadingStore';
 import { Category, DashboardWarningItem, DataRecord } from '../types';
 import { isSeparatorCategory } from '../lib/category';
+import { getDashboardSummaryGridClass, hasDashboardRecords } from '../lib/dashboardLayout';
+import { isProfileHydrationPending } from '../lib/profileHydration';
 import { resolveFilePath } from '../lib/pathResolver';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 import { RecordModal } from '../components/RecordModal';
@@ -305,7 +307,8 @@ export default function Dashboard() {
     let cancelled = false;
 
     const loadAllData = async () => {
-      const showProfileLoading = !useERPStore.getState().isProfileReady;
+      const storeState = useERPStore.getState();
+      const showProfileLoading = isProfileHydrationPending(storeState.currentProfile, storeState.isProfileReady);
       setLoading(true);
       if (showProfileLoading) {
         setGlobalLoading(true, '데이터를 불러오는 중...');
@@ -836,7 +839,7 @@ export default function Dashboard() {
     [childCategoryDashboardSections]
   );
 
-  const hasAnyRecords = scopedCategoryStats.some((stat) => stat.recordCount > 0);
+  const hasAnyRecords = hasDashboardRecords(scopedCategoryStats);
   const hasAnyAttachments = fileTypeData.length > 0;
   const hasTrendData = dateTrendData.some((entry) => entry.count > 0);
 
@@ -943,17 +946,7 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className={`grid grid-cols-1 gap-4 mb-6 ${
-              summaryCards.length >= 5
-                ? 'md:grid-cols-2 lg:grid-cols-5'
-                : summaryCards.length === 4
-                  ? 'md:grid-cols-2 lg:grid-cols-4'
-                  : summaryCards.length === 2
-                    ? 'md:grid-cols-2'
-                    : summaryCards.length === 1
-                      ? ''
-                      : 'md:grid-cols-2 lg:grid-cols-3'
-            }`}>
+            <div className={`grid grid-cols-1 gap-4 mb-6 ${getDashboardSummaryGridClass(summaryCards.length)}`}>
               {summaryCards.map((card) => (
                 <StatCard key={card.key} title={card.title} value={card.value} icon={card.icon} color={card.color} />
               ))}

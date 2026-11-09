@@ -40,6 +40,11 @@ import {
   splitRelationPasteValues,
 } from '../lib/relationPaste';
 import { commaAwareCommandFilter } from '../lib/commaSearchFilter';
+import {
+  isCommandSearchInput,
+  resolveSelectPaste,
+  shouldAutoSelectPastedComboboxValue,
+} from '../lib/comboboxPaste';
 import type { Config } from '../types';
 import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId, isTranslationEnabledField } from '../lib/translation';
 import {
@@ -64,9 +69,7 @@ interface RecordModalProps {
 }
 
 function isCommandSearchFocused() {
-  const active = document.activeElement;
-  if (!(active instanceof HTMLElement)) return false;
-  return active.closest('[cmdk-input-wrapper]') !== null || active.hasAttribute('cmdk-input');
+  return isCommandSearchInput(document.activeElement);
 }
 
 export const RecordModal: React.FC<RecordModalProps> = ({
@@ -677,30 +680,20 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   };
 
   const handleSelectPaste = (field: FieldDefinition, pastedText: string, currentValue: unknown) => {
+    const result = resolveSelectPaste(field.options, pastedText, Boolean(field.multiple), currentValue);
     if (field.multiple) {
-      const pastedValues = pastedText.split(',').map((item) => item.trim()).filter(Boolean);
-      const validOptions = field.options?.filter((option) =>
-        pastedValues.some((item) => option.toLowerCase() === item.toLowerCase())
-      ) || [];
-
-      if (validOptions.length > 0) {
-        const currentValues = Array.isArray(currentValue) ? currentValue : [];
-        const newValues = [...new Set([...currentValues, ...validOptions])];
-        updateFieldValue(field.id, newValues);
-
-        const invalidValues = pastedValues.filter((item) =>
-          !field.options?.some((option) => option.toLowerCase() === item.toLowerCase())
-        );
-        if (invalidValues.length > 0) {
+      if (result.nextValue) {
+        updateFieldValue(field.id, result.nextValue);
+        if (result.invalid.length > 0) {
           toast({
             title: '일부 값이 무시됨',
-            description: `다음 값들이 유효하지 않아 제외되었습니다: ${invalidValues.join(', ')}`,
+            description: `다음 값들이 유효하지 않아 제외되었습니다: ${result.invalid.join(', ')}`,
             variant: 'destructive',
           });
         } else {
           toast({
             title: '값이 추가됨',
-            description: `${validOptions.length}개의 값이 추가되었습니다.`,
+            description: `${result.matched.length}개의 값이 추가되었습니다.`,
           });
         }
         return;
@@ -708,27 +701,25 @@ export const RecordModal: React.FC<RecordModalProps> = ({
 
       toast({
         title: '유효하지 않은 값',
-        description: `붙여넣은 모든 값이 유효하지 않습니다: ${pastedValues.join(', ')}`,
+        description: `붙여넣은 모든 값이 유효하지 않습니다: ${result.invalid.join(', ')}`,
         variant: 'destructive',
       });
       return;
     }
 
-    const pastedValue = pastedText.trim();
-    const matchingOption = field.options?.find((option) => option.toLowerCase() === pastedValue.toLowerCase());
-    if (matchingOption) {
-      updateFieldValue(field.id, matchingOption);
+    if (typeof result.nextValue === 'string') {
+      updateFieldValue(field.id, result.nextValue);
       toggleCombobox(field.id);
       toast({
         title: '값이 선택됨',
-        description: `"${matchingOption}"이 선택되었습니다.`,
+        description: `"${result.nextValue}"이 선택되었습니다.`,
       });
       return;
     }
 
     toast({
       title: '유효하지 않은 값',
-      description: `"${pastedValue}"는 유효한 옵션이 아닙니다.`,
+      description: `"${String(pastedText || '').trim()}"는 유효한 옵션이 아닙니다.`,
       variant: 'destructive',
     });
   };
@@ -759,7 +750,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     if (!field || (field.type !== 'select' && field.type !== 'relation')) return;
 
     const handlePaste = (event: ClipboardEvent) => {
-      if (isCommandSearchFocused()) return;
+      if (!shouldAutoSelectPastedComboboxValue(isCommandSearchFocused())) return;
 
       const pastedText = event.clipboardData?.getData('text');
       if (!pastedText) return;

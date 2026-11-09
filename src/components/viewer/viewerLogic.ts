@@ -146,6 +146,17 @@ export function nextWheelScale(currentScale: number, deltaY: number) {
   return Math.max(1, Math.min(5, currentScale - deltaY * 0.001));
 }
 
+export function shouldBindViewerWheelZoom(isOpen: boolean): boolean {
+  return isOpen;
+}
+
+export function isViewerWheelZoomTarget(target: EventTarget | null | undefined): boolean {
+  if (!target || typeof (target as Element).closest !== 'function') return false;
+  const element = target as Element;
+  if (!element.closest('[data-viewer-zoom]')) return false;
+  return !element.closest('#volume-slider');
+}
+
 export function getSeekTimeFromPointer(clientX: number, width: number, left: number, duration: number) {
   const ratio = width <= 0 ? 0 : Math.min(1, Math.max(0, (clientX - left) / width));
   return ratio * duration;

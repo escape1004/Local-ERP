@@ -20,7 +20,9 @@ import {
   nextPlaybackSpeed,
   toViewerFileType,
   nextWheelScale,
+  isViewerWheelZoomTarget,
   prepareArchiveEntries,
+  shouldBindViewerWheelZoom,
 } from './viewerLogic';
 
 test('keeps native video size unless the frame is larger than the viewer', () => {
@@ -34,6 +36,20 @@ test('identifies the open viewer source only while the modal is showing a file',
   expect(getOpenViewerSourceKey(false, 'cat', 'rec', 'C:\\clip.mp4')).toBe('');
   expect(getOpenViewerSourceKey(true, 'cat', 'rec', '')).toBe('');
   expect(getOpenViewerSourceKey(true, 'cat', 'rec', 'C:\\clip.mp4')).toBe('cat:rec:C:\\clip.mp4');
+});
+
+test('binds wheel zoom only while the viewer is open and the cursor is over the zoom surface', () => {
+  expect(shouldBindViewerWheelZoom(false)).toBe(false);
+  expect(shouldBindViewerWheelZoom(true)).toBe(true);
+  expect(isViewerWheelZoomTarget(null)).toBe(false);
+  expect(isViewerWheelZoomTarget({
+    closest: (selector: string) => (selector === '[data-viewer-zoom]' ? {} : null),
+  } as EventTarget)).toBe(true);
+  expect(isViewerWheelZoomTarget({
+    closest: (selector: string) => (
+      selector === '[data-viewer-zoom]' || selector === '#volume-slider' ? {} : null
+    ),
+  } as EventTarget)).toBe(false);
 });
 
 test('formats media time and clamps invalid values', () => {

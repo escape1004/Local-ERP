@@ -28,6 +28,7 @@ import { useLoadingStore } from './hooks/useLoadingStore';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { toast } from './components/ui/use-toast';
 import { isStandaloneBrowserWindow } from './lib/browserNavigation';
+import { isProfileHydrationPending, shouldHideAppUntilReady } from './lib/profileHydration';
 import type { AppUpdateState, Profile } from './types';
 
 const PROFILE_COLORS = ['#5865F2', '#3BA55D', '#F97316', '#EC4899', '#0EA5E9', '#EAB308'];
@@ -440,7 +441,7 @@ const App = () => {
   }, [resetForProfile, setCurrentProfile]);
 
   useEffect(() => {
-    if (currentProfile && !isProfileReady) {
+    if (isProfileHydrationPending(currentProfile, isProfileReady)) {
       setLoading(true, '데이터를 불러오는 중...');
     }
   }, [currentProfile, isProfileReady, setLoading]);
@@ -699,8 +700,8 @@ const App = () => {
               <>
                 {currentProfile ? (
                   <div
-                    className={`h-full ${requiresPassword || !isProfileReady ? 'pointer-events-none invisible' : ''}`}
-                    aria-hidden={requiresPassword || !isProfileReady}
+                    className={`h-full ${shouldHideAppUntilReady(requiresPassword, isProfileReady) ? 'pointer-events-none invisible' : ''}`}
+                    aria-hidden={shouldHideAppUntilReady(requiresPassword, isProfileReady)}
                   >
                     <HashRouter>
                       <RouterContent />

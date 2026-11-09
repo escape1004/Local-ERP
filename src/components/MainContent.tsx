@@ -20,6 +20,11 @@ import {
   pickDroppedRecordFile,
 } from '../lib/recordFileDrop';
 import {
+  buildDeletedRecordRestorePayload,
+  createDeletedRecordSnapshot,
+  type DeletedRecordSnapshot,
+} from '../lib/recordDeleteUndo';
+import {
   Tooltip,
   TooltipContent,
   TooltipProvider,
@@ -608,10 +613,7 @@ export const MainContent: React.FC = () => {
   const [editingRecord, setEditingRecord] = useState<DataRecord | null>(null);
   const [droppedFilePath, setDroppedFilePath] = useState<string | null>(null);
   const [fileDropActive, setFileDropActive] = useState(false);
-  const pendingDeletedRecordRef = useRef<{
-    record: DataRecord;
-    relatedRecordIds: string[];
-  } | null>(null);
+  const pendingDeletedRecordRef = useRef<DeletedRecordSnapshot | null>(null);
   const [viewingRecord, setViewingRecord] = useState<DataRecord | null>(null);
   const [viewingCategory, setViewingCategory] = useState<string>('');
   const [expandedTags, setExpandedTags] = useState<{[key: string]: boolean}>({});
@@ -999,14 +1001,7 @@ export const MainContent: React.FC = () => {
     if (!snapshot) return;
     pendingDeletedRecordRef.current = null;
     try {
-      await addRecord({
-        id: snapshot.record.id,
-        categoryId: snapshot.record.categoryId,
-        data: snapshot.record.data,
-        createdAt: snapshot.record.createdAt,
-        updatedAt: snapshot.record.updatedAt,
-        relatedRecordIds: snapshot.relatedRecordIds,
-      });
+      await addRecord(buildDeletedRecordRestorePayload(snapshot));
       toast({ title: '삭제를 취소했습니다.' });
     } catch (error) {
       pendingDeletedRecordRef.current = snapshot;
@@ -1026,13 +1021,7 @@ export const MainContent: React.FC = () => {
       console.error('Failed to snapshot related records before delete:', error);
     }
 
-    pendingDeletedRecordRef.current = {
-      record: {
-        ...record,
-        data: { ...record.data },
-      },
-      relatedRecordIds,
-    };
+    pendingDeletedRecordRef.current = createDeletedRecordSnapshot(record, relatedRecordIds);
 
     try {
       await deleteRecord(record.id);
