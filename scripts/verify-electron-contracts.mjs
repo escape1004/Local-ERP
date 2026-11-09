@@ -248,6 +248,32 @@ function assertRuntimeTopology(actual) {
   if (actual.main.duplicateHandlers.length > 0) errors.push('duplicate ipcMain.handle registrations detected');
   if (actual.rendererSendChannels.some((channel) => channel !== 'window-control')) errors.push('renderer uses a non-allowlisted send channel');
 
+  const requiredPackagingExclusions = [
+    '!resources/save',
+    '!resources/save/**',
+    '!save',
+    '!save/**',
+    '!**/*.db',
+    '!**/*.db-wal',
+    '!**/*.db-shm',
+  ];
+  for (const pattern of requiredPackagingExclusions) {
+    if (!packagedFiles.includes(pattern)) {
+      errors.push(`packaged files must exclude ${pattern}`);
+    }
+  }
+  if (packagedFiles.some((pattern) => !pattern.startsWith('!') && /(^|\/)save(\/|$)/.test(String(pattern).replace(/\\/g, '/')))) {
+    errors.push('packaged files must not include a save directory');
+  }
+  if (packageJson.build?.nsis?.deleteAppDataOnUninstall !== false) {
+    errors.push('NSIS installer must keep AppData on uninstall');
+  }
+
+  const gitignore = fs.readFileSync(path.join(rootDir, '.gitignore'), 'utf8');
+  if (!gitignore.includes('save/') || !gitignore.includes('*.db')) {
+    errors.push('gitignore must ignore user save/ and database files');
+  }
+
   if (errors.length > 0) throw new Error(errors.join('\n'));
 }
 

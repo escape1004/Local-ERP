@@ -55,7 +55,12 @@
       "dist-electron-app/**/*.js",
       "resources/**/*",
       "!resources/save",
-      "!resources/save/**"
+      "!resources/save/**",
+      "!save",
+      "!save/**",
+      "!**/*.db",
+      "!**/*.db-wal",
+      "!**/*.db-shm"
     ],
     "extraResources": [
       {
