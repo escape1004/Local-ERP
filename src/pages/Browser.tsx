@@ -1752,50 +1752,106 @@ const BrowserPage: React.FC = () => {
             </Button>
           </BrowserTooltip>
           <form
-            className="flex min-w-0 flex-1 items-center gap-2"
+            className="flex min-w-0 flex-1 items-center"
             onSubmit={(event) => {
               event.preventDefault();
               navigateTo(addressRef.current);
             }}
           >
-            <Input
-              ref={addressInputRef}
-              value={address}
-              onChange={(event) => {
-                addressRef.current = event.target.value;
-                setAddress(event.target.value);
-              }}
-              onMouseDown={() => {
-                addressSelectAllOnClickRef.current = document.activeElement !== addressInputRef.current;
-              }}
-              onFocus={(event) => {
-                addressFocusedRef.current = true;
-                if (addressSelectAllOnClickRef.current) return;
-                event.currentTarget.select();
-              }}
-              onClick={(event) => {
-                if (!addressSelectAllOnClickRef.current) return;
-                addressSelectAllOnClickRef.current = false;
-                event.currentTarget.select();
-              }}
-              onBlur={(event) => {
-                addressFocusedRef.current = false;
-                addressSelectAllOnClickRef.current = false;
-                const form = event.currentTarget.form;
-                window.setTimeout(() => {
-                  if (addressFocusedRef.current) return;
-                  const active = document.activeElement;
-                  if (form && active instanceof HTMLElement && form.contains(active)) return;
-                  const webview = activeWebview();
-                  if (webview) syncTabFromWebview(activeTabIdRef.current, webview);
-                }, 0);
-              }}
-              placeholder="주소 또는 검색어 입력"
-              className="h-8 bg-discord-sidebar border-gray-600 text-sm text-discord-text"
-            />
-            <BrowserTooltip label="이동 또는 검색">
-              <Button type="submit" className="h-8 bg-discord-accent hover:bg-blue-600">이동</Button>
-            </BrowserTooltip>
+            <div className="relative min-w-0 flex-1">
+              <Input
+                ref={addressInputRef}
+                value={address}
+                onChange={(event) => {
+                  addressRef.current = event.target.value;
+                  setAddress(event.target.value);
+                }}
+                onMouseDown={() => {
+                  addressSelectAllOnClickRef.current = document.activeElement !== addressInputRef.current;
+                }}
+                onFocus={(event) => {
+                  addressFocusedRef.current = true;
+                  if (addressSelectAllOnClickRef.current) return;
+                  event.currentTarget.select();
+                }}
+                onClick={(event) => {
+                  if (!addressSelectAllOnClickRef.current) return;
+                  addressSelectAllOnClickRef.current = false;
+                  event.currentTarget.select();
+                }}
+                onBlur={(event) => {
+                  addressFocusedRef.current = false;
+                  addressSelectAllOnClickRef.current = false;
+                  const form = event.currentTarget.form;
+                  window.setTimeout(() => {
+                    if (addressFocusedRef.current) return;
+                    const active = document.activeElement;
+                    if (form && active instanceof HTMLElement && form.contains(active)) return;
+                    const webview = activeWebview();
+                    if (webview) syncTabFromWebview(activeTabIdRef.current, webview);
+                  }, 0);
+                }}
+                placeholder="주소 또는 검색어 입력"
+                className="h-8 bg-discord-sidebar border-gray-600 pr-9 text-sm text-discord-text"
+              />
+              <div className="absolute inset-y-0 right-0 flex items-center pr-1">
+                <BrowserTooltip
+                  label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
+                  wrapDisabled
+                >
+                  {recordLocked ? (
+                    <button
+                      type="button"
+                      className="pointer-events-none inline-flex h-7 w-7 items-center justify-center"
+                      disabled
+                      aria-label="레코드에서 자동 등록된 북마크입니다"
+                    >
+                      <Star size={16} className="fill-discord-accent text-discord-accent" />
+                    </button>
+                  ) : starred ? (
+                    <button
+                      type="button"
+                      className="inline-flex h-7 w-7 items-center justify-center text-discord-muted hover:text-discord-text disabled:opacity-100"
+                      disabled={isInternalBrowserTab({ url: currentUrl })}
+                      aria-label="북마크 해제"
+                      onClick={() => void removeCurrentBookmark()}
+                    >
+                      <Star size={16} className="fill-yellow-400 text-yellow-400" />
+                    </button>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button
+                          type="button"
+                          className="inline-flex h-7 w-7 items-center justify-center text-discord-muted hover:text-discord-text disabled:opacity-100"
+                          disabled={isInternalBrowserTab({ url: currentUrl })}
+                          aria-label="북마크할 위치 선택"
+                        >
+                          <Star size={16} />
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent
+                        align="end"
+                        className="max-h-72 min-w-[180px] overflow-y-auto border-gray-700 bg-discord-sidebar text-discord-text discord-scrollbar"
+                      >
+                        {saveTargets.map((target, index) => (
+                          <React.Fragment key={`${target.id ?? 'manual'}:${target.name}`}>
+                            {index === 1 && <DropdownMenuSeparator className="bg-gray-700" />}
+                            <DropdownMenuItem
+                              className="cursor-pointer text-discord-text hover:bg-discord-hover focus:bg-discord-hover focus:text-discord-text"
+                              style={{ paddingLeft: 8 + target.depth * 12 }}
+                              onSelect={() => void saveBookmarkTo(target.id)}
+                            >
+                              {target.name}
+                            </DropdownMenuItem>
+                          </React.Fragment>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </BrowserTooltip>
+              </div>
+            </div>
           </form>
           <span ref={downloadsRef} className="relative inline-flex">
             <BrowserTooltip label="다운로드">
@@ -1844,61 +1900,6 @@ const BrowserPage: React.FC = () => {
             </div>,
             document.body,
           )}
-          <BrowserTooltip
-            label={recordLocked ? '레코드에서 자동 등록된 북마크입니다' : starred ? '북마크 해제' : '북마크할 위치 선택'}
-            wrapDisabled
-          >
-            {recordLocked ? (
-              <button
-                type="button"
-                className="pointer-events-none inline-flex h-8 w-8 items-center justify-center rounded-md"
-                disabled
-                aria-label="레코드에서 자동 등록된 북마크입니다"
-              >
-                <Star size={16} className="fill-discord-accent text-discord-accent" />
-              </button>
-            ) : starred ? (
-              <button
-                type="button"
-                className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
-                disabled={isInternalBrowserTab({ url: currentUrl })}
-                aria-label="북마크 해제"
-                onClick={() => void removeCurrentBookmark()}
-              >
-                <Star size={16} className="fill-yellow-400 text-yellow-400" />
-              </button>
-            ) : (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button
-                    type="button"
-                    className="inline-flex h-8 w-8 items-center justify-center rounded-md hover:bg-discord-hover disabled:opacity-100"
-                    disabled={isInternalBrowserTab({ url: currentUrl })}
-                    aria-label="북마크할 위치 선택"
-                  >
-                    <Star size={16} className="text-discord-text" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent
-                  align="end"
-                  className="max-h-72 min-w-[180px] overflow-y-auto border-gray-700 bg-discord-sidebar text-discord-text discord-scrollbar"
-                >
-                  {saveTargets.map((target, index) => (
-                    <React.Fragment key={`${target.id ?? 'manual'}:${target.name}`}>
-                      {index === 1 && <DropdownMenuSeparator className="bg-gray-700" />}
-                      <DropdownMenuItem
-                        className="cursor-pointer text-discord-text hover:bg-discord-hover focus:bg-discord-hover focus:text-discord-text"
-                        style={{ paddingLeft: 8 + target.depth * 12 }}
-                        onSelect={() => void saveBookmarkTo(target.id)}
-                      >
-                        {target.name}
-                      </DropdownMenuItem>
-                    </React.Fragment>
-                  ))}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-          </BrowserTooltip>
           <BrowserTooltip label={sidePanelOpen ? '사이드 메뉴 접기' : '사이드 메뉴 펼치기'}>
             <Button
               variant="ghost"

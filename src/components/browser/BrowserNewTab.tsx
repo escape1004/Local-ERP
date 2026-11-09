@@ -1,5 +1,5 @@
 import React from 'react';
-import { Globe, RefreshCw, Search, Shuffle } from 'lucide-react';
+import { Globe, RefreshCw, Search } from 'lucide-react';
 import { faviconUrlFor, shortcutLabelForBookmark } from '../../lib/browserFavicon';
 import { hostLabelForUrl, pickRandomBookmarks } from '../../lib/browserNewTab';
 import { resolveBrowserAddressInput } from '../../lib/browserNavigation';
@@ -146,10 +146,7 @@ export function BrowserNewTab({
         {randomPages.length > 0 && (
           <section>
             <div className="mb-2 flex items-center justify-between gap-2">
-              <div className="flex items-center gap-2 text-sm font-medium text-white">
-                <Shuffle size={14} className="text-discord-muted" />
-                랜덤 북마크
-              </div>
+              <h2 className="text-sm font-medium text-white">랜덤 북마크</h2>
               <button
                 type="button"
                 onClick={reshuffle}
