@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { X, Search, Check, ChevronsUpDown, ChevronRight, CheckCircle2, XCircle, Languages } from 'lucide-react';
+import { X, Search, Check, ChevronsUpDown, ChevronRight, CheckCircle2, XCircle } from 'lucide-react';
 import { useERPStore } from '../hooks/useERPStore';
 import type { Category, DataRecord, FieldDefinition, NewRecord } from '../types';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
-import { Textarea } from './ui/textarea';
 import { Switch } from './ui/switch';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from './ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -31,22 +30,15 @@ import {
 import { getRelationDisplayLabel, getRelationPrimaryLabel, getRelationSecondaryLabel } from '../utils/relationDisplay';
 import { TextCaseContextMenu } from './records/TextCaseContextMenu';
 import { RelatedRecordsEditor } from './records/RelatedRecordsEditor';
+import { RecordModalTranslationField } from './records/RecordModalTranslationField';
 import {
   CreateMissingRelationRecordsDialog,
   type MissingRelationCreateRequest,
 } from './records/CreateMissingRelationRecordsDialog';
-import {
-  classifyRelationPasteValues,
-  splitRelationPasteValues,
-} from '../lib/relationPaste';
 import { commaAwareCommandFilter } from '../lib/commaSearchFilter';
-import {
-  isCommandSearchInput,
-  resolveSelectPaste,
-  shouldAutoSelectPastedComboboxValue,
-} from '../lib/comboboxPaste';
+import { useRecordModalPaste } from '../hooks/useRecordModalPaste';
 import type { Config } from '../types';
-import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId, isTranslationEnabledField } from '../lib/translation';
+import { OPENAI_TRANSLATION_MODEL, getTranslatedFieldId, getTranslationMetaFieldId } from '../lib/translation';
 import {
   Tooltip,
   TooltipContent,
@@ -66,10 +58,6 @@ interface RecordModalProps {
   category: Category;
   record?: DataRecord | null;
   initialFilePath?: string | null;
-}
-
-function isCommandSearchFocused() {
-  return isCommandSearchInput(document.activeElement);
 }
 
 export const RecordModal: React.FC<RecordModalProps> = ({
@@ -481,113 +469,16 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     }
   };
 
-  const renderTranslationInput = (field: FieldDefinition) => {
-    if (!isTranslationEnabledField(field)) {
-      return null;
-    }
-
-    const translationFieldId = getTranslatedFieldId(field.id);
-    const translationValue = typeof formData[translationFieldId] === 'string'
-      ? String(formData[translationFieldId])
-      : '';
-    const isTranslating = translatingFieldIds.has(field.id);
-    const isAutoTranslateAvailable = Boolean(config?.hasOpenAiApiKey);
-    const autoTranslateTooltip = !isAutoTranslateAvailable
-      ? '환경 설정 > 번역에서 OpenAI API 키를 등록하면 자동 번역을 사용할 수 있습니다.'
-      : null;
-
-    return (
-      <div className="space-y-2 pt-3">
-        <div className="flex items-center gap-2 text-sm font-medium text-discord-text">
-          {field.name} 번역
-          <Languages size={15} className="text-blue-300" />
-        </div>
-
-        {field.type === 'longtext' ? (
-          <div className="relative">
-            <TextCaseContextMenu
-              value={translationValue}
-              onValueChange={(next) => updateTranslationValue(field.id, next, false)}
-              disabled={isTranslating}
-            >
-              <Textarea
-                value={translationValue}
-                onChange={(e) => updateTranslationValue(field.id, e.target.value, false)}
-                placeholder="번역문을 입력하세요"
-                disabled={isTranslating}
-                className="min-h-[100px] bg-discord-sidebar border-gray-600 pr-28 text-discord-text placeholder:text-gray-500"
-              />
-            </TextCaseContextMenu>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="absolute right-2 top-2 inline-flex">
-                    <Button
-                      type="button"
-                      onClick={() => void handleAutoTranslate(field)}
-                      disabled={!isAutoTranslateAvailable || isTranslating}
-                      className="h-8 rounded-md bg-[#5865f2] px-3 text-xs font-medium text-white hover:bg-[#4752c4] disabled:bg-[#4e5d94] disabled:text-white/70"
-                    >
-                      {isTranslating ? '번역 중...' : '자동 번역'}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {autoTranslateTooltip && (
-                  <TooltipContent side="top" align="end">
-                    {autoTranslateTooltip}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <TextCaseContextMenu
-              value={translationValue}
-              onValueChange={(next) => updateTranslationValue(field.id, next, false)}
-              disabled={isTranslating}
-              className="flex-1"
-            >
-              <Input
-                type="text"
-                value={translationValue}
-                onChange={(e) => updateTranslationValue(field.id, e.target.value, false)}
-                placeholder="번역문을 입력하세요"
-                disabled={isTranslating}
-                className="bg-discord-sidebar border-gray-600 text-discord-text"
-              />
-            </TextCaseContextMenu>
-            <TooltipProvider>
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="inline-flex shrink-0">
-                    <Button
-                      type="button"
-                      onClick={() => void handleAutoTranslate(field)}
-                      disabled={!isAutoTranslateAvailable || isTranslating}
-                      className="bg-[#5865f2] text-white hover:bg-[#4752c4] disabled:bg-[#4e5d94] disabled:text-white/70"
-                    >
-                      {isTranslating ? '번역 중...' : '자동 번역'}
-                    </Button>
-                  </span>
-                </TooltipTrigger>
-                {autoTranslateTooltip && (
-                  <TooltipContent side="top">
-                    {autoTranslateTooltip}
-                  </TooltipContent>
-                )}
-              </Tooltip>
-            </TooltipProvider>
-          </div>
-        )}
-        {!isAutoTranslateAvailable && (
-          <p className="text-xs text-amber-300">
-            자동 번역을 사용하려면 환경설정 &gt; 번역에서 OpenAI API 키를 먼저 저장해주세요.
-          </p>
-        )}
-      </div>
-    );
-  };
+  const renderTranslationInput = (field: FieldDefinition) => (
+    <RecordModalTranslationField
+      field={field}
+      formData={formData}
+      translatingFieldIds={translatingFieldIds}
+      hasOpenAiApiKey={Boolean(config?.hasOpenAiApiKey)}
+      onTranslationChange={(fieldId, value) => updateTranslationValue(fieldId, value, false)}
+      onAutoTranslate={handleAutoTranslate}
+    />
+  );
 
   const toggleCombobox = (fieldId: string) => {
     setOpenComboboxes(prev => ({
@@ -608,17 +499,6 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     return getRelationSecondaryLabel(record, field, categories, getCategoryRecords);
   };
 
-  const applyRelationSelection = (field: FieldDefinition, recordIds: string[], currentValue: unknown) => {
-    if (recordIds.length === 0) return;
-    if (field.multiple) {
-      const currentValues = Array.isArray(currentValue) ? currentValue.filter((item): item is string => typeof item === 'string') : [];
-      updateFieldValue(field.id, [...new Set([...currentValues, ...recordIds])]);
-      return;
-    }
-    updateFieldValue(field.id, recordIds[0]);
-    toggleCombobox(field.id);
-  };
-
   const finishAmbiguousDialog = () => {
     setAmbiguousDialogOpen(false);
     setAmbiguousOptions([]);
@@ -627,101 +507,6 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     const pending = pendingMissingAfterAmbiguousRef.current;
     pendingMissingAfterAmbiguousRef.current = null;
     if (pending) setMissingCreate(pending);
-  };
-
-  const handleRelationPaste = (
-    field: FieldDefinition,
-    pastedText: string,
-    relatedRecords: DataRecord[],
-    currentValue: unknown,
-  ) => {
-    const relatedCategory = categories.find((item) => item.id === field.relationCategoryId);
-    if (!relatedCategory) return;
-
-    const classified = classifyRelationPasteValues(
-      splitRelationPasteValues(pastedText, Boolean(field.multiple)),
-      (value) => findMatchingRelationRecords(relatedRecords, field, value),
-    );
-    const validIds = classified.valid.map((item) => item.id);
-    if (validIds.length > 0) {
-      applyRelationSelection(field, validIds, currentValue);
-      if (!field.multiple && classified.ambiguous.length === 0 && classified.missing.length === 0) {
-        toast({
-          title: '값이 선택됨',
-          description: `"${getRelationLabel(classified.valid[0], field)}"이 선택되었습니다.`,
-        });
-      }
-    }
-
-    const missingRequest = classified.missing.length > 0
-      ? {
-        field,
-        category: relatedCategory,
-        values: classified.missing,
-      }
-      : null;
-
-    if (classified.ambiguous.length > 0) {
-      const currentValues = field.multiple
-        ? [...new Set([
-          ...(Array.isArray(currentValue) ? currentValue.filter((item): item is string => typeof item === 'string') : []),
-          ...validIds,
-        ])]
-        : [];
-      pendingMissingAfterAmbiguousRef.current = missingRequest;
-      setAmbiguousDialogOpen(true);
-      setAmbiguousOptions(classified.ambiguous);
-      setPendingAmbiguousField(field);
-      setPendingAmbiguousCurrentValues(currentValues);
-      return;
-    }
-
-    if (missingRequest) setMissingCreate(missingRequest);
-  };
-
-  const handleSelectPaste = (field: FieldDefinition, pastedText: string, currentValue: unknown) => {
-    const result = resolveSelectPaste(field.options, pastedText, Boolean(field.multiple), currentValue);
-    if (field.multiple) {
-      if (result.nextValue) {
-        updateFieldValue(field.id, result.nextValue);
-        if (result.invalid.length > 0) {
-          toast({
-            title: '일부 값이 무시됨',
-            description: `다음 값들이 유효하지 않아 제외되었습니다: ${result.invalid.join(', ')}`,
-            variant: 'destructive',
-          });
-        } else {
-          toast({
-            title: '값이 추가됨',
-            description: `${result.matched.length}개의 값이 추가되었습니다.`,
-          });
-        }
-        return;
-      }
-
-      toast({
-        title: '유효하지 않은 값',
-        description: `붙여넣은 모든 값이 유효하지 않습니다: ${result.invalid.join(', ')}`,
-        variant: 'destructive',
-      });
-      return;
-    }
-
-    if (typeof result.nextValue === 'string') {
-      updateFieldValue(field.id, result.nextValue);
-      toggleCombobox(field.id);
-      toast({
-        title: '값이 선택됨',
-        description: `"${result.nextValue}"이 선택되었습니다.`,
-      });
-      return;
-    }
-
-    toast({
-      title: '유효하지 않은 값',
-      description: `"${String(pastedText || '').trim()}"는 유효한 옵션이 아닙니다.`,
-      variant: 'destructive',
-    });
   };
 
   const findMatchingRelationRecords = (records: DataRecord[], field: FieldDefinition, searchValue: string) => {
@@ -742,33 +527,23 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     });
   };
 
-  useEffect(() => {
-    const openFieldId = Object.entries(openComboboxes).find(([, isOpen]) => isOpen)?.[0];
-    if (!openFieldId) return;
-
-    const field = category.fields.find((item) => item.id === openFieldId);
-    if (!field || (field.type !== 'select' && field.type !== 'relation')) return;
-
-    const handlePaste = (event: ClipboardEvent) => {
-      if (!shouldAutoSelectPastedComboboxValue(isCommandSearchFocused())) return;
-
-      const pastedText = event.clipboardData?.getData('text');
-      if (!pastedText) return;
-
-      event.preventDefault();
-      const currentValue = formData[field.id];
-      if (field.type === 'select') {
-        handleSelectPaste(field, pastedText, currentValue);
-        return;
-      }
-
-      const relatedRecords = field.relationCategoryId ? getCategoryRecords(field.relationCategoryId) : [];
-      handleRelationPaste(field, pastedText, relatedRecords, currentValue);
-    };
-
-    document.addEventListener('paste', handlePaste);
-    return () => document.removeEventListener('paste', handlePaste);
-  }, [category.fields, formData, getCategoryRecords, openComboboxes]);
+  const { applyRelationSelection } = useRecordModalPaste({
+    category,
+    formData,
+    openComboboxes,
+    categories,
+    getCategoryRecords,
+    updateFieldValue,
+    toggleCombobox,
+    getRelationLabel,
+    findMatchingRelationRecords,
+    pendingMissingAfterAmbiguousRef,
+    setAmbiguousDialogOpen,
+    setAmbiguousOptions,
+    setPendingAmbiguousField,
+    setPendingAmbiguousCurrentValues,
+    setMissingCreate,
+  });
 
   const applyFilenameAutofill = async (
     filePath: string,
