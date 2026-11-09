@@ -3,7 +3,7 @@ import path from 'path';
 import { ipcMain } from 'electron';
 import { electronDistDir } from '../ffmpeg-paths';
 import { canonicalizeBrowserUrl } from '../lib/browser-url';
-import { normalizePersistedBrowserSession } from '../lib/browser-window-url';
+import { normalizePersistedBrowserSession, readBrowserSessionForProfile, writeBrowserSessionForProfile } from '../lib/browser-window-url';
 import {
   BOOKMARK_BAR_FOLDER_ID,
   buildBrowserBookmarkTree,
@@ -15,6 +15,7 @@ import { moveManualTreeItem, normalizeManualParentId } from '../lib/browser-book
 import { parseExternalHttpUrl } from '../lib/security';
 import {
   appConfig,
+  currentProfileId,
   db,
   getConfiguredTranslationModel,
   getCurrentProfileIdOrThrow,
@@ -218,14 +219,14 @@ export function registerBrowserHandlers() {
       ? payload
       : (Array.isArray(urls) ? urls[Number(activeIndex) || 0] : '');
     const session = normalizePersistedBrowserSession(urls, activeIndex, fallbackUrl);
-    const nextUrl = session.urls[session.activeIndex] || '';
-    const same = JSON.stringify(appConfig.browserLastTabs || []) === JSON.stringify(session.urls)
-      && Number(appConfig.browserLastTabIndex || 0) === session.activeIndex
-      && appConfig.browserLastUrl === nextUrl;
+    const profileId = currentProfileId || '';
+    const stored = readBrowserSessionForProfile(appConfig, profileId);
+    const alreadyScoped = Boolean(profileId && appConfig.browserSessionsByProfile?.[profileId]);
+    const same = alreadyScoped
+      && JSON.stringify(stored.urls) === JSON.stringify(session.urls)
+      && stored.activeIndex === session.activeIndex;
     if (same) return { success: true };
-    appConfig.browserLastTabs = session.urls;
-    appConfig.browserLastTabIndex = session.activeIndex;
-    appConfig.browserLastUrl = nextUrl;
+    writeBrowserSessionForProfile(appConfig, profileId, session);
     saveAppConfig();
     return { success: true };
   });

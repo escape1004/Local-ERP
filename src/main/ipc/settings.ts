@@ -195,17 +195,18 @@ import {
   importCategoryRecordsFromRows
 } from '../import-export';
 import { hasOpenAiApiKey } from '../services/openai-secret';
-import { resolveEmbeddedBrowserSession } from '../lib/browser-window-url';
+import { readBrowserSessionForProfile, resolveEmbeddedBrowserSession } from '../lib/browser-window-url';
 import { sendEmbeddedBrowserMessage } from '../app/browser-window';
 
 export function registerSettingsHandlers() {
 
 
   ipcMain.handle('getConfig', () => {
+    const storedBrowserSession = readBrowserSessionForProfile(appConfig, currentProfileId);
     const browserSession = resolveEmbeddedBrowserSession({
-      lastTabs: appConfig.browserLastTabs,
-      lastTabIndex: appConfig.browserLastTabIndex,
-      lastUrl: appConfig.browserLastUrl,
+      lastTabs: storedBrowserSession.urls,
+      lastTabIndex: storedBrowserSession.activeIndex,
+      lastUrl: storedBrowserSession.urls[storedBrowserSession.activeIndex] || '',
       startupMode: getConfiguredBrowserStartupMode(),
     });
     return {

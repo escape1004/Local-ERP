@@ -44,6 +44,86 @@ export function normalizePersistedBrowserSession(tabs, activeIndex, lastUrl) {
   return { urls: nextUrls, activeIndex: nextUrls.length ? index : 0 };
 }
 
+export function hasBrowserSessionsByProfile(value) {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0);
+}
+
+function toStoredBrowserSession(session) {
+  const lastUrl = session.urls[session.activeIndex] || '';
+  return {
+    tabs: session.urls,
+    activeIndex: session.activeIndex,
+    lastUrl,
+  };
+}
+
+export function readBrowserSessionForProfile(config, profileId) {
+  const map = config?.browserSessionsByProfile;
+  if (hasBrowserSessionsByProfile(map)) {
+    const scoped = profileId ? map[profileId] : null;
+    if (!scoped || typeof scoped !== 'object' || Array.isArray(scoped)) {
+      return { urls: [], activeIndex: 0 };
+    }
+    return normalizePersistedBrowserSession(scoped.tabs ?? scoped.urls, scoped.activeIndex, scoped.lastUrl);
+  }
+
+  return normalizePersistedBrowserSession(
+    config?.browserLastTabs,
+    config?.browserLastTabIndex,
+    config?.browserLastUrl,
+  );
+}
+
+export function writeBrowserSessionForProfile(config, profileId, session) {
+  const next = normalizePersistedBrowserSession(session?.urls ?? session?.tabs, session?.activeIndex, session?.lastUrl);
+  const stored = toStoredBrowserSession(next);
+  if (profileId) {
+    const existing = config.browserSessionsByProfile;
+    const map = existing && typeof existing === 'object' && !Array.isArray(existing)
+      ? { ...existing }
+      : {};
+    map[profileId] = stored;
+    config.browserSessionsByProfile = map;
+  }
+  config.browserLastTabs = stored.tabs;
+  config.browserLastTabIndex = stored.activeIndex;
+  config.browserLastUrl = stored.lastUrl;
+  return next;
+}
+
+export function claimLegacyBrowserSessionForProfile(config, profileId) {
+  if (!profileId || hasBrowserSessionsByProfile(config.browserSessionsByProfile)) {
+    return false;
+  }
+
+  const legacy = normalizePersistedBrowserSession(
+    config.browserLastTabs,
+    config.browserLastTabIndex,
+    config.browserLastUrl,
+  );
+  config.browserSessionsByProfile = {
+    [profileId]: toStoredBrowserSession(legacy),
+  };
+  return true;
+}
+
+export function deleteBrowserSessionForProfile(config, profileId) {
+  const map = config?.browserSessionsByProfile;
+  if (!profileId || !map || typeof map !== 'object' || Array.isArray(map) || !Object.prototype.hasOwnProperty.call(map, profileId)) {
+    return false;
+  }
+
+  const next = { ...map };
+  delete next[profileId];
+  config.browserSessionsByProfile = next;
+  if (Object.keys(next).length === 0) {
+    config.browserLastTabs = [];
+    config.browserLastTabIndex = 0;
+    config.browserLastUrl = '';
+  }
+  return true;
+}
+
 export function resolveEmbeddedBrowserSession(input) {
   const requestedUrl = input?.requestedUrl;
   const requested = requestedUrl ? parseExternalHttpUrl(String(requestedUrl)) : null;

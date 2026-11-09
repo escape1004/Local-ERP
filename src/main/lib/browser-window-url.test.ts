@@ -5,8 +5,12 @@ import {
   normalizeBrowserSessionTabs,
   normalizeBrowserSessionUrl,
   normalizePersistedBrowserSession,
+  claimLegacyBrowserSessionForProfile,
+  deleteBrowserSessionForProfile,
+  readBrowserSessionForProfile,
   resolveEmbeddedBrowserOpenUrl,
   resolveEmbeddedBrowserSession,
+  writeBrowserSessionForProfile,
 } from './browser-window-url';
 
 test('builds a browser hash without a url', () => {
@@ -70,6 +74,81 @@ test('caps restored tabs and falls back to the last url', () => {
     urls: ['https://a.example/', 'https://b.example/', 'https://c.example/'],
     activeIndex: 2,
   });
+});
+
+test('keeps restored browser tabs scoped to the selected profile', () => {
+  const config = {
+    browserLastTabs: ['https://legacy.example/'],
+    browserLastTabIndex: 0,
+    browserLastUrl: 'https://legacy.example/',
+    browserSessionsByProfile: {
+      'profile-a': {
+        tabs: ['https://a.example/', 'https://a2.example/'],
+        activeIndex: 1,
+        lastUrl: 'https://a2.example/',
+      },
+    },
+  };
+
+  expect(readBrowserSessionForProfile(config, 'profile-a')).toEqual({
+    urls: ['https://a.example/', 'https://a2.example/'],
+    activeIndex: 1,
+  });
+  expect(readBrowserSessionForProfile(config, 'profile-b')).toEqual({
+    urls: [],
+    activeIndex: 0,
+  });
+});
+
+test('claims leftover global tabs for the first profile after upgrade', () => {
+  const config = {
+    browserLastTabs: ['https://legacy.example/'],
+    browserLastTabIndex: 0,
+    browserLastUrl: 'https://legacy.example/',
+  };
+
+  expect(claimLegacyBrowserSessionForProfile(config, 'profile-a')).toBe(true);
+  expect(readBrowserSessionForProfile(config, 'profile-a')).toEqual({
+    urls: ['https://legacy.example/'],
+    activeIndex: 0,
+  });
+  expect(readBrowserSessionForProfile(config, 'profile-b')).toEqual({
+    urls: [],
+    activeIndex: 0,
+  });
+  expect(claimLegacyBrowserSessionForProfile(config, 'profile-b')).toBe(false);
+});
+
+test('writes and deletes browser sessions per profile', () => {
+  const config = {
+    browserLastTabs: [],
+    browserLastTabIndex: 0,
+    browserLastUrl: '',
+    browserSessionsByProfile: {},
+  };
+
+  writeBrowserSessionForProfile(config, 'profile-a', {
+    urls: ['https://a.example/'],
+    activeIndex: 0,
+  });
+  writeBrowserSessionForProfile(config, 'profile-b', {
+    urls: ['https://b.example/', 'https://b2.example/'],
+    activeIndex: 1,
+  });
+
+  expect(readBrowserSessionForProfile(config, 'profile-a').urls).toEqual(['https://a.example/']);
+  expect(readBrowserSessionForProfile(config, 'profile-b')).toEqual({
+    urls: ['https://b.example/', 'https://b2.example/'],
+    activeIndex: 1,
+  });
+
+  expect(deleteBrowserSessionForProfile(config, 'profile-b')).toBe(true);
+  expect(readBrowserSessionForProfile(config, 'profile-b')).toEqual({ urls: [], activeIndex: 0 });
+  expect(readBrowserSessionForProfile(config, 'profile-a').urls).toEqual(['https://a.example/']);
+
+  expect(deleteBrowserSessionForProfile(config, 'profile-a')).toBe(true);
+  expect(config.browserLastTabs).toEqual([]);
+  expect(readBrowserSessionForProfile(config, 'profile-a')).toEqual({ urls: [], activeIndex: 0 });
 });
 
 test('restores saved tabs only when continue is selected', () => {

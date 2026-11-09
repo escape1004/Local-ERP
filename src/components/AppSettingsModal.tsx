@@ -1128,7 +1128,7 @@ export function AppSettingsModal({
             />
             <span>
               <span className="block text-sm font-medium text-white">중단한 위치에서 계속하기</span>
-              <span className="mt-1 block text-sm text-discord-muted">마지막으로 열려 있던 탭과 활성 탭을 그대로 다시 엽니다.</span>
+              <span className="mt-1 block text-sm text-discord-muted">이 프로필에서 마지막으로 열려 있던 탭과 활성 탭을 그대로 다시 엽니다.</span>
             </span>
           </label>
         </RadioGroup>

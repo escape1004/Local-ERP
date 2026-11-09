@@ -124,6 +124,7 @@ export const defaultConfig = {
   browserLastUrl: '',
   browserLastTabs: [],
   browserLastTabIndex: 0,
+  browserSessionsByProfile: {},
   passwordHash: null,
   passwordLockMaxAttempts: 5,
   passwordLockDurationMinutes: 1,

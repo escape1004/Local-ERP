@@ -81,6 +81,8 @@ import {
   log,
   db
 } from '../store';
+import { closeEmbeddedBrowserWindow } from '../app/browser-window';
+import { claimLegacyBrowserSessionForProfile, deleteBrowserSessionForProfile } from '../lib/browser-window-url';
 import { initializeDatabase } from '../database';
 import { getFileTypeFromPath, getThumbnailHash } from '../lib/files';
 import { electronDistDir, getFfmpegToolPaths, getUnpackedFfprobePath } from '../ffmpeg-paths';
@@ -208,12 +210,19 @@ export function registerProfileHandlers() {
       return { success: false, error: 'Profile not found.' };
     }
 
+    if (currentProfileId && currentProfileId !== profile.id) {
+      closeEmbeddedBrowserWindow();
+    }
+    if (claimLegacyBrowserSessionForProfile(appConfig, profile.id)) {
+      saveAppConfig();
+    }
     setCurrentProfileId(profile.id);
     log('profiles:select:success', { profileId: profile.id });
     return { success: true, profile };
   });
 
   ipcMain.handle('profiles:clearCurrent', () => {
+    closeEmbeddedBrowserWindow();
     setCurrentProfileId(null);
     return { success: true };
   });
@@ -289,7 +298,11 @@ export function registerProfileHandlers() {
     removeEmptyThumbnailDirsUpward(profileDir);
 
     if (currentProfileId === profileId) {
+      closeEmbeddedBrowserWindow();
       setCurrentProfileId(null);
+    }
+    if (deleteBrowserSessionForProfile(appConfig, profileId)) {
+      saveAppConfig();
     }
 
     return { success: true };
