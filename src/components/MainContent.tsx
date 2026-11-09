@@ -1,4 +1,5 @@
 ﻿import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Search, Plus, Filter, X, FileText, Check, ChevronsUpDown, LayoutGrid, TableProperties, Archive, Info, HelpCircle, ImageOff } from 'lucide-react';
 import { useERPStore } from '../hooks/useERPStore';
 import { useLoadingStore } from '../hooks/useLoadingStore';
@@ -71,6 +72,8 @@ declare global {
 }
 
 export const MainContent: React.FC = () => {
+  const location = useLocation();
+  const navigate = useNavigate();
   const {
     categories,
     records: recordsByCategory,
@@ -873,6 +876,20 @@ export const MainContent: React.FC = () => {
     setEditingRecord(null);
     setIsRecordModalOpen(true);
   };
+
+  useEffect(() => {
+    const state = typeof location.state === 'object' && location.state !== null
+      ? location.state as { categoryId?: string; openNewRecord?: boolean }
+      : null;
+    if (!state?.openNewRecord || !selectedCategorySafe) return;
+    if (state.categoryId && selectedCategorySafe.id !== state.categoryId) return;
+
+    handleNewRecord();
+    navigate(location.pathname, {
+      replace: true,
+      state: state.categoryId ? { categoryId: state.categoryId } : null,
+    });
+  }, [location.pathname, location.state, navigate, selectedCategorySafe]);
 
   const handleRefreshRecords = () => {
     if (!selectedCategoryId) return;

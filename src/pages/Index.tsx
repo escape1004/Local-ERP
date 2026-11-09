@@ -8,6 +8,7 @@ import { isSeparatorCategory } from '../lib/category';
 type CategoryRouteState = {
   categoryId?: string;
   recordId?: string;
+  openNewRecord?: boolean;
 };
 
 const Index = () => {

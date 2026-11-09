@@ -24,6 +24,7 @@ import {
   Image,
   Link2Off,
   Eye,
+  Plus,
   TimerReset,
   Trophy,
   Video,
@@ -925,11 +926,44 @@ export default function Dashboard() {
               </Select>
             </div>
 
-            <div className={`grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 ${summaryCards.length >= 5 ? 'lg:grid-cols-5' : summaryCards.length === 4 ? 'lg:grid-cols-4' : 'lg:grid-cols-3'}`}>
+            <div className={`grid grid-cols-1 gap-4 mb-6 ${
+              summaryCards.length >= 5
+                ? 'md:grid-cols-2 lg:grid-cols-5'
+                : summaryCards.length === 4
+                  ? 'md:grid-cols-2 lg:grid-cols-4'
+                  : summaryCards.length === 2
+                    ? 'md:grid-cols-2'
+                    : summaryCards.length === 1
+                      ? ''
+                      : 'md:grid-cols-2 lg:grid-cols-3'
+            }`}>
               {summaryCards.map((card) => (
                 <StatCard key={card.key} title={card.title} value={card.value} icon={card.icon} color={card.color} />
               ))}
             </div>
+
+            {!hasAnyRecords && (
+              <div className="bg-discord-sidebar rounded-xl border border-gray-700 p-8 mb-6 text-center">
+                <p className="text-lg text-discord-muted mb-2">등록된 레코드가 없습니다</p>
+                <p className="text-sm text-discord-muted mb-6">
+                  첫 레코드를 추가하면 대시보드에서 현황을 볼 수 있습니다.
+                </p>
+                <Button
+                  onClick={() => {
+                    const targetCategory = selectedRootCategory || rootCategories[0];
+                    if (!targetCategory) return;
+                    void selectCategory(targetCategory.id);
+                    navigate('/category', {
+                      state: { categoryId: targetCategory.id, openNewRecord: true },
+                    });
+                  }}
+                  className="bg-discord-accent hover:bg-blue-600 text-white"
+                >
+                  <Plus size={16} className="mr-2" />
+                  레코드 추가하기
+                </Button>
+              </div>
+            )}
 
             {selectedWarningTotalCount > 0 && (
               <div className="bg-discord-sidebar rounded-xl p-6 border border-gray-700 mb-6">
