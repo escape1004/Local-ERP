@@ -11,9 +11,10 @@ import type {
   SubtitleColor,
   SubtitleSize,
   SubtitleSource,
+  ViewerFitMode,
 } from './types';
 import type { SubtitleCue } from '../../lib/subtitle';
-import { NATIVE_VIDEO_CLASSNAME } from './viewerLogic';
+import { getViewerVideoClassName } from './viewerLogic';
 
 interface VideoViewerProps {
   src: string;
@@ -49,6 +50,8 @@ interface VideoViewerProps {
   toolbarOverlayClassName?: string;
   layout?: 'page' | 'embedded';
   videoClassName?: string;
+  fitMode: ViewerFitMode;
+  onFitModeChange: (mode: ViewerFitMode) => void;
   subtitleCues: SubtitleCue[];
   subtitleOffset: number;
   subtitleSize: SubtitleSize;
@@ -128,7 +131,9 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
   timelinePreview,
   toolbarOverlayClassName,
   layout = 'page',
-  videoClassName = NATIVE_VIDEO_CLASSNAME,
+  videoClassName,
+  fitMode,
+  onFitModeChange,
   subtitleCues,
   subtitleOffset,
   subtitleSize,
@@ -181,6 +186,8 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
     };
   }, [onPictureInPictureStateChange, src, videoError, videoRef]);
 
+  const resolvedVideoClassName = videoClassName ?? getViewerVideoClassName(fitMode);
+
   return (
   <div
     className={layout === 'page'
@@ -232,32 +239,34 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
             </button>
           </div>
         ) : (
-          <div
-            className="relative grid h-full w-full place-items-center bg-black"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) onVideoClick();
-            }}
+          <SubtitleController
+            onPlayInPictureInPicture={onPictureInPicture}
+            fitMode={fitMode}
+            onFitModeChange={onFitModeChange}
+            subtitles={subtitleMenu.subtitles}
+            activeSubtitleId={subtitleMenu.activeSubtitleId}
+            subtitleSize={subtitleSize}
+            subtitleColor={subtitleColor}
+            subtitleBackground={subtitleBackground}
+            subtitleOffset={subtitleOffset}
+            onSubtitleChange={subtitleMenu.onSubtitleChange}
+            onSubtitleSizeChange={subtitleMenu.onSubtitleSizeChange}
+            onSubtitleColorChange={subtitleMenu.onSubtitleColorChange}
+            onSubtitleBackgroundChange={subtitleMenu.onSubtitleBackgroundChange}
+            onSubtitleOffsetChange={subtitleMenu.onSubtitleOffsetChange}
           >
-            <SubtitleController
-              onPlayInPictureInPicture={onPictureInPicture}
-              subtitles={subtitleMenu.subtitles}
-              activeSubtitleId={subtitleMenu.activeSubtitleId}
-              subtitleSize={subtitleSize}
-              subtitleColor={subtitleColor}
-              subtitleBackground={subtitleBackground}
-              subtitleOffset={subtitleOffset}
-              onSubtitleChange={subtitleMenu.onSubtitleChange}
-              onSubtitleSizeChange={subtitleMenu.onSubtitleSizeChange}
-              onSubtitleColorChange={subtitleMenu.onSubtitleColorChange}
-              onSubtitleBackgroundChange={subtitleMenu.onSubtitleBackgroundChange}
-              onSubtitleOffsetChange={subtitleMenu.onSubtitleOffsetChange}
+            <div
+              className="relative grid h-full w-full place-items-center bg-black"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) onVideoClick();
+              }}
             >
               <video
                 ref={videoRef}
                 src={src}
                 autoPlay={autoPlay}
                 controls={false}
-                className={videoClassName}
+                className={resolvedVideoClassName}
                 style={{
                   cursor: scale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default',
                 }}
@@ -286,18 +295,18 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
                 onError={onError}
                 onCanPlay={onCanPlay}
               />
-            </SubtitleController>
-            <SubtitleOverlay
-              videoRef={videoRef}
-              sourceKey={subtitleSourceKey}
-              cues={subtitleCues}
-              currentTime={currentTime}
-              offsetSeconds={subtitleOffset}
-              size={subtitleSize}
-              color={subtitleColor}
-              background={subtitleBackground}
-            />
-          </div>
+              <SubtitleOverlay
+                videoRef={videoRef}
+                sourceKey={subtitleSourceKey}
+                cues={subtitleCues}
+                currentTime={currentTime}
+                offsetSeconds={subtitleOffset}
+                size={subtitleSize}
+                color={subtitleColor}
+                background={subtitleBackground}
+              />
+            </div>
+          </SubtitleController>
         )}
       </div>
     </div>
@@ -337,32 +346,34 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
             </button>
           </div>
         ) : (
-          <div
-            className="relative grid h-full w-full place-items-center bg-black"
-            onClick={(event) => {
-              if (event.target === event.currentTarget) onVideoClick();
-            }}
+          <SubtitleController
+            onPlayInPictureInPicture={onPictureInPicture}
+            fitMode={fitMode}
+            onFitModeChange={onFitModeChange}
+            subtitles={subtitleMenu.subtitles}
+            activeSubtitleId={subtitleMenu.activeSubtitleId}
+            subtitleSize={subtitleSize}
+            subtitleColor={subtitleColor}
+            subtitleBackground={subtitleBackground}
+            subtitleOffset={subtitleOffset}
+            onSubtitleChange={subtitleMenu.onSubtitleChange}
+            onSubtitleSizeChange={subtitleMenu.onSubtitleSizeChange}
+            onSubtitleColorChange={subtitleMenu.onSubtitleColorChange}
+            onSubtitleBackgroundChange={subtitleMenu.onSubtitleBackgroundChange}
+            onSubtitleOffsetChange={subtitleMenu.onSubtitleOffsetChange}
           >
-            <SubtitleController
-              onPlayInPictureInPicture={onPictureInPicture}
-              subtitles={subtitleMenu.subtitles}
-              activeSubtitleId={subtitleMenu.activeSubtitleId}
-              subtitleSize={subtitleSize}
-              subtitleColor={subtitleColor}
-              subtitleBackground={subtitleBackground}
-              subtitleOffset={subtitleOffset}
-              onSubtitleChange={subtitleMenu.onSubtitleChange}
-              onSubtitleSizeChange={subtitleMenu.onSubtitleSizeChange}
-              onSubtitleColorChange={subtitleMenu.onSubtitleColorChange}
-              onSubtitleBackgroundChange={subtitleMenu.onSubtitleBackgroundChange}
-              onSubtitleOffsetChange={subtitleMenu.onSubtitleOffsetChange}
+            <div
+              className="relative grid h-full w-full place-items-center bg-black"
+              onClick={(event) => {
+                if (event.target === event.currentTarget) onVideoClick();
+              }}
             >
               <video
                 ref={videoRef}
                 src={src}
                 autoPlay={autoPlay}
                 controls={false}
-                className={videoClassName}
+                className={resolvedVideoClassName}
                 style={{
                   cursor: scale > 1 ? (isPanning ? 'grabbing' : 'grab') : 'default',
                 }}
@@ -391,18 +402,18 @@ export const VideoViewer: React.FC<VideoViewerProps> = ({
                 onError={onError}
                 onCanPlay={onCanPlay}
               />
-            </SubtitleController>
-            <SubtitleOverlay
-              videoRef={videoRef}
-              sourceKey={subtitleSourceKey}
-              cues={subtitleCues}
-              currentTime={currentTime}
-              offsetSeconds={subtitleOffset}
-              size={subtitleSize}
-              color={subtitleColor}
-              background={subtitleBackground}
-            />
-          </div>
+              <SubtitleOverlay
+                videoRef={videoRef}
+                sourceKey={subtitleSourceKey}
+                cues={subtitleCues}
+                currentTime={currentTime}
+                offsetSeconds={subtitleOffset}
+                size={subtitleSize}
+                color={subtitleColor}
+                background={subtitleBackground}
+              />
+            </div>
+          </SubtitleController>
         )}
       </div>
     )}

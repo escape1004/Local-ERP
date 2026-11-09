@@ -1,7 +1,14 @@
 import React from 'react';
 import { Pause, Play } from 'lucide-react';
 import { AnimatedGif } from '../AnimatedGif';
-import type { PlaybackOverlayState } from './types';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuTrigger,
+} from '../ui/context-menu';
+import { ViewerFitMenuItems } from './ViewerFitMenu';
+import type { PlaybackOverlayState, ViewerFitMode } from './types';
+import { getViewerImageClassName } from './viewerLogic';
 
 interface ImageViewerProps {
   src: string;
@@ -15,6 +22,8 @@ interface ImageViewerProps {
   imageRef: React.RefObject<HTMLImageElement>;
   gifCanvasRef: React.RefObject<HTMLCanvasElement>;
   containerRef?: React.RefObject<HTMLDivElement>;
+  fitMode: ViewerFitMode;
+  onFitModeChange: (mode: ViewerFitMode) => void;
   showPlaybackOverlay?: boolean;
   playbackOverlayState?: PlaybackOverlayState;
   playbackOverlayVisible?: boolean;
@@ -39,10 +48,12 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   imageRef,
   gifCanvasRef,
   containerRef,
+  fitMode,
+  onFitModeChange,
   showPlaybackOverlay = false,
   playbackOverlayState = 'play',
   playbackOverlayVisible = false,
-  className = 'max-h-full max-w-full object-contain select-none',
+  className,
   wrapperClassName = 'relative flex h-full w-full items-center justify-center overflow-hidden',
   containerStyle,
   onMouseDown,
@@ -50,9 +61,11 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   onMouseUp,
   onGifClick,
 }) => {
+  const mediaClassName = className ?? getViewerImageClassName(fitMode);
   const style: React.CSSProperties = {
-    maxWidth: '100%',
-    maxHeight: '100%',
+    ...(fitMode === 'contain'
+      ? { width: '100%', height: '100%', maxWidth: '100%', maxHeight: '100%' }
+      : { maxWidth: '100%', maxHeight: '100%' }),
     transform: `scale(${scale}) translate(${offset.x / scale}px, ${offset.y / scale}px) rotate(${rotation}deg)`,
     cursor: scale > 1 ? (isPanning ? 'grabbing' : 'grab') : (isGif ? 'pointer' : 'default'),
     transition: isPanning ? 'none' : 'transform 0.2s',
@@ -78,38 +91,45 @@ export const ImageViewer: React.FC<ImageViewerProps> = ({
   };
 
   return (
-    <div ref={containerRef} className={wrapperClassName} style={containerStyle} data-viewer-zoom>
-      {isGif ? (
-        <AnimatedGif
-          ref={gifCanvasRef}
-          src={src}
-          paused={paused}
-          aria-label={alt}
-          className={className}
-          style={style}
-          {...pointerHandlers}
-          onClick={onGifClick}
-        />
-      ) : (
-        <img
-          src={src}
-          alt={alt}
-          className={className}
-          style={style}
-          draggable={false}
-          ref={imageRef}
-          {...pointerHandlers}
-        />
-      )}
-      {isGif && showPlaybackOverlay && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <div className={`flex h-20 w-20 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-all duration-300 ${
-            playbackOverlayVisible ? 'scale-100 opacity-100' : 'scale-90 opacity-0'
-          }`}>
-            {playbackOverlayState === 'pause' ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" className="ml-1" />}
-          </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div ref={containerRef} className={wrapperClassName} style={containerStyle} data-viewer-zoom>
+          {isGif ? (
+            <AnimatedGif
+              ref={gifCanvasRef}
+              src={src}
+              paused={paused}
+              aria-label={alt}
+              className={mediaClassName}
+              style={style}
+              {...pointerHandlers}
+              onClick={onGifClick}
+            />
+          ) : (
+            <img
+              src={src}
+              alt={alt}
+              className={mediaClassName}
+              style={style}
+              draggable={false}
+              ref={imageRef}
+              {...pointerHandlers}
+            />
+          )}
+          {isGif && showPlaybackOverlay && (
+            <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+              <div className={`flex h-20 w-20 items-center justify-center rounded-full bg-black/60 text-white backdrop-blur-sm transition-all duration-300 ${
+                playbackOverlayVisible ? 'scale-100 opacity-100' : 'scale-90 opacity-0'
+              }`}>
+                {playbackOverlayState === 'pause' ? <Pause size={34} fill="currentColor" /> : <Play size={34} fill="currentColor" className="ml-1" />}
+              </div>
+            </div>
+          )}
         </div>
-      )}
-    </div>
+      </ContextMenuTrigger>
+      <ContextMenuContent className="z-[80] min-w-[180px]">
+        <ViewerFitMenuItems fitMode={fitMode} onFitModeChange={onFitModeChange} />
+      </ContextMenuContent>
+    </ContextMenu>
   );
 };

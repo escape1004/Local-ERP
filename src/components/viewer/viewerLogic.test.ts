@@ -12,6 +12,13 @@ import {
   getLoopRangePercents,
   getNavigableArchiveFiles,
   getNativeContainedVideoScale,
+  getViewerImageClassName,
+  getViewerMediaFitScale,
+  getViewerVideoClassName,
+  parseViewerFitMode,
+  CONTAIN_VIDEO_CLASSNAME,
+  NATIVE_IMAGE_CLASSNAME,
+  NATIVE_VIDEO_CLASSNAME,
   getOpenViewerSourceKey,
   getSeekTimeFromPointer,
   hasBookmarkAtTime,
@@ -32,6 +39,19 @@ test('keeps native video size unless the frame is larger than the viewer', () =>
   expect(getNativeContainedVideoScale(1920, 1080, 960, 540)).toBe(0.5);
   expect(getNativeContainedVideoScale(800, 600, 400, 400)).toBe(0.5);
   expect(getNativeContainedVideoScale(0, 360, 1920, 1080)).toBe(0);
+});
+
+test('fits small media to the viewer only in contain mode', () => {
+  expect(parseViewerFitMode('contain')).toBe('contain');
+  expect(parseViewerFitMode('original')).toBe('original');
+  expect(parseViewerFitMode('nope')).toBe('original');
+  expect(getViewerMediaFitScale(640, 360, 1920, 1080, 'original')).toBe(1);
+  expect(getViewerMediaFitScale(640, 360, 1920, 1080, 'contain')).toBe(3);
+  expect(getViewerMediaFitScale(1920, 1080, 960, 540, 'contain')).toBe(0.5);
+  expect(getViewerVideoClassName('original')).toBe(NATIVE_VIDEO_CLASSNAME);
+  expect(getViewerVideoClassName('contain')).toBe(CONTAIN_VIDEO_CLASSNAME);
+  expect(getViewerImageClassName('original')).toBe(NATIVE_IMAGE_CLASSNAME);
+  expect(getViewerImageClassName('contain')).toContain('h-full');
 });
 
 test('identifies the open viewer source only while the modal is showing a file', () => {

@@ -4,13 +4,14 @@ import { ArchiveViewer } from './viewer/ArchiveViewer';
 import { ImageViewer } from './viewer/ImageViewer';
 import { VideoViewer } from './viewer/VideoViewer';
 import { ViewerModalHeader, ViewerRotateOverlay } from './viewer/ViewerModalChrome';
-import type { ViewerModalProps } from './viewer/types';
+import type { ViewerFitMode, ViewerModalProps } from './viewer/types';
 import {
   formatMediaTime,
   hasBookmarkAtTime,
   isVideoFileName,
 } from './viewer/viewerLogic';
 import { useArchiveViewer } from '../hooks/useArchiveViewer';
+import { useViewerFitMode } from '../hooks/useViewerFitMode';
 import { useMediaKeyboard } from '../hooks/useMediaKeyboard';
 import { exitPictureInPicture } from '../hooks/pictureInPicture';
 import { useVideoPlayback } from '../hooks/useVideoPlayback';
@@ -81,6 +82,12 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
     resetTransforms,
     clampToContainer,
   } = session;
+
+  const { fitMode, setFitMode } = useViewerFitMode();
+  const handleFitModeChange = useCallback((mode: ViewerFitMode) => {
+    setFitMode(mode);
+    resetTransforms();
+  }, [resetTransforms, setFitMode]);
 
   const [isImageGifPaused, setIsImageGifPaused] = useState(false);
   const [isArchiveGifPaused, setIsArchiveGifPaused] = useState(false);
@@ -568,6 +575,8 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
                     imageRef={imgRef}
                     gifCanvasRef={imageGifCanvasRef}
                     containerRef={imgContainerRef}
+                    fitMode={fitMode}
+                    onFitModeChange={handleFitModeChange}
                     showPlaybackOverlay={playback.showPlaybackOverlay}
                     playbackOverlayState={playback.playbackOverlayState}
                     playbackOverlayVisible={playback.playbackOverlayVisible}
@@ -605,6 +614,8 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
                   offset={videoOffset}
                   rotation={videoRotation}
                   isPanning={videoIsPanning}
+                  fitMode={fitMode}
+                  onFitModeChange={handleFitModeChange}
                   showBookmarks
                   bookmarks={bookmarks}
                   subtitleSourceKey={dataUrl}
@@ -684,6 +695,8 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
                     isPanning: archiveIsPanning,
                     imageRef: archiveImgRef,
                     gifCanvasRef: archiveGifCanvasRef,
+                    fitMode,
+                    onFitModeChange: handleFitModeChange,
                     showPlaybackOverlay: playback.showPlaybackOverlay,
                     playbackOverlayState: playback.playbackOverlayState,
                     playbackOverlayVisible: playback.playbackOverlayVisible,
@@ -715,6 +728,8 @@ export const ViewerModal: React.FC<ViewerModalProps> = ({ isOpen, filePath, file
                     offset: archiveVideoOffset,
                     rotation: archiveImgRotation,
                     isPanning: archiveVideoIsPanning,
+                    fitMode,
+                    onFitModeChange: handleFitModeChange,
                     subtitleSourceKey: archive.currentArchiveDataUrl,
                     onRetry: () => {
                       playback.setVideoError(null);

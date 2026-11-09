@@ -1,6 +1,7 @@
 import type { SubtitleCue } from '../../lib/subtitle';
 
 export type ViewerFileType = 'image' | 'video' | 'archive';
+export type ViewerFitMode = 'original' | 'contain';
 
 export interface ViewerModalProps {
   isOpen: boolean;

@@ -241,7 +241,6 @@ export const ArchiveViewer: React.FC<ArchiveViewerProps> = ({
             <ImageViewer
               {...imageViewer}
               src={currentArchiveDataUrl}
-              className="max-h-full max-w-full object-contain select-none"
               wrapperClassName="relative flex h-full w-full items-center justify-center overflow-hidden"
             />
           ) : (

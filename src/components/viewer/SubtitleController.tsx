@@ -11,12 +11,15 @@ import {
   ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from '../ui/context-menu';
-import type { SubtitleBackground, SubtitleColor, SubtitleSize, SubtitleSource } from './types';
+import type { SubtitleBackground, SubtitleColor, SubtitleSize, SubtitleSource, ViewerFitMode } from './types';
+import { ViewerFitMenuItems } from './ViewerFitMenu';
 import { clampSubtitleOffset } from './viewerLogic';
 
 interface SubtitleControllerProps {
   children: React.ReactElement;
   onPlayInPictureInPicture: () => void;
+  fitMode: ViewerFitMode;
+  onFitModeChange: (mode: ViewerFitMode) => void;
   subtitles: SubtitleSource[];
   activeSubtitleId: string | null;
   subtitleSize: SubtitleSize;
@@ -33,6 +36,8 @@ interface SubtitleControllerProps {
 export const SubtitleController: React.FC<SubtitleControllerProps> = ({
   children,
   onPlayInPictureInPicture,
+  fitMode,
+  onFitModeChange,
   subtitles,
   activeSubtitleId,
   subtitleSize,
@@ -50,6 +55,8 @@ export const SubtitleController: React.FC<SubtitleControllerProps> = ({
       {children}
     </ContextMenuTrigger>
     <ContextMenuContent className="z-[80] min-w-[180px]">
+      <ViewerFitMenuItems fitMode={fitMode} onFitModeChange={onFitModeChange} />
+      <ContextMenuSeparator />
       <ContextMenuItem onSelect={onPlayInPictureInPicture}>
         PIP 재생
       </ContextMenuItem>

@@ -1,5 +1,12 @@
 import type { CSSProperties } from 'react';
-import type { ArchiveFile, LoopRange, MediaBookmark, ViewerFileType } from './types';
+import type { ArchiveFile, LoopRange, MediaBookmark, ViewerFileType, ViewerFitMode } from './types';
+
+export type { ViewerFitMode };
+
+export const VIEWER_FIT_MODE_STORAGE_KEY = 'viewerFitMode';
+export const NATIVE_IMAGE_CLASSNAME = 'max-h-full max-w-full object-contain select-none';
+export const CONTAIN_IMAGE_CLASSNAME = 'h-full w-full object-contain select-none';
+export const CONTAIN_VIDEO_CLASSNAME = 'h-full w-full min-h-0 min-w-0 block bg-black object-contain';
 
 export const SUPPORTED_ARCHIVE_FILE_PATTERN = /\.(jpg|jpeg|png|gif|webp|mp4|avi|mkv|mov|wmv|flv|webm|txt)$/i;
 export const SUBTITLE_FILE_PATTERN = /\.(srt|vtt|ass)$/i;
@@ -8,17 +15,40 @@ export const IMAGE_FILE_PATTERN = /\.(jpg|jpeg|png|gif|webp)$/i;
 export const PLAYBACK_SPEEDS = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2];
 export const NATIVE_VIDEO_CLASSNAME = 'max-h-full max-w-full min-h-0 min-w-0 h-auto w-auto block bg-black object-contain';
 
+export function parseViewerFitMode(value: unknown): ViewerFitMode {
+  return value === 'contain' ? 'contain' : 'original';
+}
+
+export function getViewerImageClassName(mode: ViewerFitMode) {
+  return mode === 'contain' ? CONTAIN_IMAGE_CLASSNAME : NATIVE_IMAGE_CLASSNAME;
+}
+
+export function getViewerVideoClassName(mode: ViewerFitMode) {
+  return mode === 'contain' ? CONTAIN_VIDEO_CLASSNAME : NATIVE_VIDEO_CLASSNAME;
+}
+
+export function getViewerMediaFitScale(
+  mediaWidth: number,
+  mediaHeight: number,
+  containerWidth: number,
+  containerHeight: number,
+  mode: ViewerFitMode = 'original',
+) {
+  if (!(mediaWidth > 0 && mediaHeight > 0 && containerWidth > 0 && containerHeight > 0)) {
+    return 0;
+  }
+
+  const fit = Math.min(containerWidth / mediaWidth, containerHeight / mediaHeight);
+  return mode === 'contain' ? fit : Math.min(1, fit);
+}
+
 export function getNativeContainedVideoScale(
   videoWidth: number,
   videoHeight: number,
   containerWidth: number,
   containerHeight: number,
 ) {
-  if (!(videoWidth > 0 && videoHeight > 0 && containerWidth > 0 && containerHeight > 0)) {
-    return 0;
-  }
-
-  return Math.min(1, containerWidth / videoWidth, containerHeight / videoHeight);
+  return getViewerMediaFitScale(videoWidth, videoHeight, containerWidth, containerHeight, 'original');
 }
 
 export function isVideoFileName(name?: string) {
