@@ -2,6 +2,7 @@ import React from 'react';
 import { Loader2 } from 'lucide-react';
 import { useLoadingStore } from '../../hooks/useLoadingStore';
 import { Button } from './button';
+import { MODAL_DIM_CLASS } from '@/lib/modalOverlay';
 
 export const LoadingOverlay: React.FC = () => {
   const { isLoading, message, showCancelButton, cancelLoading } = useLoadingStore();
@@ -9,7 +10,7 @@ export const LoadingOverlay: React.FC = () => {
   if (!isLoading) return null;
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[9999]">
+    <div className={`fixed inset-0 ${MODAL_DIM_CLASS} flex items-center justify-center z-[9999]`}>
       <div className="flex flex-col items-center gap-4 min-w-[200px]">
         <Loader2 className="w-8 h-8 text-discord-accent animate-spin" />
         <div className="text-white text-center">

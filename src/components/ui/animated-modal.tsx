@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { MODAL_DIM_CLASS } from '@/lib/modalOverlay';
 
 interface AnimatedModalProps {
   isOpen: boolean;
@@ -50,7 +51,8 @@ export function AnimatedModal({
   return (
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center bg-black/50 transition-opacity duration-200',
+        'fixed inset-0 z-50 flex items-center justify-center transition-opacity duration-200',
+        MODAL_DIM_CLASS,
         isVisible ? 'opacity-100' : 'opacity-0',
         className
       )}

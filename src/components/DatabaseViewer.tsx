@@ -5,6 +5,7 @@ import { useERPStore } from '../hooks/useERPStore';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { useToast } from './ui/use-toast';
+import { MODAL_DIM_CLASS } from '../lib/modalOverlay';
 
 interface TableInfo {
   name: string;
@@ -522,7 +523,7 @@ export const DatabaseViewer: React.FC = () => {
       </div>
 
       {showResetConfirm && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60">
+        <div className={`fixed inset-0 z-[60] flex items-center justify-center ${MODAL_DIM_CLASS}`}>
           <div className="bg-discord-bg rounded-xl p-6 w-full max-w-md border border-gray-700 flex flex-col items-center overflow-hidden">
             <div className="mb-6 text-center text-discord-text">
               <div className="text-base font-medium mb-2">

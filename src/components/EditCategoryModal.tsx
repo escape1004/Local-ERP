@@ -17,6 +17,7 @@ import { useLoadingStore } from '../hooks/useLoadingStore';
 import { v4 as uuidv4 } from 'uuid';
 import { nanoid } from 'nanoid';
 import { AlertDialog } from './ui/alert-dialog';
+import { MODAL_DIM_CLASS } from '../lib/modalOverlay';
 
 interface FieldEditorProps {
   field: FieldDefinition;
@@ -406,7 +407,7 @@ export const EditCategoryModal: React.FC<EditCategoryModalProps> = ({
 
   return (
     <>
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className={`fixed inset-0 ${MODAL_DIM_CLASS} flex items-center justify-center z-50`}>
         <div className="bg-discord-bg rounded-xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
           <div className="p-6 border-b border-gray-700">
             <h2 className="text-xl font-bold text-discord-text">

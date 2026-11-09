@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { Button } from './button';
 import { X } from 'lucide-react';
+import { MODAL_DIM_CLASS } from '@/lib/modalOverlay';
 
 interface ConfirmDialogProps {
   isOpen: boolean;
@@ -68,7 +69,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   const styles = getVariantStyles();
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <div className={`fixed inset-0 ${MODAL_DIM_CLASS} flex items-center justify-center z-50`}>
       <div className="bg-discord-bg rounded-xl w-full max-w-md border border-gray-700 flex flex-col overflow-hidden">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-gray-700">

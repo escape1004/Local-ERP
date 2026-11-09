@@ -18,6 +18,7 @@ import { useLoadingStore } from './hooks/useLoadingStore';
 import { AppUpdateModal } from './components/AppUpdateModal';
 import { toast } from './components/ui/use-toast';
 import { isStandaloneBrowserWindow } from './lib/browserNavigation';
+import { MODAL_DIM_CLASS } from './lib/modalOverlay';
 import { isProfileHydrationPending, shouldHideAppUntilReady } from './lib/profileHydration';
 import { hasFocusedMediaPlayback, nextIdleActivityAt, shouldIdleLock, silenceAppForLock } from './lib/appLock';
 import {
@@ -746,7 +747,7 @@ const App = () => {
             </DialogContent>
           </Dialog>
           {showDeleteConfirm && (
-            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+            <div className={`fixed inset-0 z-50 flex items-center justify-center ${MODAL_DIM_CLASS}`}>
               <div className="bg-discord-bg rounded-xl p-6 w-full max-w-md border border-gray-700 flex flex-col items-center overflow-hidden">
                 <div className="mb-6 text-center text-discord-text">
                   <div className="text-base font-medium mb-2">
