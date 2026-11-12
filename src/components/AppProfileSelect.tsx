@@ -99,7 +99,7 @@ export function AppProfileSelect({
                 onClick={onCreate}
                 className="group flex w-[132px] flex-col items-center text-center"
               >
-                <div className="flex aspect-square w-full items-center justify-center rounded-full bg-gray-500/80 text-black transition duration-200 group-hover:scale-[1.03] group-hover:bg-gray-400">
+                <div className="flex aspect-square w-full items-center justify-center rounded-xl bg-gray-500/80 text-black transition duration-200 group-hover:scale-[1.03] group-hover:bg-gray-400 group-hover:ring-2 group-hover:ring-white/70">
                   <Plus className="h-16 w-16" strokeWidth={2.5} />
                 </div>
                 <div className="mt-4 text-xl font-medium text-gray-400 transition group-hover:text-white">
