@@ -2,6 +2,7 @@ import React, { type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { Globe, Plus, X } from 'lucide-react';
 import { faviconUrlFor } from '../../lib/browserFavicon';
+import { BROWSER_TAB_ANIMATION_MS, getBrowserTabItemStyle } from '../../lib/browserTabLayout';
 import type { BrowserTabState } from '../../lib/browserTabs';
 import { cn } from '../../lib/utils';
 import { WindowControls } from '../TitleBar';
@@ -62,20 +63,22 @@ function TabFace({
   return (
     <div
       className={cn(
-        'group flex h-8 w-40 min-w-[112px] shrink-0 select-none items-center gap-1.5 rounded-t-md px-2 text-sm',
+        'group relative flex h-8 w-full min-w-0 select-none items-center gap-1.5 overflow-hidden rounded-t-md px-2 text-sm',
         active || elevated ? 'bg-discord-bg text-discord-text' : 'text-discord-muted',
         className,
       )}
       style={style}
     >
       <TabFavicon url={tab.url} />
-      <span className="min-w-0 flex-1 truncate">{tab.loading ? '불러오는 중' : tab.title}</span>
+      <span className="min-w-0 flex-1 truncate [mask-image:linear-gradient(to_right,black_calc(100%-12px),transparent)]">
+        {tab.loading ? '불러오는 중' : tab.title}
+      </span>
       {onClose ? (
         <button
           type="button"
           aria-label={`${tab.title} 탭 닫기`}
           className={cn(
-            'flex h-4 w-4 shrink-0 items-center justify-center rounded-sm hover:bg-white/10',
+            'absolute right-1 top-1/2 z-10 flex h-4 w-4 -translate-y-1/2 items-center justify-center rounded-sm hover:bg-white/10',
             active ? 'opacity-80' : 'opacity-0 group-hover:opacity-80',
           )}
           onPointerDown={(event) => event.stopPropagation()}
@@ -87,9 +90,7 @@ function TabFace({
         >
           <X size={11} />
         </button>
-      ) : (
-        <span className="h-4 w-4 shrink-0" />
-      )}
+      ) : null}
     </div>
   );
 }
@@ -115,6 +116,11 @@ type PendingDrag = {
   height: number;
 };
 
+type ExitingTab = {
+  tab: BrowserTabState;
+  index: number;
+};
+
 export function TabBar({
   tabs,
   activeId,
@@ -133,9 +139,13 @@ export function TabBar({
   const dropIndexRef = React.useRef<number | null>(null);
   const grabRef = React.useRef({ x: 0, y: 0 });
   const suppressClickRef = React.useRef(false);
+  const hydratedRef = React.useRef(false);
+  const prevTabsRef = React.useRef(tabs);
   const [draggingId, setDraggingId] = React.useState<string | null>(null);
   const [dropIndex, setDropIndex] = React.useState<number | null>(null);
   const [ghost, setGhost] = React.useState<{ tab: BrowserTabState; width: number; height: number; x: number; y: number } | null>(null);
+  const [enteringIds, setEnteringIds] = React.useState<string[]>([]);
+  const [exitingTabs, setExitingTabs] = React.useState<ExitingTab[]>([]);
 
   const resolveRemainingIndex = React.useCallback((clientX: number) => {
     const nodes = [...(listRef.current?.querySelectorAll<HTMLElement>('[data-tab-id]') || [])];
@@ -219,9 +229,115 @@ export function TabBar({
     };
   }, [onReorder, resolveRemainingIndex, tabs]);
 
+  React.useEffect(() => {
+    const node = listRef.current;
+    if (!node) return;
+    const onWheel = (event: WheelEvent) => {
+      if (node.scrollWidth <= node.clientWidth) return;
+      const delta = event.deltaX !== 0 ? event.deltaX : event.deltaY;
+      if (delta === 0) return;
+      event.preventDefault();
+      node.scrollLeft += delta;
+    };
+    node.addEventListener('wheel', onWheel, { passive: false });
+    return () => node.removeEventListener('wheel', onWheel);
+  }, []);
+
+  React.useEffect(() => {
+    const list = listRef.current;
+    const active = list?.querySelector<HTMLElement>(`[data-tab-id="${activeId}"]`);
+    if (!list || !active || list.scrollWidth <= list.clientWidth) return;
+    const left = active.offsetLeft;
+    const right = left + active.offsetWidth;
+    if (left < list.scrollLeft) list.scrollLeft = left;
+    else if (right > list.scrollLeft + list.clientWidth) list.scrollLeft = right - list.clientWidth;
+  }, [activeId, tabs.length]);
+
+  const tabsRef = React.useRef(tabs);
+  tabsRef.current = tabs;
+  const tabIdsKey = tabs.map((tab) => tab.id).join(',');
+  const previousTabs = prevTabsRef.current;
+  const previousIds = previousTabs.map((tab) => tab.id);
+  const currentIds = tabs.map((tab) => tab.id);
+  const addedNow = hydratedRef.current
+    ? currentIds.filter((id) => !previousIds.includes(id))
+    : [];
+  const removedNow = hydratedRef.current
+    ? previousTabs
+      .map((tab, index) => ({ tab, index }))
+      .filter((item) => !currentIds.includes(item.tab.id))
+    : [];
+
+  React.useLayoutEffect(() => {
+    const nextTabs = tabsRef.current;
+    if (!hydratedRef.current) {
+      hydratedRef.current = true;
+      prevTabsRef.current = nextTabs;
+      return;
+    }
+
+    const previous = prevTabsRef.current;
+    const previousTabIds = previous.map((tab) => tab.id);
+    const nextIds = nextTabs.map((tab) => tab.id);
+    if (previousTabIds.length === 0 && nextIds.length > 0) {
+      prevTabsRef.current = nextTabs;
+      return;
+    }
+
+    const added = nextIds.filter((id) => !previousTabIds.includes(id));
+    const removed = previous
+      .map((tab, index) => ({ tab, index }))
+      .filter((item) => !nextIds.includes(item.tab.id));
+    prevTabsRef.current = nextTabs;
+
+    if (added.length > 0) {
+      setEnteringIds((current) => [...current, ...added.filter((id) => !current.includes(id))]);
+      window.setTimeout(() => {
+        setEnteringIds((current) => current.filter((id) => !added.includes(id)));
+      }, BROWSER_TAB_ANIMATION_MS);
+    }
+
+    if (removed.length > 0) {
+      setExitingTabs((current) => {
+        const next = [...current];
+        removed.forEach((item) => {
+          if (!next.some((entry) => entry.tab.id === item.tab.id)) next.push(item);
+        });
+        return next;
+      });
+      const removedIds = new Set(removed.map((item) => item.tab.id));
+      window.setTimeout(() => {
+        setExitingTabs((current) => current.filter((item) => !removedIds.has(item.tab.id)));
+      }, BROWSER_TAB_ANIMATION_MS);
+    }
+  }, [tabIdsKey]);
+
   const draggingTab = draggingId ? tabs.find((tab) => tab.id === draggingId) : null;
-  const stripTabs = draggingId ? tabs.filter((tab) => tab.id !== draggingId) : tabs;
+  const liveTabs = draggingId ? tabs.filter((tab) => tab.id !== draggingId) : tabs;
+  const pendingExit = React.useMemo(() => {
+    const merged = [...exitingTabs];
+    removedNow.forEach((item) => {
+      if (
+        !merged.some((entry) => entry.tab.id === item.tab.id)
+        && !liveTabs.some((tab) => tab.id === item.tab.id)
+      ) {
+        merged.push(item);
+      }
+    });
+    return merged;
+  }, [exitingTabs, liveTabs, removedNow]);
+  const stripTabs = React.useMemo(() => {
+    const next = [...liveTabs];
+    const liveIds = new Set(liveTabs.map((tab) => tab.id));
+    pendingExit.forEach((item) => {
+      if (liveIds.has(item.tab.id)) return;
+      liveIds.add(item.tab.id);
+      next.splice(Math.min(item.index, next.length), 0, item.tab);
+    });
+    return next;
+  }, [liveTabs, pendingExit]);
   const gapIndex = draggingId ? (dropIndex ?? Math.max(0, tabs.findIndex((tab) => tab.id === draggingId))) : null;
+  const exitingIds = new Set(pendingExit.map((item) => item.tab.id));
 
   return (
     <div
@@ -229,89 +345,97 @@ export function TabBar({
       style={dragStyle}
     >
       <div className="flex min-w-0 flex-1 pl-1">
-        <div ref={listRef} className="flex min-w-0 items-end gap-px overflow-x-auto pt-1 discord-scrollbar">
-          {stripTabs.map((tab, index) => {
-            const active = tab.id === activeId;
-            return (
-              <React.Fragment key={tab.id}>
-                {gapIndex === index && draggingTab && (
-                  <div
-                    className="h-8 shrink-0 rounded-t-md bg-black/30"
-                    style={{ width: ghost?.width || 160 }}
-                  />
-                )}
-                <ContextMenu>
-                  <ContextMenuTrigger asChild>
+        <div className="flex min-w-0 max-w-full">
+          <div ref={listRef} className="flex min-w-0 items-end gap-px overflow-x-auto pt-1 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+            {stripTabs.map((tab, index) => {
+              const active = tab.id === activeId;
+              const collapsed = exitingIds.has(tab.id);
+              const entering = !collapsed && (addedNow.includes(tab.id) || enteringIds.includes(tab.id));
+              return (
+                <React.Fragment key={tab.id}>
+                  {gapIndex === index && draggingTab && (
                     <div
-                      role="tab"
-                      data-tab-id={tab.id}
-                      aria-selected={active}
-                      title={tab.title}
-                      onClick={() => {
-                        if (suppressClickRef.current) return;
-                        onSelect(tab.id);
-                      }}
-                      onContextMenu={() => onSelect(tab.id)}
-                      onPointerDown={(event) => {
-                        if (event.button !== 0 || tabs.length < 2) return;
-                        const rect = event.currentTarget.getBoundingClientRect();
-                        pendingDragRef.current = {
-                          id: tab.id,
-                          startX: event.clientX,
-                          grabX: event.clientX - rect.left,
-                          grabY: event.clientY - rect.top,
-                          width: rect.width,
-                          height: rect.height,
-                        };
-                      }}
-                      onDragStart={(event) => event.preventDefault()}
-                      style={noDragStyle}
-                      className="cursor-default"
-                    >
-                      <TabFace
-                        tab={tab}
-                        active={active}
-                        className={active ? '' : 'hover:bg-discord-hover hover:text-discord-text'}
-                        onClose={() => onClose(tab.id)}
-                      />
-                    </div>
-                  </ContextMenuTrigger>
-                  <ContextMenuContent className="min-w-[180px] border-gray-700 bg-discord-sidebar text-discord-text">
-                    <ContextMenuItem onSelect={() => onDuplicate?.(tab.id)}>탭 복제</ContextMenuItem>
-                    <ContextMenuItem disabled={!canRestoreClosedTab} onSelect={() => onRestoreClosedTab?.()}>
-                      닫은 탭 다시 열기
-                    </ContextMenuItem>
-                    <ContextMenuSeparator className="bg-gray-700" />
-                    <ContextMenuItem onSelect={() => onClose(tab.id)}>탭 닫기</ContextMenuItem>
-                  </ContextMenuContent>
-                </ContextMenu>
-              </React.Fragment>
-            );
-          })}
-          {gapIndex === stripTabs.length && draggingTab && (
-            <div
-              className="h-8 shrink-0 rounded-t-md bg-black/30"
-              style={{ width: ghost?.width || 160 }}
-            />
-          )}
+                      className="h-8 rounded-t-md bg-black/30"
+                      style={getBrowserTabItemStyle()}
+                    />
+                  )}
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div
+                        role="tab"
+                        data-tab-id={tab.id}
+                        aria-selected={active}
+                        title={tab.title}
+                        onClick={() => {
+                          if (suppressClickRef.current || collapsed) return;
+                          onSelect(tab.id);
+                        }}
+                        onContextMenu={() => onSelect(tab.id)}
+                        onPointerDown={(event) => {
+                          if (event.button !== 0 || tabs.length < 2 || collapsed) return;
+                          const rect = event.currentTarget.getBoundingClientRect();
+                          pendingDragRef.current = {
+                            id: tab.id,
+                            startX: event.clientX,
+                            grabX: event.clientX - rect.left,
+                            grabY: event.clientY - rect.top,
+                            width: rect.width,
+                            height: rect.height,
+                          };
+                        }}
+                        onDragStart={(event) => event.preventDefault()}
+                        style={{ ...noDragStyle, ...getBrowserTabItemStyle() }}
+                        className={cn(
+                          'overflow-hidden cursor-default',
+                          entering && 'browser-tab-enter',
+                          collapsed && 'browser-tab-exit',
+                        )}
+                      >
+                        <TabFace
+                          tab={tab}
+                          active={active}
+                          className={active ? '' : 'hover:bg-discord-hover hover:text-discord-text'}
+                          onClose={collapsed ? undefined : () => onClose(tab.id)}
+                        />
+                      </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent className="min-w-[180px] border-gray-700 bg-discord-sidebar text-discord-text">
+                      <ContextMenuItem onSelect={() => onDuplicate?.(tab.id)}>탭 복제</ContextMenuItem>
+                      <ContextMenuItem disabled={!canRestoreClosedTab} onSelect={() => onRestoreClosedTab?.()}>
+                        닫은 탭 다시 열기
+                      </ContextMenuItem>
+                      <ContextMenuSeparator className="bg-gray-700" />
+                      <ContextMenuItem onSelect={() => onClose(tab.id)}>탭 닫기</ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
+                </React.Fragment>
+              );
+            })}
+            {gapIndex === stripTabs.length && draggingTab && (
+              <div
+                className="h-8 rounded-t-md bg-black/30"
+                style={getBrowserTabItemStyle()}
+              />
+            )}
+          </div>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="새 탭"
+                style={noDragStyle}
+                className="mb-0.5 mt-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-discord-muted hover:bg-discord-hover hover:text-discord-text"
+                onClick={onNewTab}
+              >
+                <Plus size={14} />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom" className={FIELD_TOOLTIP_CLASSNAME}>
+              새 탭 (Ctrl+T)
+            </TooltipContent>
+          </Tooltip>
         </div>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label="새 탭"
-              style={noDragStyle}
-              className="mb-0.5 mt-auto flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-discord-muted hover:bg-discord-hover hover:text-discord-text"
-              onClick={onNewTab}
-            >
-              <Plus size={14} />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" className={FIELD_TOOLTIP_CLASSNAME}>
-            새 탭 (Ctrl+T)
-          </TooltipContent>
-        </Tooltip>
-        <div className="min-w-8 flex-1" />
+        <div className="min-w-0 grow" />
       </div>
       <WindowControls showUtilityButtons={false} />
       {ghost && createPortal(

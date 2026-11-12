@@ -4,7 +4,6 @@ import {
   createBrowserTab,
   cycleBrowserTab,
   isBlankBrowserTab,
-  MAX_BROWSER_TABS,
   moveBrowserTab,
   openBrowserTab,
   restoreBrowserSession,
@@ -57,7 +56,7 @@ test('reorders tabs by drop index without changing identities', () => {
   expect(moveBrowserTab(tabs, first.id, 0)).toBe(tabs);
 });
 
-test('cycles tabs and stops at the max count', () => {
+test('cycles tabs and can open more than the old sixteen-tab cap', () => {
   const first = createBrowserTab('https://a.example/');
   const second = createBrowserTab('https://b.example/');
   expect(cycleBrowserTab([first, second], first.id, 1)).toBe(second.id);
@@ -65,12 +64,12 @@ test('cycles tabs and stops at the max count', () => {
 
   let tabs = [first];
   let activeId = first.id;
-  for (let index = 0; index < MAX_BROWSER_TABS + 2; index += 1) {
+  for (let index = 0; index < 17; index += 1) {
     const result = openBrowserTab(tabs, activeId, `https://n${index}.example/`, { background: true, reuseEmpty: false });
     tabs = result.tabs;
     activeId = result.activeId;
   }
-  expect(tabs).toHaveLength(MAX_BROWSER_TABS);
+  expect(tabs).toHaveLength(18);
 });
 
 test('selects the Nth tab with Ctrl+number, and 9 as the last tab', () => {

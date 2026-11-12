@@ -157,6 +157,35 @@
   .discord-scrollbar::-webkit-scrollbar-thumb:hover {
     background: #36393f;
   }
+
+  @keyframes browser-tab-enter {
+    from {
+      flex-basis: 0;
+      width: 0;
+      min-width: 0;
+      max-width: 0;
+      opacity: 0;
+    }
+  }
+
+  @keyframes browser-tab-exit {
+    to {
+      flex-basis: 0;
+      width: 0;
+      min-width: 0;
+      max-width: 0;
+      opacity: 0;
+    }
+  }
+
+  .browser-tab-enter {
+    animation: browser-tab-enter 200ms cubic-bezier(0.25, 0.1, 0.25, 1) backwards;
+  }
+
+  .browser-tab-exit {
+    pointer-events: none;
+    animation: browser-tab-exit 200ms cubic-bezier(0.25, 0.1, 0.25, 1) forwards;
+  }
 }
 
 /* 슬라이더 스타일 */

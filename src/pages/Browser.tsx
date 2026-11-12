@@ -90,7 +90,6 @@ import {
   isDownloadsBrowserTab,
   isHistoryBrowserTab,
   isInternalBrowserTab,
-  MAX_BROWSER_TABS,
   moveBrowserTab,
   NEW_TAB_URL,
   openBrowserTab,
@@ -630,10 +629,6 @@ const BrowserPage: React.FC = () => {
       background: options?.background,
       reuseEmpty: !options?.newTab && !options?.background,
     });
-    if (result.limited) {
-      toast({ title: `탭은 최대 ${MAX_BROWSER_TABS}개까지 열 수 있습니다.` });
-      return;
-    }
     setTabs(result.tabs);
     setActiveTabId(result.activeId);
     if (result.reusedId) loadUrlInTab(result.reusedId, url);

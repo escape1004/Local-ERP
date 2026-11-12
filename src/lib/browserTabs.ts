@@ -1,7 +1,6 @@
 export const NEW_TAB_URL = 'about:blank';
 export const HISTORY_PAGE_URL = 'about:history';
 export const DOWNLOADS_PAGE_URL = 'about:downloads';
-export const MAX_BROWSER_TABS = 16;
 
 export type BrowserTabState = {
   id: string;
@@ -84,10 +83,6 @@ export function openBrowserTab(
     }
   }
 
-  if (tabs.length >= MAX_BROWSER_TABS) {
-    return { tabs, activeId, reusedId: null, created: false, limited: true as const };
-  }
-
   const tab = createBrowserTab(url);
   return {
     tabs: [...tabs, tab],
@@ -140,8 +135,7 @@ export function cycleBrowserTab(tabs: BrowserTabState[], activeId: string, delta
 
 export function restoreBrowserSession(urls: string[], activeIndex = 0, requestedUrl = '') {
   const cleaned = urls
-    .map((url) => String(url || '').trim() || NEW_TAB_URL)
-    .slice(0, MAX_BROWSER_TABS);
+    .map((url) => String(url || '').trim() || NEW_TAB_URL);
   const source = cleaned.length > 0 ? cleaned : [NEW_TAB_URL];
   const tabs = source.map((url) => createBrowserTab(url));
   const safeIndex = Math.min(Math.max(0, Math.trunc(Number(activeIndex) || 0)), tabs.length - 1);
