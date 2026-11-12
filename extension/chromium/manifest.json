@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Local ERP",
+  "version": "1.1.26",
+  "description": "LCERP 레코드 목록과 사용자 스크립트",
+  "icons": {
+    "16": "icons/idle-16.png",
+    "32": "icons/idle-32.png",
+    "48": "icons/idle-48.png",
+    "128": "icons/idle-128.png"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAt4HdazN1olrpbDxDV161OZHEHQGAp3Z6QbfpCAWaipLHnxAvrDJ0b60ZmRRK3sHyJi3OZ246T9+jp2D8az37tDmKl5VRjgdFm2U+T0IivKEQJckmKkJB/80E003EbAyIyV4FikbrhvgLq+ynSxAwTrilUR4n8fmWNFp/Ob4IP6mApaz8JOelnL32696HJ1H8OEs3dt+jPoeRxU/at/wtT17RoCr1Cyh9BwDPtnJkZlC4xxCkdwvcOdh4b3EIHsGKzklbrEMHjOd69yXST+thtY9BlrNFs7gBHHNCFMbumxzWctL3Z/h+uxvFNm7fsZZ801FaA9g9P2nNSdsNcsHx0QIDAQAB",
+  "permissions": ["sidePanel", "scripting", "storage", "tabs"],
+  "host_permissions": [
+    "http://127.0.0.1/*",
+    "http://*/*",
+    "https://*/*"
+  ],
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "Local ERP 레코드",
+    "default_icon": {
+      "16": "icons/idle-16.png",
+      "32": "icons/idle-32.png",
+      "48": "icons/idle-48.png",
+      "128": "icons/idle-128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "exclude_matches": [
+        "https://accounts.google.com/*",
+        "https://accounts.youtube.com/*",
+        "https://accounts.google.co.kr/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page-bridge.js"],
+      "matches": ["http://*/*", "https://*/*"]
+    }
+  ]
+}

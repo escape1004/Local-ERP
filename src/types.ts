@@ -189,6 +189,22 @@ export interface BrowserIdleState {
   hasPlayingMedia: boolean;
 }
 
+export interface BrowserExtensionInstallInfo {
+  success: boolean;
+  origin?: string;
+  port?: number;
+  ready?: boolean;
+  chromiumExtensionId?: string;
+  firefoxExtensionId?: string;
+  braveInstalled?: boolean;
+  firefoxInstalled?: boolean;
+  braveDir?: string;
+  firefoxDir?: string;
+  braveReady?: boolean;
+  firefoxReady?: boolean;
+  error?: string;
+}
+
 export type AppUpdateStatus =
   | 'idle'
   | 'checking'
@@ -508,6 +524,12 @@ export interface ElectronAPI {
     files: Array<{ url: string; filename?: string; kind?: BrowserDownloadKind }>;
   }) => Promise<{ success: boolean; folder?: string; items?: Array<{ id: string; url: string; filePath: string }>; error?: string }>;
   onBrowserDownloadsChange: (callback: (items: BrowserDownloadItem[]) => void) => () => void;
+  getBrowserExtensionInstallInfo: () => Promise<BrowserExtensionInstallInfo>;
+  openBrowserExtensionFolder: (kind: 'brave' | 'firefox') => Promise<{ success: boolean; dir?: string; error?: string }>;
+  openExternalBrowserForExtension: (payload: {
+    browser: 'brave' | 'firefox';
+    url?: string;
+  }) => Promise<{ success: boolean; error?: string }>;
   openFile: (filePath: string) => Promise<{ success: boolean; error?: string }>;
   generateThumbnail: (filePath: string) => Promise<string | null>;
   getThumbnailDataUrl: (filePath: string) => Promise<string | null>;

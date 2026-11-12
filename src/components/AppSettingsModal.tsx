@@ -7,7 +7,7 @@ import { Input } from './ui/input';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
-import type { AppUpdateState, BrowserPasswordSummary, Config } from '../types';
+import type { AppUpdateState, BrowserExtensionInstallInfo, BrowserPasswordSummary, Config } from '../types';
 import { DEFAULT_DATE_PARSE_FORMATS } from './ui/date-picker';
 import { useLoadingStore } from '../hooks/useLoadingStore';
 import { OPENAI_TRANSLATION_MODEL, OPENAI_TRANSLATION_MODELS, normalizeTranslationDisplayMode, type TranslationDisplayMode } from '../lib/translation';
@@ -33,7 +33,7 @@ const sections: SettingsSection[] = [
   { id: 'general', label: '일반', description: '기본 동작과 창 옵션', icon: Settings },
   { id: 'list', label: '리스트', description: '레코드 리스트 표시 방식', icon: List },
   { id: 'viewer', label: '뷰어', description: '이미지와 동영상 보기 환경', icon: Monitor },
-  { id: 'browser', label: '브라우저', description: '내장 브라우저 창과 시작 동작', icon: Globe },
+  { id: 'browser', label: '브라우저', description: '내장 브라우저와 외부 확장', icon: Globe },
   { id: 'security', label: '보안', description: '프로그램 비밀번호 관리', icon: Shield },
 ];
 
@@ -150,6 +150,8 @@ export function AppSettingsModal({
   const [browserPasswords, setBrowserPasswords] = useState<BrowserPasswordSummary[]>([]);
   const [browserPasswordMessage, setBrowserPasswordMessage] = useState('');
   const [browserPasswordModalOpen, setBrowserPasswordModalOpen] = useState(false);
+  const [extensionInstallInfo, setExtensionInstallInfo] = useState<BrowserExtensionInstallInfo | null>(null);
+  const [extensionMessage, setExtensionMessage] = useState('');
   const [listMessage, setListMessage] = useState('');
   const [dateFormatInput, setDateFormatInput] = useState('');
   const [dateFormatMessage, setDateFormatMessage] = useState('');
@@ -240,6 +242,14 @@ export function AppSettingsModal({
     }
 
     let cancelled = false;
+
+    window.electronAPI.getBrowserExtensionInstallInfo()
+      .then((info) => {
+        if (!cancelled) setExtensionInstallInfo(info);
+      })
+      .catch(() => {
+        if (!cancelled) setExtensionInstallInfo(null);
+      });
 
     window.electronAPI.listBrowserPasswords()
       .then((items) => {
@@ -1107,9 +1117,57 @@ export function AppSettingsModal({
     </div>
   );
 
+  const openExtensionInstall = async (kind: 'brave' | 'firefox') => {
+    setExtensionMessage('');
+    const prepared = await window.electronAPI.getBrowserExtensionInstallInfo();
+    setExtensionInstallInfo(prepared);
+    const folder = await window.electronAPI.openBrowserExtensionFolder(kind);
+    if (!folder.success) {
+      setExtensionMessage(folder.error || '확장 폴더를 열 수 없습니다.');
+      return;
+    }
+    const opened = await window.electronAPI.openExternalBrowserForExtension({
+      browser: kind,
+      url: kind === 'brave' ? 'brave://extensions' : 'about:debugging#/runtime/this-firefox',
+    });
+    if (!opened.success) {
+      setExtensionMessage(opened.error || '브라우저를 열 수 없습니다.');
+    }
+  };
+
   const renderBrowserSection = () => (
     <div className="space-y-4">
       {renderAiSettingsLinkCard('브라우저 AI와 페이지 번역은 OpenAI API 키가 필요합니다. 키와 준비 순서는 AI 탭에서 관리합니다.')}
+
+      <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
+        <div className="text-sm font-medium text-white">구글 로그인용 확장</div>
+        <p className="text-sm text-discord-muted mt-2 leading-6">
+          앱 안 브라우저에서는 구글 로그인이 되지 않습니다. Brave 또는 Firefox에 아래 폴더를 파일로 넣으면 사이드 패널에서 레코드 URL을 열고, 페이지 스크립트가 레코드 존재 여부를 조회합니다. 스토어 등록은 하지 않습니다.
+        </p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            type="button"
+            className="bg-discord-accent text-white hover:bg-blue-600"
+            onClick={() => void openExtensionInstall('brave')}
+            disabled={isSaving}
+          >
+            Brave 확장 폴더 열기
+          </Button>
+          <Button
+            type="button"
+            className="bg-discord-accent text-white hover:bg-blue-600"
+            onClick={() => void openExtensionInstall('firefox')}
+            disabled={isSaving}
+          >
+            Firefox 확장 폴더 열기
+          </Button>
+        </div>
+        <p className="text-sm text-discord-muted mt-3 leading-6">
+          Brave는 개발자 모드에서 압축 해제된 확장 로드, Firefox는 about:debugging의 임시 부가 기능 로드를 사용합니다.
+          {extensionInstallInfo?.braveDir ? ` Brave 폴더: ${extensionInstallInfo.braveDir}` : ''}
+        </p>
+        {extensionMessage ? <p className="text-sm text-discord-muted mt-2">{extensionMessage}</p> : null}
+      </div>
 
       <div className="rounded-xl border border-gray-700 bg-discord-sidebar p-5">
         <div className="flex items-start justify-between gap-4">

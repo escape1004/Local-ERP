@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>Local ERP</title>
+    <link rel="stylesheet" href="sidepanel.css" />
+  </head>
+  <body>
+    <nav class="tabs" role="tablist">
+      <button type="button" class="tab is-active" data-tab="bookmarks" aria-label="북마크">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+        북마크
+      </button>
+      <button type="button" class="tab" data-tab="scripts" aria-label="스크립트">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="16 18 22 12 16 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><polyline points="8 6 2 12 8 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        스크립트
+      </button>
+    </nav>
+    <p id="match" class="match" hidden></p>
+    <p id="status" class="status" hidden></p>
+    <div id="bookmarks-pane" class="pane"></div>
+    <div id="scripts-pane" class="pane" hidden></div>
+    <script src="record-tree.js"></script>
+    <script src="sidepanel.js"></script>
+  </body>
+</html>

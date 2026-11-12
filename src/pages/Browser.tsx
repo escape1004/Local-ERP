@@ -25,7 +25,9 @@ import { BrowserAiChat, type BrowserAiChatMessage, type BrowserAiChatScript } fr
 import { BrowserScriptModal } from '../components/browser/BrowserScriptModal';
 import { BrowserTranslateBar } from '../components/browser/BrowserTranslateBar';
 import { BookmarkTree } from '../components/browser/BookmarkTree';
+import { BrowserGoogleSignInGate } from '../components/browser/BrowserGoogleSignInGate';
 import { TabBar } from '../components/browser/TabBar';
+import { isGoogleSignInUrl, rememberNonGoogleSignInUrl } from '../lib/browserGoogleSignIn';
 import type { ManualDragItem } from '../components/browser/bookmark-dnd';
 import { Button } from '../components/ui/button';
 import {
@@ -39,7 +41,7 @@ import { Input } from '../components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip';
 import { toast } from '../components/ui/use-toast';
 import { FIELD_TOOLTIP_CLASSNAME } from '../components/records/FieldValueRenderer';
-import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserScript, type Category, type FieldDefinition, type NewRecord } from '../types';
+import { BOOKMARK_BAR_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder, type BrowserExtensionInstallInfo, type BrowserScript, type Category, type FieldDefinition, type NewRecord } from '../types';
 import {
   parsePasswordFillPrompt,
   parsePasswordSavePrompt,
@@ -187,6 +189,8 @@ const BrowserPage: React.FC = () => {
 
   const [preloadPath, setPreloadPath] = React.useState('');
   const [partition, setPartition] = React.useState('persist:erp-browser');
+  const [extensionInstallInfo, setExtensionInstallInfo] = React.useState<BrowserExtensionInstallInfo | null>(null);
+  const lastNonGoogleUrlRef = React.useRef(new Map<string, string>());
   const [address, setAddress] = React.useState(requestedUrl);
   const [sideTab, setSideTab] = React.useState<SideTab>('bookmarks');
   const [sidePanelOpen, setSidePanelOpen] = React.useState(true);
@@ -307,6 +311,9 @@ const BrowserPage: React.FC = () => {
   React.useEffect(() => {
     let ignore = false;
     void refreshLists();
+    void window.electronAPI.getBrowserExtensionInstallInfo().then((info) => {
+      if (!ignore) setExtensionInstallInfo(info);
+    });
     void Promise.all([
       window.electronAPI.getBrowserPreloadPath(),
       window.electronAPI.getBrowserPartition(),
@@ -326,6 +333,10 @@ const BrowserPage: React.FC = () => {
         requested,
       );
       setTabs(restored.tabs);
+      restored.tabs.forEach((tab) => {
+        const remembered = rememberNonGoogleSignInUrl('', tab.url);
+        if (remembered) lastNonGoogleUrlRef.current.set(tab.id, remembered);
+      });
       setActiveTabId(restored.activeId);
       const active = restored.tabs.find((tab) => tab.id === restored.activeId);
       const display = active && !isBlankBrowserTab(active) ? active.url : '';
@@ -369,6 +380,8 @@ const BrowserPage: React.FC = () => {
         return;
       }
       const nextUrl = webview.getURL() || NEW_TAB_URL;
+      const remembered = rememberNonGoogleSignInUrl(lastNonGoogleUrlRef.current.get(tabId), nextUrl);
+      if (remembered) lastNonGoogleUrlRef.current.set(tabId, remembered);
       patchTab(tabId, {
         url: nextUrl,
         title: titleForBrowserTab(nextUrl, webview.getTitle()),
@@ -1716,6 +1729,33 @@ const BrowserPage: React.FC = () => {
     clearPasswordPrompt(activeTabId);
   };
 
+  const googleSignInOpenUrl = lastNonGoogleUrlRef.current.get(activeTabId) || currentUrl;
+  const showGoogleSignInGate = sessionReady && isGoogleSignInUrl(currentUrl);
+
+  const openGoogleSignInInBrowser = async (browser: 'brave' | 'firefox') => {
+    const result = await window.electronAPI.openExternalBrowserForExtension({
+      browser,
+      url: googleSignInOpenUrl,
+    });
+    if (!result.success) {
+      toast({ title: result.error || '브라우저를 열 수 없습니다.', variant: 'destructive' });
+    }
+  };
+
+  const openExtensionFolder = async (kind: 'brave' | 'firefox') => {
+    const prepared = await window.electronAPI.getBrowserExtensionInstallInfo();
+    setExtensionInstallInfo(prepared);
+    const result = await window.electronAPI.openBrowserExtensionFolder(kind);
+    if (!result.success) {
+      toast({ title: result.error || '확장 폴더를 열 수 없습니다.', variant: 'destructive' });
+      return;
+    }
+    await window.electronAPI.openExternalBrowserForExtension({
+      browser: kind,
+      url: kind === 'brave' ? 'brave://extensions' : 'about:debugging#/runtime/this-firefox',
+    });
+  };
+
   return (
     <div className="flex h-full overflow-hidden">
       <div className="flex min-w-0 flex-1 flex-col bg-discord-bg">
@@ -2064,6 +2104,15 @@ const BrowserPage: React.FC = () => {
               <div className="pointer-events-none absolute left-1/2 top-2 z-30 -translate-x-1/2 rounded-md border border-discord-accent bg-[#1e1f22]/95 px-3 py-1.5 text-xs text-discord-text shadow-xl">
                 클릭해서 {pickingFieldName || '필드'} 값을 선택하세요 · Esc 취소
               </div>
+            )}
+            {showGoogleSignInGate && (
+              <BrowserGoogleSignInGate
+                info={extensionInstallInfo}
+                onOpenBrave={() => void openGoogleSignInInBrowser('brave')}
+                onOpenFirefox={() => void openGoogleSignInInBrowser('firefox')}
+                onOpenBraveFolder={() => void openExtensionFolder('brave')}
+                onOpenFirefoxFolder={() => void openExtensionFolder('firefox')}
+              />
             )}
           </div>
 

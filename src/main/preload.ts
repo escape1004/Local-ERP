@@ -230,6 +230,9 @@ const api: ElectronAPI = {
     ipcRenderer.on('browser:downloads-changed', listener);
     return () => ipcRenderer.removeListener('browser:downloads-changed', listener);
   },
+  getBrowserExtensionInstallInfo: () => ipcRenderer.invoke('browser:getExtensionInstallInfo'),
+  openBrowserExtensionFolder: (kind) => ipcRenderer.invoke('browser:openExtensionFolder', kind),
+  openExternalBrowserForExtension: (payload) => ipcRenderer.invoke('browser:openExternalBrowser', payload),
 };
 
 contextBridge.exposeInMainWorld('electronAPI', api); 

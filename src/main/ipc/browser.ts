@@ -29,6 +29,14 @@ import {
   sendEmbeddedBrowserMessage,
   setRememberEmbeddedBrowserWindowBounds,
 } from '../app/browser-window';
+import {
+  ensureBrowserExtensionPrepared,
+  getBrowserExtensionBridgeState,
+} from '../services/browser-extension-bridge';
+import {
+  openBrowserExtensionFolder,
+  openExternalBrowser,
+} from '../lib/browser-extension-install';
 import { generateBrowserScriptWithOpenAi } from '../services/browser-ai';
 import {
   commitBrowserPassword,
@@ -512,4 +520,22 @@ export function registerBrowserHandlers() {
   ipcMain.handle('browser:downloadFiles', async (event, payload = {}) => (
     downloadBrowserFiles(payload, browserWindowFromEvent(event))
   ));
+  ipcMain.handle('browser:getExtensionInstallInfo', () => {
+    try {
+      return { success: true, ...ensureBrowserExtensionPrepared() };
+    } catch (error) {
+      try {
+        return { success: true, ...getBrowserExtensionBridgeState() };
+      } catch {
+        return { success: false, error: error.message || '확장 정보를 준비하지 못했습니다.' };
+      }
+    }
+  });
+  ipcMain.handle('browser:openExtensionFolder', (_event, kind) => (
+    openBrowserExtensionFolder(kind === 'firefox' ? 'firefox' : 'brave')
+  ));
+  ipcMain.handle('browser:openExternalBrowser', (_event, payload = {}) => {
+    const kind = payload.browser === 'firefox' ? 'firefox' : 'brave';
+    return openExternalBrowser(kind, payload.url);
+  });
 }
