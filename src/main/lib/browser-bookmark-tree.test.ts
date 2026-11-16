@@ -3,6 +3,7 @@ import {
   BOOKMARK_BAR_FOLDER_ID,
   MANUAL_BOOKMARK_FOLDER_ID,
   buildBrowserBookmarkTree,
+  collectManualSaveTargets,
   nextManualFolderName,
 } from './browser-bookmark-tree';
 
@@ -273,4 +274,20 @@ test('drops manual bookmarks that duplicate record urls', () => {
   expect(result.tree.map((folder) => folder.kind)).toEqual(['category']);
   expect(result.items.every((item) => item.source === 'record')).toBe(true);
   expect(result.overlappingManualIds).toEqual(['man']);
+});
+
+test('lists bookmark-bar and nested manual folders as save targets', () => {
+  expect(collectManualSaveTargets([
+    {
+      id: MANUAL_BOOKMARK_FOLDER_ID,
+      name: '직접 추가',
+      kind: 'manual',
+      children: [{ id: 'shop', name: '쇼핑', kind: 'manual', children: [], bookmarks: [] }],
+      bookmarks: [],
+    },
+  ])).toEqual([
+    { id: BOOKMARK_BAR_FOLDER_ID, name: '북마크 바', depth: 0 },
+    { id: null, name: '직접 추가', depth: 0 },
+    { id: 'shop', name: '쇼핑', depth: 1 },
+  ]);
 });

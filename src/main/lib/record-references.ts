@@ -25,22 +25,46 @@ function parseCategoryFields(raw) {
   }
 }
 
-export function recordLabelFromData(data, fields) {
-  const fieldList = Array.isArray(fields) ? fields : [];
-  const preferred = fieldList.find((field) => field?.type === 'text' && !field.hidden)
-    || fieldList.find((field) => field?.type && field.type !== 'file' && !field.hidden)
-    || fieldList[0];
-  if (!preferred) return '';
+function visibleLabelFields(fields) {
+  return (Array.isArray(fields) ? fields : [])
+    .filter((field) => field && field.type && field.type !== 'file' && !field.hidden)
+    .sort((left, right) => Number(left.order ?? 0) - Number(right.order ?? 0));
+}
 
-  const value = data?.[preferred.id];
+function formatRelatedFieldValue(field, data) {
+  const value = data?.[field?.id];
   if (value == null || value === '') return '';
-  if (typeof value === 'object') {
-    if (preferred.type === 'percentage') {
-      return `${value.value ?? 0}/${value.max ?? 0}`;
-    }
-    return JSON.stringify(value);
-  }
-  return String(value);
+  const items = Array.isArray(value) ? value : [value];
+  return items
+    .map((item) => {
+      if (item == null || item === '') return '';
+      if (typeof item === 'object') {
+        if (field.type === 'percentage') {
+          return `${item.value ?? 0}/${item.max ?? 0}`;
+        }
+        return JSON.stringify(item);
+      }
+      if (field.type === 'text') {
+        return `${field.textPrefix ?? ''}${item}${field.textSuffix ?? ''}`;
+      }
+      return String(item);
+    })
+    .filter(Boolean)
+    .join(', ');
+}
+
+export function recordLabelsFromData(data, fields) {
+  const visible = visibleLabelFields(fields);
+  const titleField = visible[0] || (Array.isArray(fields) ? fields[0] : null);
+  const subtitleField = visible[1];
+  return {
+    label: titleField ? formatRelatedFieldValue(titleField, data) : '',
+    subtitle: subtitleField ? formatRelatedFieldValue(subtitleField, data) : '',
+  };
+}
+
+export function recordLabelFromData(data, fields) {
+  return recordLabelsFromData(data, fields).label;
 }
 
 export function normalizeRelatedRecordIds(raw, sourceRecordId, existingIds) {
@@ -101,12 +125,13 @@ export function listRelatedRecordIds(database, recordId) {
 function mapRelatedRecordRow(row) {
   const data = parseJsonObject(row.data);
   const fields = parseCategoryFields(row.categoryFields);
-  const label = recordLabelFromData(data, fields) || row.id;
+  const labels = recordLabelsFromData(data, fields);
   return {
     id: row.id,
     categoryId: row.categoryId,
     categoryName: row.categoryName || '',
-    label,
+    label: labels.label || row.id,
+    subtitle: labels.subtitle,
     thumbnailPath: row.thumbnailPath || null,
     record: {
       id: row.id,

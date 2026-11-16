@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 import { BOOKMARK_BAR_FOLDER_ID, MANUAL_BOOKMARK_FOLDER_ID } from '../../types';
-import { collectManualSaveTargets } from './BookmarkBar';
+import { collectManualSaveTargets } from '../../main/lib/browser-bookmark-tree';
 
 test('lists the bookmark bar first, then nested manual folders', () => {
   expect(collectManualSaveTargets([

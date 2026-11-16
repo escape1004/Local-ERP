@@ -6,6 +6,29 @@ import {
 export const MANUAL_BOOKMARK_FOLDER_ID = '__manual__';
 export const BOOKMARK_BAR_FOLDER_ID = '__bar__';
 
+export function collectManualSaveTargets(tree = []) {
+  const options = [
+    { id: BOOKMARK_BAR_FOLDER_ID, name: '북마크 바', depth: 0 },
+  ];
+
+  const walk = (folder, depth) => {
+    if (folder?.kind !== 'manual') return;
+    if (folder.id === MANUAL_BOOKMARK_FOLDER_ID) {
+      options.push({ id: null, name: '직접 추가', depth: 0 });
+      (folder.children || []).forEach((child) => walk(child, 1));
+      return;
+    }
+    options.push({ id: folder.id, name: folder.name, depth });
+    (folder.children || []).forEach((child) => walk(child, depth + 1));
+  };
+
+  (tree || []).forEach((folder) => walk(folder, 0));
+  if (!options.some((item) => item.id === null)) {
+    options.push({ id: null, name: '직접 추가', depth: 0 });
+  }
+  return options;
+}
+
 export function nextManualFolderName(existingNames = []) {
   const names = new Set(
     existingNames.map((name) => String(name || '').trim()).filter(Boolean),

@@ -10,6 +10,8 @@ import {
   listRelatedRecordIds,
   listRelatedRecords,
   normalizeRelatedRecordIds,
+  recordLabelFromData,
+  recordLabelsFromData,
   replaceRelatedRecordIds,
   searchRelatedRecordCandidates,
 } from './record-references';
@@ -50,6 +52,20 @@ function seedReferenceDb(database) {
 
 test('escapeLikePattern escapes LIKE wildcards', () => {
   expect(escapeLikePattern('100%_ready!now')).toBe('100!%!_ready!!now');
+});
+
+test('uses the first two visible fields as related-record title and subtitle', () => {
+  const fields = [
+    { id: 'poster', type: 'file', hidden: false, order: 0 },
+    { id: 'title', type: 'text', hidden: false, order: 1 },
+    { id: 'year', type: 'text', hidden: false, order: 2, textSuffix: '년' },
+    { id: 'note', type: 'text', hidden: true, order: 3 },
+  ];
+  expect(recordLabelsFromData({ title: 'Heat', year: '1995', note: 'hidden' }, fields)).toEqual({
+    label: 'Heat',
+    subtitle: '1995년',
+  });
+  expect(recordLabelFromData({ title: 'Heat' }, fields)).toBe('Heat');
 });
 
 test('normalizeRelatedRecordIds rejects invalid selections', () => {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Star } from 'lucide-react';
-import { BOOKMARK_BAR_FOLDER_ID, MANUAL_BOOKMARK_FOLDER_ID, type BrowserBookmark, type BrowserBookmarkFolder } from '../../types';
+import type { BrowserBookmark } from '../../types';
+import { collectManualSaveTargets } from '../../main/lib/browser-bookmark-tree';
 import { faviconUrlFor } from '../../lib/browserFavicon';
 import { MANUAL_DRAG_THRESHOLD_PX, type ManualDragItem } from './bookmark-dnd';
 import { focusRenameInput, startRenameAfterMenuClose } from './bookmark-rename';
@@ -14,34 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { FIELD_TOOLTIP_CLASSNAME } from '../records/FieldValueRenderer';
 import { cn } from '../../lib/utils';
 
-export type BookmarkSaveTarget = {
-  id: string | null;
-  name: string;
-  depth: number;
-};
-
-export function collectManualSaveTargets(tree: BrowserBookmarkFolder[]): BookmarkSaveTarget[] {
-  const options: BookmarkSaveTarget[] = [
-    { id: BOOKMARK_BAR_FOLDER_ID, name: '북마크 바', depth: 0 },
-  ];
-
-  const walk = (folder: BrowserBookmarkFolder, depth: number) => {
-    if (folder.kind !== 'manual') return;
-    if (folder.id === MANUAL_BOOKMARK_FOLDER_ID) {
-      options.push({ id: null, name: '직접 추가', depth: 0 });
-      folder.children.forEach((child) => walk(child, 1));
-      return;
-    }
-    options.push({ id: folder.id, name: folder.name, depth });
-    folder.children.forEach((child) => walk(child, depth + 1));
-  };
-
-  tree.forEach((folder) => walk(folder, 0));
-  if (!options.some((item) => item.id === null)) {
-    options.push({ id: null, name: '직접 추가', depth: 0 });
-  }
-  return options;
-}
+export { collectManualSaveTargets };
 
 function BookmarkFavicon({ url }: { url: string }) {
   const src = faviconUrlFor(url);

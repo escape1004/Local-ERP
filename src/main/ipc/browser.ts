@@ -5,14 +5,11 @@ import { electronDistDir } from '../ffmpeg-paths';
 import { canonicalizeBrowserUrl } from '../lib/browser-url';
 import { normalizePersistedBrowserSession, readBrowserSessionForProfile, writeBrowserSessionForProfile } from '../lib/browser-window-url';
 import {
-  BOOKMARK_BAR_FOLDER_ID,
   buildBrowserBookmarkTree,
-  MANUAL_BOOKMARK_FOLDER_ID,
   nextManualFolderName,
 } from '../lib/browser-bookmark-tree';
 import { buildRecordUrlMatchIndex } from '../lib/browser-record-match';
 import { moveManualTreeItem, normalizeManualParentId } from '../lib/browser-bookmark-move';
-import { parseExternalHttpUrl } from '../lib/security';
 import {
   appConfig,
   currentProfileId,
@@ -33,6 +30,10 @@ import {
   ensureBrowserExtensionPrepared,
   getBrowserExtensionBridgeState,
 } from '../services/browser-extension-bridge';
+import {
+  addBrowserExtensionBookmark,
+  removeBrowserExtensionBookmark,
+} from '../lib/browser-extension-data';
 import {
   openBrowserExtensionFolder,
   openExternalBrowser,
@@ -189,14 +190,6 @@ function listBookmarks() {
   };
 }
 
-function resolveManualFolderId(folderId, profileId) {
-  const text = String(folderId || '').trim();
-  if (!text || text === MANUAL_BOOKMARK_FOLDER_ID) return null;
-  if (text === BOOKMARK_BAR_FOLDER_ID) return BOOKMARK_BAR_FOLDER_ID;
-  const folder = db.prepare('SELECT id FROM browser_bookmark_folders WHERE id = ? AND profileId = ?').get(text, profileId);
-  return folder?.id || null;
-}
-
 function listScripts() {
   return db.prepare(`
     SELECT id, name, enabled, matches_json AS matchesJson, run_at AS runAt, source, updated_at AS updatedAt
@@ -251,54 +244,9 @@ export function registerBrowserHandlers() {
 
   ipcMain.handle('browser:listBookmarks', () => listBookmarks());
 
-  ipcMain.handle('browser:addBookmark', (_event, payload = {}) => {
-    const profileId = currentBrowserProfileId();
-    if (!profileId) return { success: false, error: '프로필을 선택해주세요.' };
-    const parsed = parseExternalHttpUrl(payload.url);
-    if (!parsed) return { success: false, error: '북마크할 주소가 올바르지 않습니다.' };
-    const url = canonicalizeBrowserUrl(parsed.toString()) || parsed.toString();
-    const matches = findMatchingRecords(url);
-    if (matches.length > 0) {
-      const listed = listBookmarks();
-      return {
-        success: true,
-        bookmark: listed.items.find((item) => item.source === 'record' && item.url === url),
-      };
-    }
+  ipcMain.handle('browser:addBookmark', (_event, payload = {}) => addBrowserExtensionBookmark(payload));
 
-    const existing = db.prepare('SELECT id FROM browser_bookmarks WHERE url = ? AND profileId = ?').get(url, profileId);
-    if (existing) {
-      return {
-        success: true,
-        bookmark: listBookmarks().items.find((item) => item.id === existing.id),
-      };
-    }
-
-    const id = crypto.randomUUID();
-    const title = String(payload.title || '').trim() || matches[0]?.label || parsed.hostname;
-    const folderId = resolveManualFolderId(payload.folderId, profileId);
-    db.prepare(`
-      INSERT INTO browser_bookmarks (id, profileId, title, url, record_id, folder_id, sort_order, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id,
-      profileId,
-      title,
-      url,
-      matches[0]?.id || null,
-      folderId,
-      nextManualSortOrder('browser_bookmarks', 'folder_id', folderId, profileId),
-      nowIso(),
-    );
-    return { success: true, bookmark: listBookmarks().items.find((item) => item.id === id) };
-  });
-
-  ipcMain.handle('browser:removeBookmark', (_event, id) => {
-    const profileId = currentBrowserProfileId();
-    if (!profileId) return { success: false, error: '프로필을 선택해주세요.' };
-    db.prepare('DELETE FROM browser_bookmarks WHERE id = ? AND profileId = ?').run(String(id || ''), profileId);
-    return { success: true };
-  });
+  ipcMain.handle('browser:removeBookmark', (_event, id) => removeBrowserExtensionBookmark(id));
 
   ipcMain.handle('browser:renameBookmark', (_event, payload = {}) => {
     const profileId = currentBrowserProfileId();

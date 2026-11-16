@@ -8,6 +8,7 @@ import {
   EXTENSION_HTTP_PORT_MAX,
   EXTENSION_HTTP_PORT_MIN,
   handleExtensionBridgeRequest,
+  normalizeExtensionBridgeBody,
   readBridgeToken,
 } from '../lib/browser-extension-bridge';
 import {
@@ -16,9 +17,12 @@ import {
   prepareBrowserExtensionFiles,
 } from '../lib/browser-extension-install';
 import {
+  addBrowserExtensionBookmark,
   findBrowserExtensionRecordsByUrl,
   listBrowserExtensionBookmarks,
   listBrowserExtensionScripts,
+  matchBrowserExtensionBookmarksByUrl,
+  removeBrowserExtensionBookmark,
 } from '../lib/browser-extension-data';
 
 export let extensionBridgePort = EXTENSION_HTTP_PORT_MIN;
@@ -83,7 +87,10 @@ function extensionBridgeData() {
   return {
     bookmarks: () => {
       const listed = listBrowserExtensionBookmarks();
-      return { tree: listed.tree || [] };
+      return {
+        tree: listed.tree || [],
+        saveTargets: listed.saveTargets || [],
+      };
     },
     listScripts: (url: string) => (
       listBrowserExtensionScripts().map((script) => ({
@@ -104,6 +111,9 @@ function extensionBridgeData() {
         }))
     ),
     findRecordsByUrl: (url: string) => findBrowserExtensionRecordsByUrl(url),
+    matchBookmarksByUrl: (url: string) => matchBrowserExtensionBookmarksByUrl(url),
+    addBookmark: (payload) => addBrowserExtensionBookmark(payload),
+    removeBookmark: (id: string) => removeBrowserExtensionBookmark(id),
   };
 }
 
@@ -139,7 +149,7 @@ export async function startBrowserExtensionBridge() {
         origin,
         token: readBridgeToken(req.headers as Record<string, string | string[] | undefined>),
         expectedToken: extensionBridgeToken,
-        body: { url: typeof body.url === 'string' ? body.url : '' },
+        body: normalizeExtensionBridgeBody(body),
         query: { url: urlObj.searchParams.get('url') || '' },
         data: extensionBridgeData(),
       });

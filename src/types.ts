@@ -92,6 +92,7 @@ export interface RelatedRecordSummary {
   categoryId: string;
   categoryName: string;
   label: string;
+  subtitle?: string;
   thumbnailPath?: string | null;
   record: DataRecord;
 }

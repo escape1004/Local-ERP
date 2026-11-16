@@ -34,12 +34,12 @@
     "scripts": ["background.js"]
   },
   "action": {
-    "default_title": "Local ERP 레코드",
+    "default_title": "Local ERP 북마크",
     "default_icon": {
-      "16": "icons/idle-16.png",
-      "32": "icons/idle-32.png",
-      "48": "icons/idle-48.png",
-      "128": "icons/idle-128.png"
+      "16": "icons/star-idle-16.png",
+      "32": "icons/star-idle-32.png",
+      "48": "icons/star-idle-48.png",
+      "128": "icons/star-idle-128.png"
     }
   },
   "content_scripts": [

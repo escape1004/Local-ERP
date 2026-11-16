@@ -28,22 +28,37 @@ async function bridgeFetch(pathname, options = {}) {
 }
 
 const ICON_IDLE = {
-  16: 'icons/idle-16.png',
-  32: 'icons/idle-32.png',
-  48: 'icons/idle-48.png',
-  128: 'icons/idle-128.png',
+  16: 'icons/star-idle-16.png',
+  32: 'icons/star-idle-32.png',
+  48: 'icons/star-idle-48.png',
+  128: 'icons/star-idle-128.png',
 };
-const ICON_FOUND = {
-  16: 'icons/found-16.png',
-  32: 'icons/found-32.png',
-  48: 'icons/found-48.png',
-  128: 'icons/found-128.png',
+const ICON_RECORD = {
+  16: 'icons/star-record-16.png',
+  32: 'icons/star-record-32.png',
+  48: 'icons/star-record-48.png',
+  128: 'icons/star-record-128.png',
+};
+const ICON_MANUAL = {
+  16: 'icons/star-manual-16.png',
+  32: 'icons/star-manual-32.png',
+  48: 'icons/star-manual-48.png',
+  128: 'icons/star-manual-128.png',
 };
 
-async function setRecordIcon(tabId, found) {
+function iconForMatch(match) {
+  if (match?.record) {
+    return { path: ICON_RECORD, title: 'Local ERP · 레코드에 있음' };
+  }
+  if (match?.manual) {
+    return { path: ICON_MANUAL, title: 'Local ERP · 직접 추가 북마크' };
+  }
+  return { path: ICON_IDLE, title: 'Local ERP · 북마크 없음' };
+}
+
+async function setRecordIcon(tabId, match) {
   if (!api.action?.setIcon || !tabId) return;
-  const path = found ? ICON_FOUND : ICON_IDLE;
-  const title = found ? 'Local ERP · 레코드에 있음' : 'Local ERP · 레코드에 없음';
+  const { path, title } = iconForMatch(match);
   try {
     await api.action.setIcon({ tabId, path });
     await api.action.setTitle?.({ tabId, title });
@@ -54,16 +69,15 @@ async function setRecordIcon(tabId, found) {
 }
 
 async function refreshRecordIcon(tabId, url) {
-  let found = false;
+  let match = { record: false, manual: false };
   if (/^https?:/i.test(url || '')) {
     try {
-      const payload = await bridgeFetch('/records-by-url', { method: 'POST', body: { url } });
-      found = Array.isArray(payload.records) && payload.records.length > 0;
+      match = await bridgeFetch('/bookmark-match', { method: 'POST', body: { url } });
     } catch {
-      found = false;
+      match = { record: false, manual: false };
     }
   }
-  await setRecordIcon(tabId, found);
+  await setRecordIcon(tabId, match);
 }
 
 async function refreshActiveRecordIcon() {
@@ -72,8 +86,21 @@ async function refreshActiveRecordIcon() {
   if (tab?.id) await refreshRecordIcon(tab.id, tab.url || '');
 }
 
+async function notifyBookmarksChanged() {
+  await refreshActiveRecordIcon();
+  try {
+    await api.runtime.sendMessage({ type: 'bookmarksChanged' });
+  } catch {
+    // no listeners
+  }
+}
+
 if (api.sidePanel?.setPanelBehavior) {
   void api.sidePanel.setPanelBehavior({ openPanelOnActionClick: true });
+} else if (api.action?.onClicked && api.sidebarAction?.open) {
+  api.action.onClicked.addListener(() => {
+    void api.sidebarAction.open();
+  });
 }
 
 api.tabs.onActivated.addListener((info) => {
@@ -92,10 +119,40 @@ api.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       .catch((error) => sendResponse({ error: error.message || 'bridge-failed' }));
     return true;
   }
+  if (message?.type === 'findBookmarkMatch') {
+    bridgeFetch('/bookmark-match', { method: 'POST', body: { url: message.url } })
+      .then((payload) => sendResponse(payload))
+      .catch((error) => sendResponse({ error: error.message || 'bridge-failed' }));
+    return true;
+  }
   if (message?.type === 'listBookmarks') {
     bridgeFetch('/bookmarks')
-      .then((payload) => sendResponse({ tree: payload.tree || [] }))
+      .then((payload) => sendResponse({
+        tree: payload.tree || [],
+        saveTargets: payload.saveTargets || [],
+      }))
       .catch((error) => sendResponse({ error: error.message || 'bridge-failed' }));
+    return true;
+  }
+  if (message?.type === 'addBookmark') {
+    bridgeFetch('/bookmarks', {
+      method: 'POST',
+      body: { url: message.url, title: message.title, folderId: message.folderId },
+    })
+      .then(async (payload) => {
+        await notifyBookmarksChanged();
+        sendResponse(payload);
+      })
+      .catch((error) => sendResponse({ success: false, error: error.message || 'bridge-failed' }));
+    return true;
+  }
+  if (message?.type === 'removeBookmark') {
+    bridgeFetch('/bookmarks/remove', { method: 'POST', body: { id: message.id } })
+      .then(async (payload) => {
+        await notifyBookmarksChanged();
+        sendResponse(payload);
+      })
+      .catch((error) => sendResponse({ success: false, error: error.message || 'bridge-failed' }));
     return true;
   }
   if (message?.type === 'listScripts') {

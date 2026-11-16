@@ -3,21 +3,42 @@ const bookmarksPane = document.getElementById('bookmarks-pane');
 const scriptsPane = document.getElementById('scripts-pane');
 const statusEl = document.getElementById('status');
 const matchEl = document.getElementById('match');
+const actionsEl = document.getElementById('bookmark-actions');
 const EXPANDED_KEY = 'lcerp-record-tree-expanded';
 const TAB_KEY = 'lcerp-side-tab';
+const MANUAL_BOOKMARK_FOLDER_ID = '__manual__';
 
 const ICONS = {
   chevronDown: '<svg class="chevron" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   chevronRight: '<svg class="chevron" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
   folder: '<svg class="folder-icon category" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  folderManual: '<svg class="folder-icon manual" viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>',
+  star: '<svg class="folder-icon star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
   link: '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5.93" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 18.07" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
 
+function folderGlyph(folder) {
+  if (folder.id === MANUAL_BOOKMARK_FOLDER_ID) return ICONS.star;
+  if (folder.kind === 'manual') return ICONS.folderManual;
+  return ICONS.folder;
+}
+
+function bookmarkHost(url) {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return url || '';
+  }
+}
+
 let expandedIds = new Set();
 let recordFolders = [];
+let saveTargets = [];
 let scripts = [];
 let matchKeys = recordMatchKeys([]);
 let currentUrl = '';
+let currentTitle = '';
+let currentMatch = { record: false, manual: false, records: [], manuals: [] };
 let activeTab = 'bookmarks';
 
 function setStatus(text) {
@@ -25,11 +46,61 @@ function setStatus(text) {
   statusEl.hidden = !text;
 }
 
-function setMatch(text, found) {
+function setMatch(text, state) {
   matchEl.textContent = text;
   matchEl.hidden = !text || activeTab !== 'bookmarks';
-  matchEl.classList.toggle('found', found === true);
-  matchEl.classList.toggle('missing', found === false);
+  matchEl.classList.toggle('found', state === true || state === 'record');
+  matchEl.classList.toggle('manual', state === 'manual');
+  matchEl.classList.toggle('missing', state === false);
+}
+
+function renderBookmarkActions() {
+  actionsEl.replaceChildren();
+  const show = activeTab === 'bookmarks' && /^https?:/i.test(currentUrl) && !currentMatch.record;
+  actionsEl.hidden = !show;
+  if (!show) return;
+
+  if (currentMatch.manual) {
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'action-btn danger';
+    remove.textContent = '북마크 해제';
+    remove.addEventListener('click', () => {
+      const id = currentMatch.manuals?.[0]?.id;
+      if (!id) return;
+      void api.runtime.sendMessage({ type: 'removeBookmark', id }).then(() => {
+        lastRefreshKey = '';
+        void refresh(true);
+      });
+    });
+    actionsEl.appendChild(remove);
+    return;
+  }
+
+  const label = document.createElement('p');
+  label.className = 'action-label';
+  label.textContent = '북마크할 위치';
+  actionsEl.appendChild(label);
+  const targets = saveTargets.length ? saveTargets : [{ id: null, name: '직접 추가', depth: 0 }];
+  targets.forEach((target) => {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'action-btn';
+    row.style.paddingLeft = `${12 + Number(target.depth || 0) * 12}px`;
+    row.textContent = target.name;
+    row.addEventListener('click', () => {
+      void api.runtime.sendMessage({
+        type: 'addBookmark',
+        url: currentUrl,
+        title: currentTitle,
+        folderId: target.id,
+      }).then(() => {
+        lastRefreshKey = '';
+        void refresh(true);
+      });
+    });
+    actionsEl.appendChild(row);
+  });
 }
 
 function escapeHtml(value) {
@@ -45,11 +116,12 @@ async function loadPrefs() {
     const stored = await api.storage.local.get([EXPANDED_KEY, TAB_KEY]);
     const ids = stored?.[EXPANDED_KEY];
     if (Array.isArray(ids)) expandedIds = new Set(ids.map(String));
+    else expandedIds = new Set([MANUAL_BOOKMARK_FOLDER_ID]);
     if (stored?.[TAB_KEY] === 'scripts' || stored?.[TAB_KEY] === 'bookmarks') {
       activeTab = stored[TAB_KEY];
     }
   } catch {
-    expandedIds = new Set();
+    expandedIds = new Set([MANUAL_BOOKMARK_FOLDER_ID]);
   }
 }
 
@@ -69,6 +141,7 @@ function setSideTab(id) {
   bookmarksPane.hidden = activeTab !== 'bookmarks';
   scriptsPane.hidden = activeTab !== 'scripts';
   matchEl.hidden = activeTab !== 'bookmarks' || !matchEl.textContent;
+  renderBookmarkActions();
   try {
     void api.storage.local.set({ [TAB_KEY]: activeTab });
   } catch {
@@ -95,21 +168,23 @@ function renderFolder(folder, parent, depth) {
   header.style.zIndex = String(30 - depth);
   header.style.paddingLeft = `${12 + depth * 20}px`;
   header.setAttribute('aria-expanded', open ? 'true' : 'false');
-  header.innerHTML = `${depth > 0 ? '<span class="nest">└</span>' : ''}${open ? ICONS.chevronDown : ICONS.chevronRight}${ICONS.folder}<span class="folder-name">${escapeHtml(folder.name || '폴더')}</span><span class="count">${total}</span>`;
+  header.innerHTML = `${depth > 0 ? '<span class="nest">└</span>' : ''}${open ? ICONS.chevronDown : ICONS.chevronRight}${folderGlyph(folder)}<span class="folder-name">${escapeHtml(folder.name || '폴더')}</span><span class="count">${total}</span>`;
   header.addEventListener('click', () => toggleFolder(folder.id));
   wrap.appendChild(header);
 
   if (open) {
     (folder.children || []).forEach((child) => renderFolder(child, wrap, depth + 1));
     (folder.bookmarks || []).forEach((bookmark) => {
+      const isRecord = bookmark.source === 'record';
       const active = isRecordBookmarkActive(bookmark, matchKeys);
       const button = document.createElement('button');
       button.type = 'button';
-      button.className = active ? 'item active' : 'item';
+      button.className = `item${active ? ' active' : ''}${isRecord ? '' : ' manual'}`;
       button.style.paddingLeft = `${32 + depth * 20}px`;
       button.title = bookmark.url || '';
-      const subtitle = bookmark.subtitle || bookmark.url || '';
-      button.innerHTML = `<span class="rail"></span><span class="item-body"><span class="item-title">${ICONS.link}<span>${escapeHtml(bookmark.title || bookmark.url)}</span></span>${subtitle ? `<span class="item-sub">${escapeHtml(subtitle)}</span>` : ''}</span>`;
+      const subtitle = isRecord ? (bookmark.subtitle || '') : bookmarkHost(bookmark.url);
+      const titleIcon = isRecord ? ICONS.link : '<span class="dash">-</span>';
+      button.innerHTML = `<span class="rail${isRecord ? '' : ' manual'}"></span><span class="item-body"><span class="item-title">${titleIcon}<span>${escapeHtml(bookmark.title || bookmark.url)}</span></span>${subtitle ? `<span class="item-sub">${escapeHtml(subtitle)}</span>` : ''}</span>`;
       const openBookmark = (options = {}) => {
         if (!bookmark.url) return;
         if (options.newTab) {
@@ -137,6 +212,12 @@ function renderFolder(folder, parent, depth) {
         }
         openBookmark();
       });
+      if (!isRecord) {
+        button.addEventListener('contextmenu', (event) => {
+          event.preventDefault();
+          showBookmarkMenu(event, bookmark);
+        });
+      }
       wrap.appendChild(button);
     });
   }
@@ -149,7 +230,7 @@ function renderBookmarks() {
   if (recordFolders.length === 0) {
     const empty = document.createElement('div');
     empty.className = 'empty';
-    empty.textContent = '표시할 레코드 URL이 없습니다.';
+    empty.textContent = '표시할 북마크가 없습니다.';
     bookmarksPane.appendChild(empty);
     return;
   }
@@ -176,7 +257,7 @@ function renderScripts() {
   });
 }
 
-async function currentTabUrl() {
+async function currentTabInfo() {
   const queries = [
     { active: true, currentWindow: true },
     { active: true, lastFocusedWindow: true },
@@ -184,25 +265,44 @@ async function currentTabUrl() {
   for (const query of queries) {
     const tabs = await api.tabs.query(query);
     const tab = tabs.find((item) => /^https?:/i.test(item?.url || '')) || tabs[0];
-    if (tab?.url) return tab.url;
+    if (tab?.url) return { url: tab.url, title: tab.title || '' };
   }
-  return '';
+  return { url: '', title: '' };
 }
 
-function applyCurrentMatch(records) {
-  matchKeys = recordMatchKeys(records);
+function applyCurrentMatch(match) {
+  currentMatch = {
+    record: Boolean(match?.record),
+    manual: Boolean(match?.manual),
+    records: Array.isArray(match?.records) ? match.records : [],
+    manuals: Array.isArray(match?.manuals) ? match.manuals : [],
+  };
+  const records = currentMatch.records;
+  const manuals = currentMatch.manuals;
+  matchKeys = recordMatchKeys([
+    ...records,
+    { urls: manuals.map((item) => item.url).filter(Boolean) },
+  ]);
   folderIdsContainingActiveBookmarks(recordFolders, matchKeys).forEach((id) => expandedIds.add(id));
   void saveExpanded();
   if (!currentUrl || !/^https?:/i.test(currentUrl)) {
     setMatch('', null);
+    renderBookmarkActions();
     return;
   }
-  if (records.length > 0) {
+  if (currentMatch.record) {
     const labels = records.map((item) => item.label || item.id).filter(Boolean);
-    setMatch(`현재 페이지는 레코드에 있습니다${labels.length ? ` · ${labels.join(', ')}` : ''}`, true);
+    setMatch(`현재 페이지는 레코드에 있습니다${labels.length ? ` · ${labels.join(', ')}` : ''}`, 'record');
+    renderBookmarkActions();
     return;
   }
-  setMatch('현재 페이지는 레코드에 없습니다', false);
+  if (currentMatch.manual) {
+    setMatch('현재 페이지는 직접 추가 북마크에 있습니다', 'manual');
+    renderBookmarkActions();
+    return;
+  }
+  setMatch('현재 페이지는 북마크에 없습니다', false);
+  renderBookmarkActions();
 }
 
 function isSidePanelActive() {
@@ -213,35 +313,46 @@ let lastRefreshKey = '';
 
 async function refresh(force = false) {
   if (!force && !isSidePanelActive()) return;
-  currentUrl = await currentTabUrl();
+  const tab = await currentTabInfo();
+  currentUrl = tab.url;
+  currentTitle = tab.title;
   const httpUrl = /^https?:/i.test(currentUrl);
   const refreshKey = `${currentUrl}|${activeTab}`;
   if (!force && refreshKey === lastRefreshKey) return;
   lastRefreshKey = refreshKey;
   const [bookmarksResult, matchResult, scriptsResult] = await Promise.all([
     api.runtime.sendMessage({ type: 'listBookmarks' }),
-    httpUrl ? api.runtime.sendMessage({ type: 'findRecordsByUrl', url: currentUrl }) : Promise.resolve({ records: [] }),
+    httpUrl ? api.runtime.sendMessage({ type: 'findBookmarkMatch', url: currentUrl }) : Promise.resolve({
+      record: false,
+      manual: false,
+      records: [],
+      manuals: [],
+    }),
     api.runtime.sendMessage({ type: 'listScripts', url: httpUrl ? currentUrl : '' }),
   ]);
 
   if (bookmarksResult?.error || scriptsResult?.error) {
     const error = bookmarksResult?.error || scriptsResult?.error;
     recordFolders = [];
+    saveTargets = [];
     scripts = [];
+    currentMatch = { record: false, manual: false, records: [], manuals: [] };
     setStatus(error === 'missing-config' || error === 'unauthorized'
       ? 'LCERP 앱을 실행한 뒤 확장을 다시 로드하세요.'
       : 'LCERP 앱이 실행 중인지 확인하세요.');
     setMatch('', null);
+    renderBookmarkActions();
     renderBookmarks();
     renderScripts();
     return;
   }
 
   const tree = Array.isArray(bookmarksResult?.tree) ? bookmarksResult.tree : [];
-  recordFolders = tree.filter((folder) => folder.kind === 'category');
+  recordFolders = tree;
+  saveTargets = Array.isArray(bookmarksResult?.saveTargets) ? bookmarksResult.saveTargets : [];
   scripts = Array.isArray(scriptsResult?.scripts) ? scriptsResult.scripts : [];
   setStatus('');
-  applyCurrentMatch(Array.isArray(matchResult?.records) ? matchResult.records : []);
+  applyCurrentMatch(matchResult?.error ? { record: false, manual: false, records: [], manuals: [] } : matchResult);
   renderBookmarks();
   renderScripts();
   setSideTab(activeTab);
@@ -255,6 +366,37 @@ function scheduleRefresh() {
     void refresh();
   }, 200);
 }
+
+let contextMenu = null;
+
+function hideBookmarkMenu() {
+  contextMenu?.remove();
+  contextMenu = null;
+}
+
+function showBookmarkMenu(event, bookmark) {
+  hideBookmarkMenu();
+  contextMenu = document.createElement('div');
+  contextMenu.className = 'ctx';
+  contextMenu.style.left = `${event.clientX}px`;
+  contextMenu.style.top = `${event.clientY}px`;
+  const remove = document.createElement('button');
+  remove.type = 'button';
+  remove.className = 'ctx-item danger';
+  remove.textContent = '삭제';
+  remove.addEventListener('click', () => {
+    hideBookmarkMenu();
+    void api.runtime.sendMessage({ type: 'removeBookmark', id: bookmark.id }).then(() => {
+      lastRefreshKey = '';
+      void refresh(true);
+    });
+  });
+  contextMenu.appendChild(remove);
+  document.body.appendChild(contextMenu);
+}
+
+document.addEventListener('click', hideBookmarkMenu);
+document.addEventListener('scroll', hideBookmarkMenu, true);
 
 document.querySelectorAll('.tab').forEach((button) => {
   button.addEventListener('click', () => setSideTab(button.dataset.tab));
@@ -271,6 +413,11 @@ api.tabs.onUpdated.addListener((_tabId, changeInfo) => {
 });
 document.addEventListener('visibilitychange', () => {
   if (!isSidePanelActive()) return;
+  lastRefreshKey = '';
+  scheduleRefresh();
+});
+api.runtime.onMessage.addListener((message) => {
+  if (message?.type !== 'bookmarksChanged') return;
   lastRefreshKey = '';
   scheduleRefresh();
 });

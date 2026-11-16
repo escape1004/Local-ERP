@@ -39,6 +39,7 @@ export const RelatedRecordsPanel: React.FC<{
     if (!normalizedQuery) return labeledRecords;
     return labeledRecords.filter(({ item }) => (
       item.label.toLowerCase().includes(normalizedQuery)
+      || (item.subtitle || '').toLowerCase().includes(normalizedQuery)
       || item.categoryName.toLowerCase().includes(normalizedQuery)
     ));
   }, [labeledRecords, query]);
@@ -92,10 +93,13 @@ export const RelatedRecordsPanel: React.FC<{
                     </div>
                   )}
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-xs font-normal text-discord-text">
+                    <span className="block truncate text-xs font-normal text-discord-muted">
                       {item.categoryName}
                     </span>
                     <span className="mt-0.5 block truncate text-sm font-semibold text-discord-text">{item.label}</span>
+                    {item.subtitle ? (
+                      <span className="mt-0.5 block truncate text-sm font-normal text-discord-text">{item.subtitle}</span>
+                    ) : null}
                   </span>
                 </>
               );
@@ -105,7 +109,7 @@ export const RelatedRecordsPanel: React.FC<{
                   <div
                     key={item.id}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-discord-text"
-                    title={item.label}
+                    title={[item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
                   >
                     {content}
                   </div>
@@ -118,7 +122,7 @@ export const RelatedRecordsPanel: React.FC<{
                   type="button"
                   onClick={() => onSelectRecord(item.record, category)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-discord-text hover:bg-discord-hover"
-                  title={item.label}
+                  title={[item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
                 >
                   {content}
                 </button>

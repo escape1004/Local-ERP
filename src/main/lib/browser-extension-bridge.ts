@@ -25,11 +25,23 @@ export function readBridgeToken(headers: Record<string, string | string[] | unde
   return String(value || '').trim();
 }
 
+export function normalizeExtensionBridgeBody(raw: Record<string, unknown> = {}) {
+  return {
+    url: typeof raw.url === 'string' ? raw.url : '',
+    title: typeof raw.title === 'string' ? raw.title : undefined,
+    folderId: raw.folderId === null || typeof raw.folderId === 'string' ? raw.folderId as string | null : undefined,
+    id: typeof raw.id === 'string' ? raw.id : undefined,
+  };
+}
+
 type BridgeData = {
   bookmarks: () => unknown;
   listScripts: (url: string) => unknown;
   scriptsForUrl: (url: string) => unknown;
   findRecordsByUrl: (url: string) => unknown;
+  matchBookmarksByUrl: (url: string) => unknown;
+  addBookmark: (payload: { url?: string; title?: string; folderId?: string | null }) => { success: boolean; error?: string };
+  removeBookmark: (id: string) => { success: boolean; error?: string };
 };
 
 type BridgeRequest = {
@@ -38,7 +50,7 @@ type BridgeRequest = {
   origin?: string;
   token?: string;
   expectedToken?: string;
-  body?: { url?: string };
+  body?: { url?: string; title?: string; folderId?: string | null; id?: string };
   query?: { url?: string };
   data: BridgeData;
 };
@@ -80,8 +92,23 @@ export function handleExtensionBridgeRequest({
   if (verb === 'POST' && route === '/records-by-url') {
     return { status: 200, json: { records: data.findRecordsByUrl(url) } };
   }
+  if (verb === 'POST' && route === '/bookmark-match') {
+    return { status: 200, json: data.matchBookmarksByUrl(url) };
+  }
   if (verb === 'POST' && route === '/scripts-for-url') {
     return { status: 200, json: { scripts: data.scriptsForUrl(url) } };
+  }
+  if (verb === 'POST' && route === '/bookmarks') {
+    const result = data.addBookmark({
+      url: body?.url,
+      title: body?.title,
+      folderId: body?.folderId,
+    });
+    return { status: result.success ? 200 : 400, json: result };
+  }
+  if (verb === 'POST' && route === '/bookmarks/remove') {
+    const result = data.removeBookmark(String(body?.id || ''));
+    return { status: result.success ? 200 : 400, json: result };
   }
 
   return { status: 404, json: { error: 'not-found' } };
