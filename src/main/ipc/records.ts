@@ -188,7 +188,7 @@ import {
 } from '../import-export';
 import {
   deleteRelatedRecordLinks,
-  listRelatedRecords,
+  getRelatedRecordsState,
   saveRelatedRecordIds,
   searchRelatedRecordCandidates,
 } from '../lib/record-references';
@@ -196,7 +196,7 @@ import {
 export function registerRecordHandlers() {
 
 
-  async function handleUpdateRecord(_, id, data, relatedRecordIds) {
+  async function handleUpdateRecord(_, id, data, relatedRecords) {
     try {
       log('=== handleUpdateRecord 시작 ===', { id, dataKeys: Object.keys(data) });
 
@@ -383,7 +383,7 @@ export function registerRecordHandlers() {
         // 썸네일 생성 실패는 레코드 업데이트를 막지 않음
       }
 
-      saveRelatedRecordIds(db, id, relatedRecordIds, profileId);
+      saveRelatedRecordIds(db, id, relatedRecords, profileId);
 
       log('=== handleUpdateRecord 완료 ===');
       return { success: true };
@@ -516,7 +516,12 @@ export function registerRecordHandlers() {
       } catch (error) {
         log('썸네일 생성 블록 예외', { error: error.message, stack: error.stack });
       }
-      saveRelatedRecordIds(db, recordId, record.relatedRecordIds, profileId);
+      if (record.relatedRecordIds !== undefined || record.relatedLabel !== undefined) {
+        saveRelatedRecordIds(db, recordId, {
+          ids: Array.isArray(record.relatedRecordIds) ? record.relatedRecordIds : [],
+          ...(record.relatedLabel !== undefined ? { label: record.relatedLabel } : {}),
+        }, profileId);
+      }
       return recordId;
     } catch (error) {
       log('[addRecord] 최상위 예외', { error: error.message, stack: error.stack });
@@ -569,7 +574,7 @@ export function registerRecordHandlers() {
     const profileId = getCurrentProfileIdOrThrow();
     if (!recordId) throw new Error('Record ID is required');
     ensureRecordBelongsToCurrentProfile(recordId);
-    return listRelatedRecords(db, recordId, profileId);
+    return getRelatedRecordsState(db, recordId, profileId);
   });
 
   ipcMain.handle('db:searchRelatedRecords', async (_, payload = {}) => {

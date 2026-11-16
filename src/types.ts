@@ -78,6 +78,11 @@ export interface DataRecord {
   thumbnailTimestamp?: number;
 }
 
+export interface RelatedRecordsSavePayload {
+  ids: string[];
+  label?: string;
+}
+
 export interface NewRecord {
   id?: string;
   categoryId: string;
@@ -85,6 +90,7 @@ export interface NewRecord {
   createdAt?: string;
   updatedAt?: string;
   relatedRecordIds?: string[];
+  relatedLabel?: string;
 }
 
 export interface RelatedRecordSummary {
@@ -93,8 +99,14 @@ export interface RelatedRecordSummary {
   categoryName: string;
   label: string;
   subtitle?: string;
+  relationLabel?: string;
   thumbnailPath?: string | null;
   record: DataRecord;
+}
+
+export interface RelatedRecordsState {
+  label: string;
+  records: RelatedRecordSummary[];
 }
 
 export interface RelatedRecordSearchPayload {
@@ -390,9 +402,9 @@ export interface ElectronAPI {
   importCategoryRecords: (categoryId: string, format: 'csv' | 'xlsx') => Promise<{ success: boolean; canceled?: boolean; path?: string; importedCount?: number; duplicateCount?: number; skippedCount?: number; unresolvedRelationCount?: number; duplicateFields?: string[]; format?: 'csv' | 'xlsx'; error?: string }>;
   getRecords: (categoryId: string) => Promise<DataRecord[]>;
   addRecord: (record: NewRecord) => Promise<string>;
-  updateRecord: (id: string, data: Record<string, any>, relatedRecordIds?: string[]) => Promise<void>;
+  updateRecord: (id: string, data: Record<string, any>, relatedRecords?: RelatedRecordsSavePayload | string[]) => Promise<void>;
   deleteRecord: (id: string) => Promise<void>;
-  listRelatedRecords: (recordId: string) => Promise<RelatedRecordSummary[]>;
+  listRelatedRecords: (recordId: string) => Promise<RelatedRecordsState>;
   searchRelatedRecords: (payload: RelatedRecordSearchPayload) => Promise<RelatedRecordSummary[]>;
   exportCategory: (categoryId: string) => Promise<{ success: boolean; path?: string; error?: string }>;
   importCategories: () => Promise<{ success: boolean; importedCount?: number; error?: string }>;

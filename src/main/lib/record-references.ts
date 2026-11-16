@@ -2,6 +2,7 @@ import { getSqlPlaceholders } from './sql';
 
 export const MAX_RELATED_RECORDS = 100;
 export const RELATED_RECORD_SEARCH_LIMIT = 50;
+export const MAX_RELATED_RECORD_LABEL_LENGTH = 40;
 
 export function escapeLikePattern(value) {
   return String(value).replace(/!/g, '!!').replace(/%/g, '!%').replace(/_/g, '!_');
@@ -67,36 +68,75 @@ export function recordLabelFromData(data, fields) {
   return recordLabelsFromData(data, fields).label;
 }
 
+export function normalizeRelatedRecordLabel(raw) {
+  if (raw == null) return '';
+  return String(raw).replace(/\s+/g, ' ').trim().slice(0, MAX_RELATED_RECORD_LABEL_LENGTH);
+}
+
 export function normalizeRelatedRecordIds(raw, sourceRecordId, existingIds) {
   if (!Array.isArray(raw)) {
     return { ok: false, error: '관련 레코드 선택값이 올바르지 않습니다.' };
   }
 
-  const ids = [...new Set(
-    raw
-      .map((id) => String(id || '').trim())
-      .filter(Boolean)
-  )];
+  const ids = [];
+  const seen = new Set();
 
-  if (ids.length > MAX_RELATED_RECORDS) {
-    return { ok: false, error: '관련 레코드는 최대 100개까지 지정할 수 있습니다.' };
-  }
+  for (const entry of raw) {
+    const id = typeof entry === 'string' || typeof entry === 'number'
+      ? String(entry || '').trim()
+      : String(entry?.id || '').trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
 
-  for (const id of ids) {
     if (id === sourceRecordId) {
       return { ok: false, error: '레코드는 자기 자신과 연결할 수 없습니다.' };
     }
     if (!existingIds.has(id)) {
       return { ok: false, error: '관련 레코드 대상을 찾을 수 없습니다.' };
     }
+    ids.push(id);
+  }
+
+  if (ids.length > MAX_RELATED_RECORDS) {
+    return { ok: false, error: '관련 레코드는 최대 100개까지 지정할 수 있습니다.' };
   }
 
   return { ok: true, ids };
 }
 
+export function normalizeRelatedRecordsPayload(raw) {
+  if (raw === undefined) return { ok: true, skipped: true };
+  if (Array.isArray(raw)) {
+    return { ok: true, skipped: false, ids: raw, label: undefined, hasLabel: false };
+  }
+  if (raw && typeof raw === 'object') {
+    return {
+      ok: true,
+      skipped: false,
+      ids: Array.isArray(raw.ids) ? raw.ids : (Array.isArray(raw.relatedRecordIds) ? raw.relatedRecordIds : []),
+      label: raw.label ?? raw.relatedLabel,
+      hasLabel: Object.prototype.hasOwnProperty.call(raw, 'label')
+        || Object.prototype.hasOwnProperty.call(raw, 'relatedLabel'),
+    };
+  }
+  return { ok: false, error: '관련 레코드 선택값이 올바르지 않습니다.' };
+}
+
 export function listProfileRecordIds(database, profileId) {
   return new Set(
     database.prepare('SELECT id FROM records WHERE profileId = ?').all(profileId).map((row) => row.id)
+  );
+}
+
+export function getRecordRelatedLabel(database, recordId) {
+  const row = database.prepare('SELECT related_label AS relatedLabel FROM records WHERE id = ?').get(recordId);
+  return normalizeRelatedRecordLabel(row?.relatedLabel);
+}
+
+export function setRecordRelatedLabel(database, recordId, label) {
+  database.prepare('UPDATE records SET related_label = ? WHERE id = ?').run(
+    normalizeRelatedRecordLabel(label) || null,
+    recordId,
   );
 }
 
@@ -132,6 +172,7 @@ function mapRelatedRecordRow(row) {
     categoryName: row.categoryName || '',
     label: labels.label || row.id,
     subtitle: labels.subtitle,
+    relationLabel: normalizeRelatedRecordLabel(row.relatedLabel),
     thumbnailPath: row.thumbnailPath || null,
     record: {
       id: row.id,
@@ -149,7 +190,7 @@ function mapRelatedRecordRow(row) {
 
 const RELATED_RECORD_SELECT = `
   SELECT r.id, r.profileId, r.categoryId, r.data, r.createdAt, r.updatedAt,
-         r.duration, r.thumbnailPath, r.thumbnailTimestamp,
+         r.duration, r.thumbnailPath, r.thumbnailTimestamp, r.related_label AS relatedLabel,
          c.name AS categoryName, c.fields AS categoryFields
   FROM records r
   JOIN categories c ON c.id = r.categoryId
@@ -165,8 +206,20 @@ export function listRelatedRecords(database, recordId, profileId) {
       AND r.id IN (${getSqlPlaceholders(ids.length)})
   `).all(profileId, ...ids);
 
-  const byId = new Map(rows.map((row) => [row.id, mapRelatedRecordRow(row)]));
-  return ids.map((id) => byId.get(id)).filter(Boolean);
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  return ids
+    .map((id) => {
+      const row = byId.get(id);
+      return row ? mapRelatedRecordRow(row) : null;
+    })
+    .filter(Boolean);
+}
+
+export function getRelatedRecordsState(database, recordId, profileId) {
+  return {
+    label: getRecordRelatedLabel(database, recordId),
+    records: listRelatedRecords(database, recordId, profileId),
+  };
 }
 
 export function searchRelatedRecordCandidates(database, options) {
@@ -194,8 +247,8 @@ export function searchRelatedRecordCandidates(database, options) {
 
   if (query) {
     const like = `%${escapeLikePattern(query)}%`;
-    sql += ` AND (c.name LIKE ? ESCAPE '!' COLLATE NOCASE OR r.data LIKE ? ESCAPE '!' COLLATE NOCASE)`;
-    params.push(like, like);
+    sql += ` AND (c.name LIKE ? ESCAPE '!' COLLATE NOCASE OR r.data LIKE ? ESCAPE '!' COLLATE NOCASE OR COALESCE(r.related_label, '') LIKE ? ESCAPE '!' COLLATE NOCASE)`;
+    params.push(like, like, like);
   }
 
   sql += query
@@ -204,7 +257,7 @@ export function searchRelatedRecordCandidates(database, options) {
   sql += ' LIMIT ?';
   params.push(limit);
 
-  return database.prepare(sql).all(...params).map(mapRelatedRecordRow);
+  return database.prepare(sql).all(...params).map((row) => mapRelatedRecordRow(row));
 }
 
 export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
@@ -240,8 +293,9 @@ export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
       }
     });
 
-    const hasLink = database.prepare(`
-      SELECT 1 AS found FROM record_references
+    const findLink = database.prepare(`
+      SELECT source_record_id, target_record_id
+      FROM record_references
       WHERE (source_record_id = ? AND target_record_id = ?)
          OR (source_record_id = ? AND target_record_id = ?)
     `);
@@ -249,10 +303,20 @@ export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
       INSERT INTO record_references (source_record_id, target_record_id, sort_order, created_at)
       VALUES (?, ?, ?, ?)
     `);
+    const updateOutgoing = database.prepare(`
+      UPDATE record_references
+      SET sort_order = ?
+      WHERE source_record_id = ? AND target_record_id = ?
+    `);
 
     normalized.ids.forEach((targetId, index) => {
-      if (!hasLink.get(sourceId, targetId, targetId, sourceId)) {
+      const link = findLink.get(sourceId, targetId, targetId, sourceId);
+      if (!link) {
         insertStmt.run(sourceId, targetId, index, now);
+        return;
+      }
+      if (link.source_record_id === sourceId) {
+        updateOutgoing.run(index, sourceId, targetId);
       }
     });
   });
@@ -261,12 +325,18 @@ export function replaceRelatedRecordIds(database, sourceId, ids, existingIds) {
   return { ok: true };
 }
 
-export function saveRelatedRecordIds(database, sourceId, relatedRecordIds, profileId) {
-  if (relatedRecordIds === undefined) return;
-  if (!Array.isArray(relatedRecordIds)) {
-    throw new Error('관련 레코드 선택값이 올바르지 않습니다.');
+export function saveRelatedRecordIds(database, sourceId, relatedPayload, profileId) {
+  const normalized = normalizeRelatedRecordsPayload(relatedPayload);
+  if (!normalized.ok) {
+    throw new Error(normalized.error);
   }
-  replaceRelatedRecordIds(database, sourceId, relatedRecordIds, listProfileRecordIds(database, profileId));
+  if (normalized.skipped) return;
+
+  if (normalized.hasLabel) {
+    setRecordRelatedLabel(database, sourceId, normalized.label);
+  }
+
+  replaceRelatedRecordIds(database, sourceId, normalized.ids, listProfileRecordIds(database, profileId));
 }
 
 export function deleteRelatedRecordLinks(database, recordId) {

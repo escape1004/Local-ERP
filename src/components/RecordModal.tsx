@@ -94,6 +94,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   const [config, setConfig] = useState<Config | null>(null);
   const [translatingFieldIds, setTranslatingFieldIds] = useState<Set<string>>(new Set());
   const [relatedRecordIds, setRelatedRecordIds] = useState<string[]>([]);
+  const [relatedLabel, setRelatedLabel] = useState('');
   const [relatedRecordsLoaded, setRelatedRecordsLoaded] = useState(false);
   const canEditRelatedRecords = Boolean(category && !category.parentId);
 
@@ -123,12 +124,14 @@ export const RecordModal: React.FC<RecordModalProps> = ({
   useEffect(() => {
     if (!isOpen) {
       setRelatedRecordIds([]);
+      setRelatedLabel('');
       setRelatedRecordsLoaded(false);
       return undefined;
     }
 
     if (!canEditRelatedRecords || !record?.id) {
       setRelatedRecordIds([]);
+      setRelatedLabel('');
       setRelatedRecordsLoaded(true);
       return undefined;
     }
@@ -136,9 +139,10 @@ export const RecordModal: React.FC<RecordModalProps> = ({
     let cancelled = false;
     setRelatedRecordsLoaded(false);
     window.electronAPI.listRelatedRecords(record.id)
-      .then((rows) => {
+      .then((state) => {
         if (!cancelled) {
-          setRelatedRecordIds(rows.map((row) => row.id));
+          setRelatedRecordIds(state.records.map((row) => row.id));
+          setRelatedLabel(state.label || '');
           setRelatedRecordsLoaded(true);
         }
       })
@@ -146,6 +150,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
         console.error('Failed to load related records:', error);
         if (!cancelled) {
           setRelatedRecordIds([]);
+          setRelatedLabel('');
           setRelatedRecordsLoaded(true);
         }
       });
@@ -288,7 +293,11 @@ export const RecordModal: React.FC<RecordModalProps> = ({
         }
       });
       if (record) {
-        await updateRecord(record.id, normalizedFormData, canEditRelatedRecords ? relatedRecordIds : undefined);
+        await updateRecord(
+          record.id,
+          normalizedFormData,
+          canEditRelatedRecords ? { ids: relatedRecordIds, label: relatedLabel } : undefined,
+        );
         
         // 파일 필드가 변경되었는지 확인하고 썸네일 재생성 이벤트 발생
         const fileField = category.fields.find(f => f.type === 'file');
@@ -322,7 +331,7 @@ export const RecordModal: React.FC<RecordModalProps> = ({
           data: normalizedFormData,
           createdAt: now,
           updatedAt: now,
-          ...(canEditRelatedRecords ? { relatedRecordIds } : {}),
+          ...(canEditRelatedRecords ? { relatedRecordIds, relatedLabel } : {}),
         };
         await addRecord(newRecord);
       }
@@ -1378,6 +1387,8 @@ export const RecordModal: React.FC<RecordModalProps> = ({
                 sourceRecordId={record?.id}
                 value={relatedRecordIds}
                 onChange={setRelatedRecordIds}
+                label={relatedLabel}
+                onLabelChange={setRelatedLabel}
               />
             )}
           </div>

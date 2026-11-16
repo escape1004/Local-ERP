@@ -267,8 +267,8 @@ export const ViewRecordModal: React.FC<ViewRecordModalProps> = ({
 
     let cancelled = false;
     window.electronAPI.listRelatedRecords(record.id)
-      .then((rows) => {
-        if (!cancelled) setRelatedRecords(rows);
+      .then((state) => {
+        if (!cancelled) setRelatedRecords(state.records);
       })
       .catch((error) => {
         console.error('Failed to load related records:', error);

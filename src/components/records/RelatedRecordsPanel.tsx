@@ -40,6 +40,7 @@ export const RelatedRecordsPanel: React.FC<{
     return labeledRecords.filter(({ item }) => (
       item.label.toLowerCase().includes(normalizedQuery)
       || (item.subtitle || '').toLowerCase().includes(normalizedQuery)
+      || (item.relationLabel || '').toLowerCase().includes(normalizedQuery)
       || item.categoryName.toLowerCase().includes(normalizedQuery)
     ));
   }, [labeledRecords, query]);
@@ -96,7 +97,14 @@ export const RelatedRecordsPanel: React.FC<{
                     <span className="block truncate text-xs font-normal text-discord-muted">
                       {item.categoryName}
                     </span>
-                    <span className="mt-0.5 block truncate text-sm font-semibold text-discord-text">{item.label}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-1.5">
+                      {item.relationLabel ? (
+                        <span className="inline-flex h-5 shrink-0 items-center rounded border border-yellow-400/50 bg-yellow-400/15 px-1.5 text-[11px] font-semibold leading-none text-yellow-300">
+                          {item.relationLabel}
+                        </span>
+                      ) : null}
+                      <span className="min-w-0 truncate text-sm font-semibold leading-5 text-discord-text">{item.label}</span>
+                    </span>
                     {item.subtitle ? (
                       <span className="mt-0.5 block truncate text-sm font-normal text-discord-text">{item.subtitle}</span>
                     ) : null}
@@ -109,7 +117,7 @@ export const RelatedRecordsPanel: React.FC<{
                   <div
                     key={item.id}
                     className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm text-discord-text"
-                    title={[item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
+                    title={[item.relationLabel, item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
                   >
                     {content}
                   </div>
@@ -122,7 +130,7 @@ export const RelatedRecordsPanel: React.FC<{
                   type="button"
                   onClick={() => onSelectRecord(item.record, category)}
                   className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm text-discord-text hover:bg-discord-hover"
-                  title={[item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
+                  title={[item.relationLabel, item.categoryName, item.label, item.subtitle].filter(Boolean).join(' · ')}
                 >
                   {content}
                 </button>

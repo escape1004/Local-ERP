@@ -1,9 +1,10 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, Search } from 'lucide-react';
+import { ChevronDown, ChevronRight, Search, X } from 'lucide-react';
 import type { RelatedRecordSummary } from '../../types';
 import { Input } from '../ui/input';
 
 const MAX_RELATED_RECORDS = 100;
+const MAX_LABEL_LENGTH = 40;
 
 function mergeKnown(
   current: RelatedRecordSummary[],
@@ -14,11 +15,26 @@ function mergeKnown(
   return [...map.values()];
 }
 
+function normalizeIds(value: string[] = []): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  value.forEach((entry) => {
+    const id = String(entry || '').trim();
+    if (!id || seen.has(id)) return;
+    seen.add(id);
+    next.push(id);
+  });
+  return next;
+}
+
 export const RelatedRecordsEditor: React.FC<{
   sourceRecordId?: string;
   value: string[];
   onChange: (value: string[]) => void;
-}> = ({ sourceRecordId, value, onChange }) => {
+  label: string;
+  onLabelChange: (label: string) => void;
+}> = ({ sourceRecordId, value, onChange, label, onLabelChange }) => {
+  const ids = React.useMemo(() => normalizeIds(value), [value]);
   const [expanded, setExpanded] = React.useState(false);
   const [query, setQuery] = React.useState('');
   const [results, setResults] = React.useState<RelatedRecordSummary[]>([]);
@@ -29,9 +45,9 @@ export const RelatedRecordsEditor: React.FC<{
 
     let cancelled = false;
     window.electronAPI.listRelatedRecords(sourceRecordId)
-      .then((rows) => {
+      .then((state) => {
         if (!cancelled) {
-          setKnown((current) => mergeKnown(current, rows));
+          setKnown((current) => mergeKnown(current, state.records));
         }
       })
       .catch((error) => {
@@ -67,20 +83,32 @@ export const RelatedRecordsEditor: React.FC<{
     };
   }, [expanded, query, sourceRecordId]);
 
-  const selected = value.flatMap((id) => {
+  const selected = ids.map((id) => {
     const candidate = known.find((item) => item.id === id);
-    return candidate ? [candidate] : [];
+    if (candidate) return candidate;
+    return {
+      id,
+      categoryId: '',
+      categoryName: '',
+      label: id,
+      record: { id, categoryId: '', data: {} },
+    } as RelatedRecordSummary;
   });
+  const selectedIds = new Set(ids);
   const matching = results.filter((candidate) => candidate.id !== sourceRecordId);
-  const atLimit = value.length >= MAX_RELATED_RECORDS;
+  const atLimit = ids.length >= MAX_RELATED_RECORDS;
+
+  const setIds = (next: string[]) => {
+    onChange(normalizeIds(next));
+  };
 
   const toggle = (id: string) => {
-    if (value.includes(id)) {
-      onChange(value.filter((item) => item !== id));
+    if (selectedIds.has(id)) {
+      setIds(ids.filter((item) => item !== id));
       return;
     }
     if (atLimit) return;
-    onChange([...value, id]);
+    setIds([...ids, id]);
   };
 
   return (
@@ -97,32 +125,68 @@ export const RelatedRecordsEditor: React.FC<{
           <ChevronRight size={16} className="shrink-0 text-discord-muted" />
         )}
         <span className="text-sm font-medium text-discord-text">관련 레코드</span>
-        {value.length > 0 && (
-          <span className="text-xs text-discord-muted">{value.length}</span>
+        {ids.length > 0 && (
+          <span className="text-xs text-discord-muted">{ids.length}</span>
         )}
       </button>
 
       {expanded && (
-        <div className="space-y-2 border-t border-gray-700 px-4 pb-4 pt-3">
+        <div className="space-y-3 border-t border-gray-700 px-4 pb-4 pt-3">
           <p className="text-xs text-discord-muted">
-            관계 필드와 별개로, 카테고리에 상관없이 레코드를 연결합니다. 양쪽 레코드에서 같은 연결을 관리하며, 어느 쪽에서든 끊을 수 있습니다.
+            관계 필드와 별개로, 카테고리에 상관없이 레코드를 연결합니다. 아래에서 지정한 표시 라벨은 다른 레코드의 관련 목록에 이 레코드가 나타날 때 사용됩니다.
           </p>
 
+          <div>
+            <label className="mb-1.5 block text-xs text-discord-muted" htmlFor="related-record-label">
+              이 레코드의 표시 라벨
+            </label>
+            <Input
+              id="related-record-label"
+              value={label}
+              onChange={(event) => onLabelChange(event.target.value.slice(0, MAX_LABEL_LENGTH))}
+              placeholder="예: 주연, 원작 (선택)"
+              maxLength={MAX_LABEL_LENGTH}
+              className="h-9 bg-discord-bg border-gray-600 text-sm text-discord-text"
+            />
+          </div>
+
           {selected.length > 0 ? (
-            <div className="flex flex-wrap gap-2">
+            <div className="overflow-hidden rounded border border-gray-700 bg-discord-bg">
               {selected.map((candidate) => (
-                <button
+                <div
                   key={candidate.id}
-                  type="button"
-                  onClick={() => toggle(candidate.id)}
-                  className="max-w-full whitespace-normal rounded-full border border-discord-accent/30 bg-discord-accent/10 px-3 py-1.5 text-left text-xs text-discord-text"
-                  title="연결 해제"
+                  className="flex items-start gap-3 border-b border-gray-700 px-3 py-2.5 last:border-0"
                 >
-                  <span className="text-[11px] font-normal">{candidate.categoryName}</span>
-                  <span className="mx-1">·</span>
-                  <span className="font-semibold">{candidate.label}</span>
-                  {' '}×
-                </button>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-xs text-discord-muted">
+                      {candidate.categoryName || '레코드'}
+                    </div>
+                    <div className="mt-0.5 flex min-w-0 items-center gap-2">
+                      {candidate.relationLabel ? (
+                        <span className="inline-flex h-5 shrink-0 items-center rounded bg-yellow-500/20 px-1.5 text-[11px] font-medium leading-none text-yellow-300">
+                          {candidate.relationLabel}
+                        </span>
+                      ) : null}
+                      <span className="truncate text-sm font-semibold leading-5 text-discord-text">
+                        {candidate.label}
+                      </span>
+                    </div>
+                    {candidate.subtitle ? (
+                      <div className="mt-0.5 truncate text-sm text-discord-text">
+                        {candidate.subtitle}
+                      </div>
+                    ) : null}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => toggle(candidate.id)}
+                    className="mt-0.5 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded text-discord-muted hover:bg-discord-hover hover:text-discord-text"
+                    title="연결 해제"
+                    aria-label={`${candidate.label} 연결 해제`}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
               ))}
             </div>
           ) : (
@@ -143,7 +207,7 @@ export const RelatedRecordsEditor: React.FC<{
 
           <div className="max-h-52 overflow-y-auto rounded border border-gray-700 bg-discord-bg discord-scrollbar">
             {matching.length > 0 ? matching.map((candidate) => {
-              const checked = value.includes(candidate.id);
+              const checked = selectedIds.has(candidate.id);
               return (
                 <label
                   key={candidate.id}
@@ -157,8 +221,18 @@ export const RelatedRecordsEditor: React.FC<{
                     className="accent-discord-accent"
                   />
                   <span className="min-w-0">
-                    <span className="block truncate text-xs font-normal text-discord-text">{candidate.categoryName}</span>
-                    <strong className="mt-0.5 block truncate text-sm font-semibold text-discord-text">{candidate.label}</strong>
+                    <span className="block truncate text-xs font-normal text-discord-muted">{candidate.categoryName}</span>
+                    <span className="mt-0.5 flex min-w-0 items-center gap-2">
+                      {candidate.relationLabel ? (
+                        <span className="inline-flex h-5 shrink-0 items-center rounded bg-yellow-500/20 px-1.5 text-[11px] font-medium leading-none text-yellow-300">
+                          {candidate.relationLabel}
+                        </span>
+                      ) : null}
+                      <strong className="truncate text-sm font-semibold leading-5 text-discord-text">{candidate.label}</strong>
+                    </span>
+                    {candidate.subtitle ? (
+                      <span className="mt-0.5 block truncate text-sm text-discord-text">{candidate.subtitle}</span>
+                    ) : null}
                   </span>
                 </label>
               );

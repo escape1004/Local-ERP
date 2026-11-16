@@ -310,6 +310,21 @@ export const SCHEMA_MIGRATIONS = [
       rehomeBrowserBookmarksToPrimaryProfile(database);
     },
   },
+  {
+    version: 13,
+    name: 'record_reference_labels',
+    up(database) {
+      addColumnIfMissing(database, 'record_references', 'source_label', 'TEXT');
+      addColumnIfMissing(database, 'record_references', 'target_label', 'TEXT');
+    },
+  },
+  {
+    version: 14,
+    name: 'record_related_label',
+    up(database) {
+      addColumnIfMissing(database, 'records', 'related_label', 'TEXT');
+    },
+  },
 ];
 
 export const CURRENT_SCHEMA_VERSION = SCHEMA_MIGRATIONS[SCHEMA_MIGRATIONS.length - 1].version;

@@ -1015,13 +1015,16 @@ export const MainContent: React.FC = () => {
 
   const deleteRecordWithUndo = async (record: DataRecord) => {
     let relatedRecordIds: string[] = [];
+    let relatedLabel = '';
     try {
-      relatedRecordIds = (await window.electronAPI.listRelatedRecords(record.id)).map((row) => row.id);
+      const state = await window.electronAPI.listRelatedRecords(record.id);
+      relatedRecordIds = state.records.map((row) => row.id);
+      relatedLabel = state.label || '';
     } catch (error) {
       console.error('Failed to snapshot related records before delete:', error);
     }
 
-    pendingDeletedRecordRef.current = createDeletedRecordSnapshot(record, relatedRecordIds);
+    pendingDeletedRecordRef.current = createDeletedRecordSnapshot(record, relatedRecordIds, relatedLabel);
 
     try {
       await deleteRecord(record.id);

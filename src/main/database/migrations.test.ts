@@ -134,7 +134,7 @@ function expectLatestSchema(database) {
     'id', 'profileId', 'name', 'parentId', 'fields', 'order_num', 'itemType', 'memo', 'createdAt', 'updatedAt',
   ]));
   expect(getTableColumns(database, 'records')).toEqual(expect.arrayContaining([
-    'id', 'profileId', 'categoryId', 'data', 'createdAt', 'updatedAt', 'duration', 'thumbnailPath', 'thumbnailTimestamp',
+    'id', 'profileId', 'categoryId', 'data', 'createdAt', 'updatedAt', 'duration', 'thumbnailPath', 'thumbnailTimestamp', 'related_label',
   ]));
   expect(getTableColumns(database, 'record_view_counts')).toEqual(expect.arrayContaining([
     'profileId', 'recordId', 'categoryId', 'viewCount', 'updatedAt',
@@ -152,7 +152,7 @@ function expectLatestSchema(database) {
     'id', 'name', 'enabled', 'matches_json', 'run_at', 'source', 'updated_at',
   ]));
   expect(getTableColumns(database, 'record_references')).toEqual(expect.arrayContaining([
-    'source_record_id', 'target_record_id', 'sort_order', 'created_at',
+    'source_record_id', 'target_record_id', 'sort_order', 'created_at', 'source_label', 'target_label',
   ]));
   expect(database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
     .toBeUndefined();
@@ -232,7 +232,7 @@ test('removes the bundled youtube highlight script from an existing browser data
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([8, 9, 10, 11, 12]);
+    expect(result.appliedVersions).toEqual([8, 9, 10, 11, 12, 13, 14]);
     expect(temp.database.prepare('SELECT id FROM browser_scripts WHERE id = ?').get('youtube-record-highlight'))
       .toBeUndefined();
     expect(tableExists(temp.database, 'record_references')).toBe(true);
@@ -248,10 +248,10 @@ test('adds record_references when upgrading from version 8', () => {
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([9, 10, 11, 12]);
+    expect(result.appliedVersions).toEqual([9, 10, 11, 12, 13, 14]);
     expect(tableExists(temp.database, 'record_references')).toBe(true);
     expect(getTableColumns(temp.database, 'record_references')).toEqual(expect.arrayContaining([
-      'source_record_id', 'target_record_id', 'sort_order', 'created_at',
+      'source_record_id', 'target_record_id', 'sort_order', 'created_at', 'source_label', 'target_label',
     ]));
   });
 });
@@ -266,7 +266,7 @@ test('adds browser history and downloads when upgrading from version 9', () => {
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([10, 11, 12]);
+    expect(result.appliedVersions).toEqual([10, 11, 12, 13, 14]);
     expect(tableExists(temp.database, 'browser_history')).toBe(true);
     expect(tableExists(temp.database, 'browser_downloads')).toBe(true);
     expect(getTableColumns(temp.database, 'browser_history')).toEqual(expect.arrayContaining([
@@ -297,7 +297,7 @@ test('scopes existing browser bookmarks to a profile and allows the same url in 
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([11, 12]);
+    expect(result.appliedVersions).toEqual([11, 12, 13, 14]);
     expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-1').profileId)
       .toBe('profile-1');
     expect(temp.database.prepare('SELECT profileId FROM browser_bookmark_folders WHERE id = ?').get('folder-1').profileId)
@@ -358,7 +358,7 @@ test('moves legacy browser bookmarks from the oldest profile to the one with the
 
     const result = migrate(temp.database, temp.backupDir);
 
-    expect(result.appliedVersions).toEqual([12]);
+    expect(result.appliedVersions).toEqual([12, 13, 14]);
     expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-legacy'))
       .toBeUndefined();
     expect(temp.database.prepare('SELECT profileId FROM browser_bookmarks WHERE id = ?').get('bm-keep').profileId)
@@ -367,6 +367,33 @@ test('moves legacy browser bookmarks from the oldest profile to the one with the
       .toEqual({ profileId: 'main', url: 'https://www.google.com/' });
     expect(temp.database.prepare('SELECT profileId FROM browser_bookmark_folders WHERE id = ?').get('folder-legacy').profileId)
       .toBe('main');
+  });
+});
+
+test('adds related-record labels when upgrading from version 12', () => {
+  withMigrationDb((temp) => {
+    migrate(temp.database, temp.backupDir, {
+      migrations: SCHEMA_MIGRATIONS.filter((migration) => migration.version <= 12),
+    });
+    expect(getTableColumns(temp.database, 'record_references')).toEqual(expect.arrayContaining([
+      'source_record_id', 'target_record_id', 'sort_order', 'created_at',
+    ]));
+    expect(getTableColumns(temp.database, 'record_references')).not.toEqual(expect.arrayContaining([
+      'source_label', 'target_label',
+    ]));
+    expect(getTableColumns(temp.database, 'records')).not.toEqual(expect.arrayContaining([
+      'related_label',
+    ]));
+
+    const result = migrate(temp.database, temp.backupDir);
+
+    expect(result.appliedVersions).toEqual([13, 14]);
+    expect(getTableColumns(temp.database, 'record_references')).toEqual(expect.arrayContaining([
+      'source_label', 'target_label',
+    ]));
+    expect(getTableColumns(temp.database, 'records')).toEqual(expect.arrayContaining([
+      'related_label',
+    ]));
   });
 });
 

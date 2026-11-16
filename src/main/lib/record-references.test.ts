@@ -7,13 +7,16 @@ import {
   deleteRelatedRecordLinksForCategories,
   deleteRelatedRecordLinksForProfile,
   escapeLikePattern,
+  getRelatedRecordsState,
   listRelatedRecordIds,
   listRelatedRecords,
   normalizeRelatedRecordIds,
   recordLabelFromData,
   recordLabelsFromData,
   replaceRelatedRecordIds,
+  saveRelatedRecordIds,
   searchRelatedRecordCandidates,
+  setRecordRelatedLabel,
 } from './record-references';
 
 const TITLE_FIELDS = JSON.stringify([
@@ -95,25 +98,43 @@ test('normalizeRelatedRecordIds rejects invalid selections', () => {
   });
 });
 
-test('replaceRelatedRecordIds stores undirected links and lists outgoing first', () => {
+test('replaceRelatedRecordIds stores undirected links and uses each record related_label', () => {
   withTempSqlite((temp) => {
     seedReferenceDb(temp.database);
     const existing = new Set(['r-inception', 'r-leo', 'r-interstellar', 'r-other']);
 
+    setRecordRelatedLabel(temp.database, 'r-leo', '주연');
+    setRecordRelatedLabel(temp.database, 'r-inception', '작품');
     replaceRelatedRecordIds(temp.database, 'r-inception', ['r-leo', 'r-interstellar'], existing);
 
     expect(listRelatedRecordIds(temp.database, 'r-inception')).toEqual(['r-leo', 'r-interstellar']);
     expect(listRelatedRecordIds(temp.database, 'r-leo')).toEqual(['r-inception']);
+    expect(listRelatedRecords(temp.database, 'r-inception', 'p1').map((row) => ({
+      id: row.id,
+      relationLabel: row.relationLabel,
+    }))).toEqual([
+      { id: 'r-leo', relationLabel: '주연' },
+      { id: 'r-interstellar', relationLabel: '' },
+    ]);
     expect(listRelatedRecords(temp.database, 'r-leo', 'p1').map((row) => ({
       id: row.id,
       categoryName: row.categoryName,
       label: row.label,
+      relationLabel: row.relationLabel,
     }))).toEqual([
-      { id: 'r-inception', categoryName: 'Movies', label: 'Inception' },
+      { id: 'r-inception', categoryName: 'Movies', label: 'Inception', relationLabel: '작품' },
     ]);
 
-    replaceRelatedRecordIds(temp.database, 'r-leo', ['r-inception'], existing);
-    expect(temp.database.prepare('SELECT COUNT(*) AS count FROM record_references').get().count).toBe(2);
+    expect(getRelatedRecordsState(temp.database, 'r-leo', 'p1')).toEqual({
+      label: '주연',
+      records: expect.arrayContaining([
+        expect.objectContaining({ id: 'r-inception', relationLabel: '작품' }),
+      ]),
+    });
+
+    saveRelatedRecordIds(temp.database, 'r-leo', { ids: ['r-inception'], label: '배우' }, 'p1');
+    expect(getRelatedRecordsState(temp.database, 'r-leo', 'p1').label).toBe('배우');
+    expect(listRelatedRecords(temp.database, 'r-inception', 'p1').find((row) => row.id === 'r-leo')?.relationLabel).toBe('배우');
 
     replaceRelatedRecordIds(temp.database, 'r-leo', [], existing);
     expect(listRelatedRecordIds(temp.database, 'r-inception')).toEqual(['r-interstellar']);
