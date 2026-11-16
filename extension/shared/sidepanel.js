@@ -2,7 +2,6 @@ const api = typeof browser !== 'undefined' ? browser : chrome;
 const bookmarksPane = document.getElementById('bookmarks-pane');
 const scriptsPane = document.getElementById('scripts-pane');
 const statusEl = document.getElementById('status');
-const matchEl = document.getElementById('match');
 const actionsEl = document.getElementById('bookmark-actions');
 const EXPANDED_KEY = 'lcerp-record-tree-expanded';
 const TAB_KEY = 'lcerp-side-tab';
@@ -16,6 +15,8 @@ const ICONS = {
   star: '<svg class="folder-icon star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>',
   link: '<svg viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.07 0l1.41-1.41a5 5 0 0 0-7.07-7.07L10 5.93" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M14 11a5 5 0 0 0-7.07 0L5.52 12.41a5 5 0 0 0 7.07 7.07L14 18.07" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>',
 };
+
+let bookmarkMenuOpen = false;
 
 function folderGlyph(folder) {
   if (folder.id === MANUAL_BOOKMARK_FOLDER_ID) return ICONS.star;
@@ -46,16 +47,30 @@ function setStatus(text) {
   statusEl.hidden = !text;
 }
 
-function setMatch(text, state) {
-  matchEl.textContent = text;
-  matchEl.hidden = !text || activeTab !== 'bookmarks';
-  matchEl.classList.toggle('found', state === true || state === 'record');
-  matchEl.classList.toggle('manual', state === 'manual');
-  matchEl.classList.toggle('missing', state === false);
+function closeBookmarkMenu() {
+  bookmarkMenuOpen = false;
+  const toggle = actionsEl.querySelector('.bookmark-toggle');
+  const menu = actionsEl.querySelector('.bookmark-menu');
+  if (toggle) toggle.setAttribute('aria-expanded', 'false');
+  if (menu) menu.hidden = true;
+}
+
+function addBookmarkTo(folderId) {
+  closeBookmarkMenu();
+  void api.runtime.sendMessage({
+    type: 'addBookmark',
+    url: currentUrl,
+    title: currentTitle,
+    folderId,
+  }).then(() => {
+    lastRefreshKey = '';
+    void refresh(true);
+  });
 }
 
 function renderBookmarkActions() {
   actionsEl.replaceChildren();
+  bookmarkMenuOpen = false;
   const show = activeTab === 'bookmarks' && /^https?:/i.test(currentUrl) && !currentMatch.record;
   actionsEl.hidden = !show;
   if (!show) return;
@@ -77,30 +92,41 @@ function renderBookmarkActions() {
     return;
   }
 
-  const label = document.createElement('p');
-  label.className = 'action-label';
-  label.textContent = '북마크할 위치';
-  actionsEl.appendChild(label);
+  const toggle = document.createElement('button');
+  toggle.type = 'button';
+  toggle.className = 'bookmark-toggle';
+  toggle.setAttribute('aria-expanded', 'false');
+  toggle.setAttribute('aria-haspopup', 'listbox');
+  toggle.innerHTML = `<span>북마크</span>${ICONS.chevronDown}`;
+
+  const menu = document.createElement('div');
+  menu.className = 'bookmark-menu';
+  menu.hidden = true;
+  menu.setAttribute('role', 'listbox');
+
   const targets = saveTargets.length ? saveTargets : [{ id: null, name: '직접 추가', depth: 0 }];
   targets.forEach((target) => {
     const row = document.createElement('button');
     row.type = 'button';
-    row.className = 'action-btn';
+    row.className = 'bookmark-menu-item';
     row.style.paddingLeft = `${12 + Number(target.depth || 0) * 12}px`;
     row.textContent = target.name;
-    row.addEventListener('click', () => {
-      void api.runtime.sendMessage({
-        type: 'addBookmark',
-        url: currentUrl,
-        title: currentTitle,
-        folderId: target.id,
-      }).then(() => {
-        lastRefreshKey = '';
-        void refresh(true);
-      });
+    row.addEventListener('click', (event) => {
+      event.stopPropagation();
+      addBookmarkTo(target.id);
     });
-    actionsEl.appendChild(row);
+    menu.appendChild(row);
   });
+
+  toggle.addEventListener('click', (event) => {
+    event.stopPropagation();
+    bookmarkMenuOpen = !bookmarkMenuOpen;
+    toggle.setAttribute('aria-expanded', bookmarkMenuOpen ? 'true' : 'false');
+    menu.hidden = !bookmarkMenuOpen;
+  });
+
+  actionsEl.appendChild(toggle);
+  actionsEl.appendChild(menu);
 }
 
 function escapeHtml(value) {
@@ -140,7 +166,6 @@ function setSideTab(id) {
   });
   bookmarksPane.hidden = activeTab !== 'bookmarks';
   scriptsPane.hidden = activeTab !== 'scripts';
-  matchEl.hidden = activeTab !== 'bookmarks' || !matchEl.textContent;
   renderBookmarkActions();
   try {
     void api.storage.local.set({ [TAB_KEY]: activeTab });
@@ -285,23 +310,6 @@ function applyCurrentMatch(match) {
   ]);
   folderIdsContainingActiveBookmarks(recordFolders, matchKeys).forEach((id) => expandedIds.add(id));
   void saveExpanded();
-  if (!currentUrl || !/^https?:/i.test(currentUrl)) {
-    setMatch('', null);
-    renderBookmarkActions();
-    return;
-  }
-  if (currentMatch.record) {
-    const labels = records.map((item) => item.label || item.id).filter(Boolean);
-    setMatch(`현재 페이지는 레코드에 있습니다${labels.length ? ` · ${labels.join(', ')}` : ''}`, 'record');
-    renderBookmarkActions();
-    return;
-  }
-  if (currentMatch.manual) {
-    setMatch('현재 페이지는 직접 추가 북마크에 있습니다', 'manual');
-    renderBookmarkActions();
-    return;
-  }
-  setMatch('현재 페이지는 북마크에 없습니다', false);
   renderBookmarkActions();
 }
 
@@ -340,7 +348,6 @@ async function refresh(force = false) {
     setStatus(error === 'missing-config' || error === 'unauthorized'
       ? 'LCERP 앱을 실행한 뒤 확장을 다시 로드하세요.'
       : 'LCERP 앱이 실행 중인지 확인하세요.');
-    setMatch('', null);
     renderBookmarkActions();
     renderBookmarks();
     renderScripts();
@@ -395,8 +402,25 @@ function showBookmarkMenu(event, bookmark) {
   document.body.appendChild(contextMenu);
 }
 
-document.addEventListener('click', hideBookmarkMenu);
-document.addEventListener('scroll', hideBookmarkMenu, true);
+document.addEventListener('click', (event) => {
+  hideBookmarkMenu();
+  if (event.target instanceof Element && event.target.closest('.bookmark-actions')) return;
+  closeBookmarkMenu();
+});
+document.addEventListener('scroll', (event) => {
+  hideBookmarkMenu();
+  const target = event.target;
+  if (target instanceof Element && target.closest('.bookmark-menu')) return;
+  if (target === document || target === document.documentElement || target === document.body) {
+    closeBookmarkMenu();
+  }
+}, true);
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape') {
+    hideBookmarkMenu();
+    closeBookmarkMenu();
+  }
+});
 
 document.querySelectorAll('.tab').forEach((button) => {
   button.addEventListener('click', () => setSideTab(button.dataset.tab));
